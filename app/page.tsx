@@ -1,65 +1,98 @@
-import Image from "next/image";
+"use client"
 
-export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { Search } from "lucide-react"
+import Link from "next/link"
+import { SidebarNav } from "@/components/sidebar-nav"
+import { useAuth } from "@/components/auth-provider"
+import { useChatbotContext } from "@/components/chatbot-context-provider"
+import { DailyQuestCard } from "@/components/daily-quest-card"
+import { AISuggestedCourseCard } from "@/components/ai-suggested-course-card"
+import { CommunityPulseCard } from "@/components/community-pulse-card"
+
+export default function LearningDashboard() {
+  const { user, loading } = useAuth()
+  const { setPageContext } = useChatbotContext()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/auth")
+    }
+  }, [user, loading, router])
+
+  // Set chatbot context for dashboard page
+  useEffect(() => {
+    setPageContext({
+      type: "generic",
+      pageName: "Dashboard",
+      description: "The user's learning dashboard with daily quests, AI-suggested courses, and community pulse. The user can track their progress, discover new courses, and see community activity.",
+    })
+
+    return () => {
+      setPageContext(null)
+    }
+  }, [setPageContext])
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="text-muted-foreground">Loading...</div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </div>
+    )
+  }
+
+  // Don't render if not authenticated (will redirect)
+  if (!user) {
+    return null
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen bg-background lg:flex-row">
+      <SidebarNav currentPath="/" />
+
+      {/* Main Content */}
+      <main className="flex-1">
+        {/* Content Area */}
+        <div className="p-4 lg:p-8">
+          {/* Search Section */}
+          <div className="mx-auto max-w-6xl space-y-8">
+            <div className="space-y-4 text-center">
+              <h2 className="text-balance text-3xl font-bold tracking-tight text-foreground lg:text-4xl">
+                What do you want to learn today?
+              </h2>
+              <div className="relative mx-auto max-w-2xl">
+                <Link href="/create-course" className="block">
+                  <div className="relative cursor-pointer">
+                    <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                    <div className="h-14 rounded-md border border-input bg-background pl-12 pr-4 text-base text-muted-foreground shadow-sm transition-colors hover:border-primary flex items-center">
+                      Search for courses, topics, or skills...
+                    </div>
+                  </div>
+                </Link>
+              </div>
+            </div>
+
+            {/* Dashboard Cards Grid */}
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Left Column: Daily Quest (full height) */}
+              <div className="lg:row-span-2">
+                <DailyQuestCard />
+              </div>
+
+              {/* Right Column: AI Suggested Course and Community Pulse */}
+              <div className="space-y-6">
+                <AISuggestedCourseCard />
+                <CommunityPulseCard />
+              </div>
+            </div>
+          </div>
         </div>
       </main>
     </div>
-  );
+  )
 }
