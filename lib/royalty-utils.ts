@@ -37,6 +37,13 @@ export async function awardCourseAdditionRoyalty(
 
     // Award XP to publisher
     await awardXP(publisherId, ROYALTY_XP_AMOUNT, "Course Addition Royalty", `User added your course`, { courseId, addedBy: userId })
+
+    // Award Nexon to publisher (15 per addition)
+    const { awardNexon } = await import("./nexon-utils")
+    await awardNexon(publisherId, 15, "Course Addition Royalty", `User added your course`, { courseId, addedBy: userId }).catch((error) => {
+      console.error("Error awarding Nexon for royalty:", error)
+      // Don't throw - Nexon failure shouldn't block royalty
+    })
   } catch (error) {
     console.error("Error awarding course addition royalty:", error)
     // Don't throw - royalty failure shouldn't block course addition

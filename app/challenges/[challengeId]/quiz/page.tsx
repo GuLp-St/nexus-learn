@@ -30,6 +30,7 @@ export default function ChallengeQuizPage() {
   const [showResults, setShowResults] = useState(false)
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [quizStartTime, setQuizStartTime] = useState<number | null>(null)
+  const [elapsedTime, setElapsedTime] = useState<number>(0)
   const params = useParams()
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
@@ -67,8 +68,8 @@ export default function ChallengeQuizPage() {
 
         setChallenge(challengeData)
 
-        // Accept challenge
-        await acceptChallenge(challengeId)
+        // Accept challenge (check Nexon and deduct bet)
+        await acceptChallenge(challengeId, user.uid)
 
         // Fetch questions (exact same questions as challenger)
         const challengeQuestions = await getChallengeQuestions(
@@ -105,6 +106,17 @@ export default function ChallengeQuizPage() {
       loadChallenge()
     }
   }, [challengeId, router, user, authLoading])
+
+  // Timer effect
+  useEffect(() => {
+    if (!quizStartTime) return
+
+    const interval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - quizStartTime) / 1000))
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [quizStartTime])
 
   const handleAnswerChange = (questionId: string, answer: string | number | boolean) => {
     setAnswers({
@@ -237,6 +249,14 @@ export default function ChallengeQuizPage() {
                   Question {currentQuestionIndex + 1} of {totalQuestions}
                 </p>
               </div>
+              {quizStartTime && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10">
+                  <Clock className="h-5 w-5 text-primary" />
+                  <span className="font-mono font-semibold text-lg">
+                    {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, "0")}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Progress Bar */}

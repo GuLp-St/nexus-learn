@@ -419,6 +419,13 @@ export function checkObjectiveAnswer(question: QuizQuestion, userAnswer: string 
     return false
   }
 
+  // First, try simple case-insensitive string comparison (handles most cases)
+  if (typeof question.correctAnswer === "string" && typeof userAnswer === "string") {
+    if (question.correctAnswer.trim().toLowerCase() === userAnswer.trim().toLowerCase()) {
+      return true
+    }
+  }
+
   // Handle different answer types
   if (question.objectiveType === "multiple-choice") {
     // Normalize both answers to numbers for comparison
@@ -456,32 +463,85 @@ export function checkObjectiveAnswer(question: QuizQuestion, userAnswer: string 
       return false
     }
     
-    // Compare as numbers, but also handle string comparison if both are strings
-    if (correctNum === userNum) {
+    // Compare as numbers
+    if (correctNum === userNum && correctNum !== -1) {
       return true
     }
     
-    // Fallback: if both are strings, compare directly
+    // Fallback: if both are strings, compare directly (case-insensitive)
     if (typeof question.correctAnswer === "string" && typeof userAnswer === "string") {
-      return question.correctAnswer.trim().toLowerCase() === userAnswer.trim().toLowerCase()
+      const correctStr = question.correctAnswer.trim().toLowerCase()
+      const userStr = userAnswer.trim().toLowerCase()
+      if (correctStr === userStr) return true
+      
+      // Also try to match by option text if options exist
+      if (question.options) {
+        const correctIndex = question.options.findIndex(opt => opt.trim().toLowerCase() === correctStr)
+        const userIndex = question.options.findIndex(opt => opt.trim().toLowerCase() === userStr)
+        if (correctIndex !== -1 && userIndex !== -1 && correctIndex === userIndex) {
+          return true
+        }
+      }
+    }
+    
+    // Additional fallback: compare option texts directly if user answer is text
+    if (question.options && typeof userAnswer === "string") {
+      const correctOption = typeof question.correctAnswer === "number" 
+        ? question.options[question.correctAnswer]
+        : question.correctAnswer
+      if (correctOption && typeof correctOption === "string") {
+        if (correctOption.trim().toLowerCase() === userAnswer.trim().toLowerCase()) {
+          return true
+        }
+      }
     }
     
     return false
   } else if (question.objectiveType === "true-false") {
+    // Simple case-insensitive string comparison first
+    if (typeof question.correctAnswer === "string" && typeof userAnswer === "string") {
+      if (question.correctAnswer.trim().toLowerCase() === userAnswer.trim().toLowerCase()) {
+        return true
+      }
+    }
+    
     // Normalize boolean values - handle all variations (case-insensitive)
-    const normalizeToBool = (value: any): boolean => {
+    const normalizeToBool = (value: any): boolean | null => {
+      // Handle boolean directly
       if (value === true || value === 1) return true
       if (value === false || value === 0) return false
+      
+      // Handle string values (case-insensitive)
       if (typeof value === "string") {
         const lower = value.toLowerCase().trim()
-        if (lower === "true" || lower === "1") return true
-        if (lower === "false" || lower === "0") return false
+        if (lower === "true" || lower === "1" || lower === "yes") return true
+        if (lower === "false" || lower === "0" || lower === "no") return false
       }
-      return false
+      
+      return null
     }
     
     const correctBool = normalizeToBool(question.correctAnswer)
     const userBool = normalizeToBool(userAnswer)
+    
+    // If either normalization failed, try direct comparison
+    if (correctBool === null || userBool === null) {
+      // Try direct comparison (handles boolean-to-boolean, string-to-string)
+      if (question.correctAnswer === userAnswer) return true
+      
+      // Try case-insensitive string comparison (already done above, but keep as fallback)
+      if (typeof question.correctAnswer === "string" && typeof userAnswer === "string") {
+        return question.correctAnswer.toLowerCase().trim() === userAnswer.toLowerCase().trim()
+      }
+      
+      // Try converting both to strings and comparing
+      const correctStr = String(question.correctAnswer).toLowerCase().trim()
+      const userStr = String(userAnswer).toLowerCase().trim()
+      if (correctStr === "true" && userStr === "true") return true
+      if (correctStr === "false" && userStr === "false") return true
+      
+      return false
+    }
     
     return correctBool === userBool
   }

@@ -110,10 +110,13 @@ export async function updateUserAvatar(
 ): Promise<void> {
   try {
     const userRef = doc(db, "users", userId)
+    // Map style name to cosmetic ID for consistency
+    const cosmeticId = avatarStyle.startsWith("avatar-") ? avatarStyle : `avatar-${avatarStyle}`
+    
     await updateDoc(userRef, {
       avatarUrl,
-      avatarStyle,
       avatarSeed,
+      "cosmetics.avatarStyle": cosmeticId,
       updatedAt: serverTimestamp(),
     })
   } catch (error: any) {

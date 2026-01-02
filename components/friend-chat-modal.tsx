@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
+import { NameWithColor } from "@/components/name-with-color"
 import { sendMessage, subscribeToChatMessages, markMessagesAsRead, setTypingStatus, subscribeToTypingStatus, ChatMessage } from "@/lib/chat-utils"
 import { useAuth } from "@/components/auth-provider"
 import { format } from "date-fns"
@@ -149,12 +150,19 @@ export function FriendChatModal({
         <DialogHeader className="border-b px-6 py-4">
           <div className="flex items-center justify-between w-full pr-8">
             <DialogTitle className="flex items-center gap-3">
-              <Avatar className="h-10 w-10">
-                <AvatarImage src={friendAvatarUrl} alt={friendNickname} />
-                <AvatarFallback>{getInitials(friendNickname)}</AvatarFallback>
-              </Avatar>
+              <AvatarWithCosmetics
+                userId={friendId}
+                nickname={friendNickname}
+                avatarUrl={friendAvatarUrl}
+                size="md"
+              />
               <div className="flex flex-col">
-                <span className="text-base">{friendNickname}</span>
+                <span className="text-base">
+                  <NameWithColor
+                    userId={friendId}
+                    name={friendNickname}
+                  />
+                </span>
                 {isFriendTyping && (
                   <span className="text-xs text-primary animate-pulse">typing...</span>
                 )}

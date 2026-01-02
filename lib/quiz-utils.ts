@@ -184,6 +184,40 @@ export async function saveQuizQuestions(questions: QuizQuestion[]): Promise<void
 }
 
 /**
+ * Fetch quiz questions by question IDs
+ */
+export async function fetchQuizQuestionsByIds(
+  courseId: string,
+  questionIds: string[]
+): Promise<QuizQuestion[]> {
+  try {
+    // Fetch all questions for the course and filter by questionId
+    const questionsQuery = query(
+      collection(db, "quizQuestions"),
+      where("courseId", "==", courseId)
+    )
+    
+    const snapshot = await getDocs(questionsQuery)
+    const questions: QuizQuestion[] = []
+    
+    snapshot.forEach((docSnap) => {
+      const questionData = docSnap.data() as QuizQuestion
+      if (questionIds.includes(questionData.questionId)) {
+        questions.push(questionData)
+      }
+    })
+    
+    // Sort questions to match the order of questionIds
+    return questionIds
+      .map((id) => questions.find((q) => q.questionId === id))
+      .filter((q): q is QuizQuestion => q !== undefined)
+  } catch (error) {
+    console.error("Error fetching quiz questions by IDs:", error)
+    return []
+  }
+}
+
+/**
  * Get available question count for a quiz type
  */
 export async function getAvailableQuestionCount(
@@ -759,6 +793,41 @@ export async function getIncompleteQuizAttempt(
     
     console.error("Error fetching incomplete quiz attempt:", error)
     return null
+  }
+}
+
+/**
+ * Get course-specific average accuracy (percentage)
+ */
+export async function getCourseAverageAccuracy(
+  userId: string,
+  courseId: string
+): Promise<number> {
+  try {
+    const attempts = await getQuizAttempts(userId, courseId)
+    
+    if (attempts.length === 0) {
+      return 0
+    }
+    
+    let totalScore = 0
+    let maxScore = 0
+    
+    attempts.forEach((attempt) => {
+      if (attempt.completedAt && attempt.maxScore > 0) {
+        totalScore += attempt.totalScore
+        maxScore += attempt.maxScore
+      }
+    })
+    
+    if (maxScore === 0) {
+      return 0
+    }
+    
+    return Math.round((totalScore / maxScore) * 100)
+  } catch (error) {
+    console.error("Error calculating course average accuracy:", error)
+    return 0
   }
 }
 

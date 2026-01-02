@@ -49,6 +49,7 @@ export default function LessonQuizPage() {
   const [otherQuizInProgress, setOtherQuizInProgress] = useState<(QuizAttempt & { courseTitle?: string }) | null>(null)
   const [abandonDialogOpen, setAbandonDialogOpen] = useState(false)
   const [challengeFriendId, setChallengeFriendId] = useState<string | null>(null)
+  const [challengeBetAmount, setChallengeBetAmount] = useState<number>(0)
   const [quizStartTime, setQuizStartTime] = useState<number | null>(null)
   const quizStartTimeRef = useRef<number | null>(null)
   const isChallengeMode = challengeFriendId !== null
@@ -111,8 +112,10 @@ export default function LessonQuizPage() {
     if (typeof window !== "undefined") {
       const searchParams = new URLSearchParams(window.location.search)
       const challengeParam = searchParams.get("challenge")
+      const betParam = searchParams.get("bet")
       if (challengeParam) {
         setChallengeFriendId(challengeParam)
+        setChallengeBetAmount(betParam ? parseInt(betParam) || 0 : 0)
       }
     }
   }, [])
@@ -401,7 +404,8 @@ export default function LessonQuizPage() {
               questionIds,
               attemptId,
               totalScore,
-              timeTaken
+              timeTaken,
+              challengeBetAmount
             )
             
             // Create notification/chat message for challenged user
@@ -591,18 +595,25 @@ export default function LessonQuizPage() {
               {/* Score Display */}
               <div className="text-center">
                 <h1 className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">Your Score</h1>
-                <div className="flex items-center justify-center gap-2 text-6xl font-bold text-foreground lg:text-7xl">
+                <div className="flex items-center justify-center gap-4 text-6xl font-bold text-foreground lg:text-7xl">
                   <span className="text-primary">{totalScore}/{maxScore}</span>
-                  <div className="flex gap-1">
-                    {questions.map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`h-10 w-10 lg:h-12 lg:w-12 ${
-                          i < totalScore ? "fill-primary text-primary" : "text-muted"
-                        }`}
-                      />
-                    ))}
-                  </div>
+                  {(() => {
+                    const grade = scorePercentage >= 100 ? "S" 
+                      : scorePercentage >= 80 ? "A"
+                      : scorePercentage >= 60 ? "B"
+                      : scorePercentage >= 40 ? "C"
+                      : "F"
+                    const gradeColor = grade === "S" ? "text-yellow-500"
+                      : grade === "A" ? "text-green-500"
+                      : grade === "B" ? "text-blue-500"
+                      : grade === "C" ? "text-orange-500"
+                      : "text-red-500"
+                    return (
+                      <span className={gradeColor}>
+                        {grade}
+                      </span>
+                    )
+                  })()}
                 </div>
                 <p className="mt-4 text-lg text-muted-foreground">
                   {scorePercentage >= 80 ? "Excellent work!" : scorePercentage >= 60 ? "Good job!" : "Keep practicing!"}

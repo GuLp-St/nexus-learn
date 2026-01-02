@@ -259,6 +259,13 @@ export async function claimQuestReward(userId: string, questId: string): Promise
       { questId, questType: quest.type }
     )
 
+    // Award Nexon (25 per quest)
+    const { awardNexon } = await import("./nexon-utils")
+    await awardNexon(userId, 25, "Daily Quest", `Completed quest: ${quest.title}`, { questId, questType: quest.type }).catch((error) => {
+      console.error("Error awarding Nexon for daily quest:", error)
+      // Don't throw - Nexon failure shouldn't block quest claim
+    })
+
     // Mark quest as claimed
     const updatedQuests = data.quests.map((q) => {
       if (q.id === questId) {

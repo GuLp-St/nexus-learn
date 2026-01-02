@@ -12,7 +12,9 @@ import { getUserCourses } from "@/lib/course-utils"
 import { getLevelProgress } from "@/lib/level-utils"
 import { getUserBadges, getBadgeDisplayInfo } from "@/lib/badge-utils"
 import { getUserActivityThisWeek } from "@/lib/activity-tracker"
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
+import { NameWithColor } from "@/components/name-with-color"
+import { getUserCosmetics } from "@/lib/cosmetics-utils"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import Link from "next/link"
@@ -51,7 +53,59 @@ export default function UserProfileView() {
   const [notFound, setNotFound] = useState(false)
   const [isFriend, setIsFriend] = useState(false)
   const [sendingRequest, setSendingRequest] = useState(false)
+  const [wallpaper, setWallpaper] = useState<string | null>(null)
+  const [avatarFrame, setAvatarFrame] = useState<string | null>(null)
   const { setPageContext } = useChatbotContext()
+
+  const getFrameXPClasses = (frameId: string | null) => {
+    if (!frameId) return "text-primary"
+    
+    // Glow frames
+    if (frameId === "frame-neon-blue") return "xp-glow-neon-blue"
+    if (frameId === "frame-radioactive") return "xp-glow-radioactive"
+    if (frameId === "frame-void") return "xp-glow-void"
+    
+    // Motion frames
+    if (frameId === "frame-rgb-gamer") return "xp-frame-rgb-gamer"
+    if (frameId === "frame-golden-lustre") return "xp-frame-golden-lustre"
+    if (frameId === "frame-nexus-glitch") return "xp-frame-nexus-glitch"
+
+    // Legendary Series (Structure) - Still provide a color for the XP bar
+    if (frameId === "frame-laurels") return "text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.35)]"
+    if (frameId === "frame-devil-horns") return "text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]"
+    if (frameId === "frame-crown") return "text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.3)]"
+    
+    return "text-primary"
+  }
+
+  const renderStructuralXPFrame = (frameId: string | null) => {
+    if (!frameId) return null
+
+    // Structure frames
+    if (frameId === "frame-laurels") {
+      return (
+        <div className="absolute -top-6 left-1/2 -translate-x-1/2 pointer-events-none z-50">
+          <div className="text-emerald-400 text-5xl">🌿</div>
+        </div>
+      )
+    }
+    if (frameId === "frame-devil-horns") {
+      return (
+        <div className="absolute -top-6 left-1/2 -translate-x-1/2 flex gap-1 pointer-events-none z-50">
+          <div className="text-red-500 text-5xl">👹</div>
+        </div>
+      )
+    }
+    if (frameId === "frame-crown") {
+      return (
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 pointer-events-none z-50">
+          <div className="text-yellow-500 text-6xl">👑</div>
+        </div>
+      )
+    }
+
+    return null
+  }
 
   // Generate initials from nickname
   const getInitials = (name: string | null) => {
@@ -106,6 +160,15 @@ export default function UserProfileView() {
         const courses = await getUserCourses(userId)
         const completed = courses.filter((c) => c.userProgress?.progress === 100).length
         setCoursesCompleted(completed)
+
+        // Load cosmetics
+        try {
+          const userCosmetics = await getUserCosmetics(userId)
+          setWallpaper(userCosmetics.wallpaper || null)
+          setAvatarFrame(userCosmetics.avatarFrame || null)
+        } catch (error) {
+          console.error("Error loading cosmetics:", error)
+        }
 
         // Fetch badges
         const userBadges = await getUserBadges(userId)
@@ -210,8 +273,11 @@ export default function UserProfileView() {
   const initials = getInitials(profileUser.nickname)
   const maxHours = activityData.length > 0 ? Math.max(...activityData.map((d) => d.hours), 1) : 1
 
+  // Get wallpaper class (strip "wallpaper-" prefix if present)
+  const wallpaperClass = wallpaper ? `cosmetic-wallpaper-${wallpaper.replace("wallpaper-", "")}` : ""
+
   return (
-    <div className="flex flex-col min-h-screen bg-background lg:flex-row">
+    <div className={`flex flex-col min-h-screen bg-background lg:flex-row ${wallpaperClass}`}>
       <SidebarNav 
         currentPath="/profile" 
         title={`${displayName}'s Profile`}
@@ -242,49 +308,59 @@ export default function UserProfileView() {
             {/* Profile Header */}
             <div className="flex flex-col items-center space-y-4 text-center">
               {/* Avatar with Level Progress */}
-              <div className="relative">
-                <svg className="h-40 w-40 -rotate-90 transform" viewBox="0 0 160 160">
-                  <circle
-                    cx="80"
-                    cy="80"
-                    r="70"
-                    stroke="currentColor"
-                    strokeWidth="8"
-                    fill="none"
-                    className="text-accent"
+              <div className="relative h-40 w-40 flex items-center justify-center">
+                {/* Glitch XP ring - CSS-based with progress */}
+                {avatarFrame === "frame-nexus-glitch" ? (
+                  <div 
+                    className="glitch-xp-ring" 
+                    style={{ "--progress": levelProgress?.progressPercentage || 0 } as React.CSSProperties}
                   />
-                  <circle
-                    cx="80"
-                    cy="80"
-                    r="70"
-                    stroke="currentColor"
-                    strokeWidth="8"
-                    fill="none"
-                    strokeDasharray={`${2 * Math.PI * 70}`}
-                    strokeDashoffset={`${2 * Math.PI * 70 * (1 - (levelProgress?.progressPercentage || 0) / 100)}`}
-                    className="text-primary transition-all duration-500"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Avatar className="h-32 w-32 border-4 border-background shadow-lg">
-                    {profileUser.avatarUrl ? (
-                      <AvatarImage src={profileUser.avatarUrl} alt={displayName} />
-                    ) : (
-                      <AvatarFallback className="bg-gradient-to-br from-teal-500 to-teal-600 text-5xl font-bold text-white">
-                        {initials}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                </div>
-                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-4 py-1 text-sm font-bold text-primary-foreground shadow-md">
+                ) : (
+                  <svg className="absolute inset-0 h-40 w-40 -rotate-90 transform" viewBox="0 0 160 160">
+                    <circle
+                      cx="80"
+                      cy="80"
+                      r="76"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                      className="text-accent/20"
+                    />
+                    <circle
+                      cx="80"
+                      cy="80"
+                      r="76"
+                      stroke="currentColor"
+                      strokeWidth="6"
+                      fill="none"
+                      strokeDasharray={`${2 * Math.PI * 76}`}
+                      strokeDashoffset={`${2 * Math.PI * 76 * (1 - (levelProgress?.progressPercentage || 0) / 100)}`}
+                      className={`${getFrameXPClasses(avatarFrame)} transition-all duration-1000`}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                )}
+                <AvatarWithCosmetics
+                  userId={userId}
+                  nickname={profileUser.nickname}
+                  avatarUrl={profileUser.avatarUrl}
+                  size="xl"
+                  hideFrame={true}
+                />
+                {renderStructuralXPFrame(avatarFrame)}
+                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-4 py-1 text-sm font-bold text-primary-foreground shadow-md z-10">
                   {loadingStats ? "..." : `Level ${levelProgress?.currentLevel || 1}`}
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center gap-3 justify-center">
-                  <h2 className="text-2xl font-bold text-foreground">{displayName}</h2>
+                  <h2 className="text-2xl font-bold text-foreground">
+                    <NameWithColor
+                      userId={userId}
+                      name={displayName}
+                    />
+                  </h2>
                   {currentUser && !isOwnProfile && !isFriend && (
                     <Button
                       variant="outline"

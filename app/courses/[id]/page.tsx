@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, MessageCircle, BookOpen, Clock, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react"
+import { ArrowLeft, BookOpen, Clock, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
@@ -22,7 +22,6 @@ interface LessonProgress {
 }
 
 export default function CourseContentPage() {
-  const [showChatbot, setShowChatbot] = useState(false)
   const [course, setCourse] = useState<CourseWithProgress | null>(null)
   const [loading, setLoading] = useState(true)
   const [showRatingModal, setShowRatingModal] = useState(false)
@@ -383,32 +382,6 @@ export default function CourseContentPage() {
           </article>
         </div>
 
-        {/* Floating AI Chatbot Button */}
-        <Button
-          size="icon"
-          className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg transition-transform hover:scale-110"
-          onClick={() => setShowChatbot(!showChatbot)}
-        >
-          <MessageCircle className="h-6 w-6" />
-          <span className="sr-only">Ask AI Chatbot</span>
-        </Button>
-
-        {/* Simple Chatbot Indicator (for demo) */}
-        {showChatbot && (
-          <div className="fixed bottom-24 right-6 w-80 rounded-lg border border-border bg-card p-4 shadow-xl">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-card-foreground">AI Assistant</h3>
-                <Button variant="ghost" size="sm" onClick={() => setShowChatbot(false)}>
-                  ×
-                </Button>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Hi! I'm here to help you understand neural networks. What would you like to know?
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Rating Modal */}
         {showRatingModal && course && user && (

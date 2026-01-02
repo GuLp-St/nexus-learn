@@ -11,7 +11,9 @@ import { getUserXP } from "@/lib/leaderboard-utils"
 import { getUserCourses } from "@/lib/course-utils"
 import { getLevelProgress } from "@/lib/level-utils"
 import { ProfileSettingsModal } from "@/components/profile-settings-modal"
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
+import { NameWithColor } from "@/components/name-with-color"
+import { getUserCosmetics } from "@/lib/cosmetics-utils"
 import { getUserBadges, getBadgeDisplayInfo, checkAndUpdateBadges } from "@/lib/badge-utils"
 import { XPHistoryModal } from "@/components/xp-history-modal"
 import { CompletedCoursesModal } from "@/components/completed-courses-modal"
@@ -41,6 +43,59 @@ export default function UserProfile() {
   const [xpHistoryOpen, setXpHistoryOpen] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [completedCoursesOpen, setCompletedCoursesOpen] = useState(false)
+  const [wallpaper, setWallpaper] = useState<string | null>(null)
+  const [avatarFrame, setAvatarFrame] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  const getFrameXPClasses = (frameId: string | null) => {
+    if (!frameId) return "text-primary"
+    
+    // Glow frames
+    if (frameId === "frame-neon-blue") return "xp-glow-neon-blue"
+    if (frameId === "frame-radioactive") return "xp-glow-radioactive"
+    if (frameId === "frame-void") return "xp-glow-void"
+    
+    // Motion frames
+    if (frameId === "frame-rgb-gamer") return "xp-frame-rgb-gamer"
+    if (frameId === "frame-golden-lustre") return "xp-frame-golden-lustre"
+    if (frameId === "frame-nexus-glitch") return "xp-frame-nexus-glitch"
+
+    // Legendary Series (Structure) - Still provide a color for the XP bar
+    if (frameId === "frame-laurels") return "text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.35)]"
+    if (frameId === "frame-devil-horns") return "text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]"
+    if (frameId === "frame-crown") return "text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.3)]"
+    
+    return "text-primary"
+  }
+
+  const renderStructuralXPFrame = (frameId: string | null) => {
+    if (!frameId) return null
+
+    // Structure frames
+    if (frameId === "frame-laurels") {
+      return (
+        <div className="absolute -top-6 left-1/2 -translate-x-1/2 pointer-events-none z-50">
+          <div className="text-emerald-400 text-5xl">🌿</div>
+        </div>
+      )
+    }
+    if (frameId === "frame-devil-horns") {
+      return (
+        <div className="absolute -top-6 left-1/2 -translate-x-1/2 flex gap-1 pointer-events-none z-50">
+          <div className="text-red-500 text-5xl">👹</div>
+        </div>
+      )
+    }
+    if (frameId === "frame-crown") {
+      return (
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 pointer-events-none z-50">
+          <div className="text-yellow-500 text-6xl">👑</div>
+        </div>
+      )
+    }
+
+    return null
+  }
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -73,6 +128,15 @@ export default function UserProfile() {
 
         // Check and update badges
         await checkAndUpdateBadges(user.uid)
+
+        // Load cosmetics
+        try {
+          const userCosmetics = await getUserCosmetics(user.uid)
+          setWallpaper(userCosmetics.wallpaper || null)
+          setAvatarFrame(userCosmetics.avatarFrame || null)
+        } catch (error) {
+          console.error("Error loading cosmetics:", error)
+        }
 
         // Fetch badges
         const userBadges = await getUserBadges(user.uid)
@@ -149,10 +213,14 @@ export default function UserProfile() {
     // Refresh profile data
     await refreshProfile()
     
-    // Refresh stats
+    // Refresh stats and cosmetics
     if (user) {
       try {
-        const xpData = await getUserXP(user.uid)
+        const [xpData, userCosmetics] = await Promise.all([
+          getUserXP(user.uid),
+          getUserCosmetics(user.uid)
+        ])
+        
         if (xpData) {
           setXP(xpData.xp)
           const progress = getLevelProgress(xpData.xp)
@@ -163,8 +231,14 @@ export default function UserProfile() {
             xpNeededForNext: progress.xpNeededForNext,
           })
         }
+        
+        setWallpaper(userCosmetics.wallpaper || null)
+        setAvatarFrame(userCosmetics.avatarFrame || null)
+        
+        // Force refresh of AvatarWithCosmetics and NameWithColor
+        setRefreshKey(prev => prev + 1)
       } catch (error) {
-        console.error("Error refreshing stats:", error)
+        console.error("Error refreshing stats and cosmetics:", error)
       }
     }
   }
@@ -221,8 +295,11 @@ export default function UserProfile() {
 
   const maxHours = activityData.length > 0 ? Math.max(...activityData.map((d) => d.hours), 1) : 1
 
+  // Get wallpaper class (strip "wallpaper-" prefix if present)
+  const wallpaperClass = wallpaper ? `cosmetic-wallpaper-${wallpaper.replace("wallpaper-", "")}` : ""
+
   return (
-    <div className="flex flex-col min-h-screen bg-background lg:flex-row">
+    <div className={`flex flex-col min-h-screen bg-background lg:flex-row ${wallpaperClass}`}>
       <SidebarNav currentPath="/profile" title="My Profile" />
 
       {/* Main Content */}
@@ -233,48 +310,60 @@ export default function UserProfile() {
             {/* Profile Header */}
             <div className="flex flex-col items-center space-y-4 text-center">
               {/* Avatar with Level Progress */}
-              <div className="relative">
-                <svg className="h-40 w-40 -rotate-90 transform" viewBox="0 0 160 160">
-                  <circle
-                    cx="80"
-                    cy="80"
-                    r="70"
-                    stroke="currentColor"
-                    strokeWidth="8"
-                    fill="none"
-                    className="text-accent"
+              <div className="relative h-40 w-40 flex items-center justify-center">
+                {/* Glitch XP ring - CSS-based with progress */}
+                {avatarFrame === "frame-nexus-glitch" ? (
+                  <div 
+                    className="glitch-xp-ring" 
+                    style={{ "--progress": levelProgress?.progressPercentage || 0 } as React.CSSProperties}
                   />
-                  <circle
-                    cx="80"
-                    cy="80"
-                    r="70"
-                    stroke="currentColor"
-                    strokeWidth="8"
-                    fill="none"
-                    strokeDasharray={`${2 * Math.PI * 70}`}
-                    strokeDashoffset={`${2 * Math.PI * 70 * (1 - (levelProgress?.progressPercentage || 0) / 100)}`}
-                    className="text-primary transition-all duration-500"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Avatar className="h-32 w-32 border-4 border-background shadow-lg">
-                    {avatarUrl ? (
-                      <AvatarImage src={avatarUrl} alt={displayName} />
-                    ) : (
-                      <AvatarFallback className="bg-gradient-to-br from-teal-500 to-teal-600 text-5xl font-bold text-white">
-                        {initials}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                </div>
-                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-4 py-1 text-sm font-bold text-primary-foreground shadow-md">
+                ) : (
+                  <svg className="absolute inset-0 h-40 w-40 -rotate-90 transform" viewBox="0 0 160 160">
+                    <circle
+                      cx="80"
+                      cy="80"
+                      r="76"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                      className="text-accent/20"
+                    />
+                    <circle
+                      cx="80"
+                      cy="80"
+                      r="76"
+                      stroke="currentColor"
+                      strokeWidth="6"
+                      fill="none"
+                      strokeDasharray={`${2 * Math.PI * 76}`}
+                      strokeDashoffset={`${2 * Math.PI * 76 * (1 - (levelProgress?.progressPercentage || 0) / 100)}`}
+                      className={`${getFrameXPClasses(avatarFrame)} transition-all duration-1000`}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                )}
+                <AvatarWithCosmetics
+                  userId={user.uid}
+                  nickname={nickname}
+                  avatarUrl={avatarUrl}
+                  size="xl"
+                  hideFrame={true}
+                  refreshKey={refreshKey}
+                />
+                {renderStructuralXPFrame(avatarFrame)}
+                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-4 py-1 text-sm font-bold text-primary-foreground shadow-md z-10">
                   {loadingStats ? "..." : `Level ${levelProgress?.currentLevel || 1}`}
                 </div>
               </div>
 
               <div className="relative">
-                <h2 className="text-2xl font-bold text-foreground">{displayName}</h2>
+                <h2 className="text-2xl font-bold text-foreground">
+                  <NameWithColor
+                    userId={user.uid}
+                    name={displayName}
+                    refreshKey={refreshKey}
+                  />
+                </h2>
                 <Button
                   variant="ghost"
                   size="icon"

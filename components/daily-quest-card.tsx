@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import { RefreshCw, Trophy, CheckCircle2 } from "lucide-react"
+import { RefreshCw, Trophy, CheckCircle2, RotateCcw } from "lucide-react"
 import { getUserDailyQuests, claimQuestReward, refreshQuest, Quest, DailyQuests } from "@/lib/daily-quest-utils"
 import { useAuth } from "@/components/auth-provider"
 import { useXP } from "@/components/xp-context-provider"
@@ -104,7 +104,7 @@ export function DailyQuestCard() {
   }
 
   return (
-    <Card>
+    <Card className="h-full flex flex-col">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
@@ -113,15 +113,22 @@ export function DailyQuestCard() {
               Daily Quests
             </CardTitle>
             <CardDescription className="mt-1">
-              Complete quests to earn XP. Resets daily at UTC midnight.
+              Complete quests to earn XP
             </CardDescription>
           </div>
-          <div className="text-sm text-muted-foreground">
-            {quests.refreshTokens} refresh{quests.refreshTokens !== 1 ? "es" : ""}
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+            {quests.refreshTokens > 0 ? (
+              <>
+                <span>{quests.refreshTokens}</span>
+                <RotateCcw className="h-4 w-4" />
+              </>
+            ) : (
+              <QuestRefreshCountdown lastReset={quests.lastRefreshTokenReset} />
+            )}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 flex-1">
         {quests.quests.map((quest) => (
           <QuestItem
             key={quest.id}
@@ -145,6 +152,58 @@ interface QuestItemProps {
   claiming: boolean
   refreshing: boolean
   canRefresh: boolean
+}
+
+function QuestRefreshCountdown({ lastReset }: { lastReset: string }) {
+  const [timeLeft, setTimeLeft] = useState<string>("")
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date()
+      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+      const tomorrowUTC = new Date(todayUTC)
+      tomorrowUTC.setUTCDate(tomorrowUTC.getUTCDate() + 1)
+      
+      const msLeft = tomorrowUTC.getTime() - now.getTime()
+      const hours = Math.floor(msLeft / (1000 * 60 * 60))
+      const minutes = Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60))
+      
+      setTimeLeft(`${hours}h ${minutes}m`)
+    }
+
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 60000) // Update every minute
+
+    return () => clearInterval(interval)
+  }, [lastReset])
+
+  return <span className="text-xs">{timeLeft}</span>
+}
+
+function QuestCompletedCountdown() {
+  const [timeLeft, setTimeLeft] = useState<string>("")
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date()
+      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+      const tomorrowUTC = new Date(todayUTC)
+      tomorrowUTC.setUTCDate(tomorrowUTC.getUTCDate() + 1)
+      
+      const msLeft = tomorrowUTC.getTime() - now.getTime()
+      const hours = Math.floor(msLeft / (1000 * 60 * 60))
+      const minutes = Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60))
+      
+      setTimeLeft(`Resets in ${hours}h ${minutes}m`)
+    }
+
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 60000) // Update every minute
+
+    return () => clearInterval(interval)
+  }, [])
+
+  return <span className="text-xs text-muted-foreground">{timeLeft}</span>
 }
 
 function QuestItem({ quest, onClaim, onRefresh, claiming, refreshing, canRefresh }: QuestItemProps) {
@@ -180,7 +239,11 @@ function QuestItem({ quest, onClaim, onRefresh, claiming, refreshing, canRefresh
         </div>
 
         <div className="flex flex-col gap-2 flex-shrink-0">
-          {isCompleted ? (
+          {quest.claimed ? (
+            <div className="text-xs text-center text-muted-foreground py-1 px-2">
+              <QuestCompletedCountdown />
+            </div>
+          ) : isCompleted ? (
             <Button
               size="sm"
               onClick={onClaim}

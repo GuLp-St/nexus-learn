@@ -196,16 +196,6 @@ export default function ModuleQuizzesPage() {
                           <BookOpen className="mr-2 h-4 w-4" />
                           {status.status === "completed" ? "Retake Quiz" : status.status === "in-progress" ? "Resume Quiz" : "Take Module Quiz"}
                         </Button>
-                        {status.status === "completed" && (
-                          <Button
-                            variant="ghost"
-                            className="w-full"
-                            onClick={() => router.push(`/quizzes/${courseId}/history`)}
-                          >
-                            <FileQuestion className="mr-2 h-4 w-4" />
-                            Review Past Quiz
-                          </Button>
-                        )}
                       </div>
                     </CardContent>
                   </Card>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { LayoutDashboard, FileQuestion, Trophy, Menu, X, Library, User, Users, Moon, Sun } from "lucide-react"
+import { LayoutDashboard, FileQuestion, Trophy, Menu, X, Library, User, Users, Moon, Sun, ShoppingBag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useTheme } from "@/components/theme-provider"
@@ -26,6 +26,7 @@ export function SidebarNav({ currentPath, title = "LearnHub", leftAction }: Side
     { icon: FileQuestion, label: "Quizzes", href: "/quizzes" },
     { icon: Trophy, label: "Leaderboard", href: "/leaderboard" },
     { icon: Users, label: "Social", href: "/friends", badge: totalSocialNotifications > 0 ? totalSocialNotifications : undefined },
+    { icon: ShoppingBag, label: "Store", href: "/store" },
   ]
 
   return (

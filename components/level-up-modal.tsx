@@ -3,8 +3,18 @@
 import { useEffect, useState } from "react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Trophy, Sparkles } from "lucide-react"
+import { Trophy, Sparkles, Coins } from "lucide-react"
 import { XPAwardResult } from "@/lib/xp-utils"
+
+// Custom Nexon icon component
+function NexonIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.2"/>
+      <path d="M12 2L15 9L22 10L17 15L18 22L12 18L6 22L7 15L2 10L9 9L12 2Z" fill="currentColor"/>
+    </svg>
+  )
+}
 
 interface LevelUpModalProps {
   open: boolean
@@ -148,6 +158,18 @@ export function LevelUpModal({ open, onClose, result }: LevelUpModalProps) {
                 {newXP.toLocaleString()} XP • Ready for the next level!
               </p>
             </div>
+
+            {/* Nexon Reward Display */}
+            {result.nexonAwarded && (
+              <div className={`flex items-center justify-center gap-2 p-4 rounded-lg bg-primary/10 transition-all duration-700 delay-600 ${
+                showContent ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+              }`}>
+                <NexonIcon className="h-6 w-6 text-primary" />
+                <span className="text-lg font-semibold text-foreground">
+                  +{result.nexonAwarded} Nexon
+                </span>
+              </div>
+            )}
 
             {/* Claim Button with Fade-in */}
             <Button

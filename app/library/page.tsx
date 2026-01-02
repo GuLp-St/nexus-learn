@@ -120,7 +120,7 @@ function ContinueLearningButton({ courses }: { courses: CourseWithProgress[] }) 
       </Button>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Resume Course</DialogTitle>
             <DialogDescription>
@@ -129,10 +129,10 @@ function ContinueLearningButton({ courses }: { courses: CourseWithProgress[] }) 
           </DialogHeader>
           {details && (
             <div className="bg-muted p-4 rounded-lg space-y-2 text-sm border border-border">
-              <p className="font-bold text-foreground">{details.course}</p>
+              <p className="font-bold text-foreground break-words">{details.course}</p>
               <div className="space-y-1 text-muted-foreground">
-                <p className="truncate">{details.module}</p>
-                <p className="truncate">{details.lesson}</p>
+                <p className="break-words">{details.module}</p>
+                <p className="break-words">{details.lesson}</p>
                 {details.slide && <p>Slide {details.slide}</p>}
               </div>
             </div>

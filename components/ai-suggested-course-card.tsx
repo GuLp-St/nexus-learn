@@ -88,7 +88,7 @@ export function AISuggestedCourseCard() {
   }
 
   return (
-    <Card>
+    <Card className="h-full flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-primary" />
@@ -98,8 +98,8 @@ export function AISuggestedCourseCard() {
           Based on your learning journey
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
+      <CardContent className="flex-1 flex flex-col">
+        <div className="space-y-4 flex-1 flex flex-col">
           <Link href={`/courses/${course.id}`}>
             <div className="aspect-video w-full overflow-hidden bg-gradient-to-br from-primary/20 to-primary/5 rounded-lg flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity">
               <div className="text-4xl font-bold text-primary/60">
@@ -113,7 +113,7 @@ export function AISuggestedCourseCard() {
             </div>
           </Link>
 
-          <div className="space-y-2">
+          <div className="space-y-2 flex-1 flex flex-col">
             <h3 className="font-semibold text-lg">{course.title}</h3>
             <p className="text-sm text-muted-foreground line-clamp-2">
               {course.description}
@@ -133,23 +133,25 @@ export function AISuggestedCourseCard() {
               </div>
             )}
 
-            <Button
-              onClick={handleAddToLibrary}
-              disabled={adding}
-              className="w-full"
-            >
-              {adding ? (
-                <>
-                  <Spinner className="h-4 w-4 mr-2" />
-                  Adding...
-                </>
-              ) : (
-                <>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add to Library
-                </>
-              )}
-            </Button>
+            <div className="mt-auto">
+              <Button
+                onClick={handleAddToLibrary}
+                disabled={adding}
+                className="w-full"
+              >
+                {adding ? (
+                  <>
+                    <Spinner className="h-4 w-4 mr-2" />
+                    Adding...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add to Library
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </CardContent>

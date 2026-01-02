@@ -9,7 +9,8 @@ import {
   formatActivityDescription,
   CommunityActivity,
 } from "@/lib/community-pulse-utils"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
+import { NameWithColor } from "@/components/name-with-color"
 import { useRouter } from "next/navigation"
 import { copyCourseToUserLibrary } from "@/lib/course-copy-utils"
 import { useAuth } from "@/components/auth-provider"
@@ -82,7 +83,7 @@ export function CommunityPulseCard() {
   }
 
   return (
-    <Card>
+    <Card className="h-full flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Users className="h-5 w-5 text-primary" />
@@ -90,30 +91,28 @@ export function CommunityPulseCard() {
         </CardTitle>
         <CardDescription>Recent activity from the community</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1 flex flex-col">
         {activities.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="flex flex-col items-center justify-center py-8 text-center flex-1">
             <Ghost className="h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-sm text-muted-foreground">
               Be the first to make history!
             </p>
           </div>
         ) : (
-          <div className="space-y-4 max-h-[400px] overflow-y-auto">
+          <div className="space-y-4 flex-1 overflow-y-auto">
             {activities.map((activity) => (
               <div
                 key={activity.id}
                 className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
               >
-                <Avatar
-                  className="h-8 w-8 cursor-pointer flex-shrink-0"
-                  onClick={() => handleAvatarClick(activity.userId)}
-                >
-                  <AvatarImage src={activity.userAvatarUrl} alt={activity.userNickname} />
-                  <AvatarFallback>
-                    {activity.userNickname.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <div onClick={() => handleAvatarClick(activity.userId)} className="cursor-pointer flex-shrink-0">
+                  <AvatarWithCosmetics
+                    userId={activity.userId}
+                    nickname={activity.userNickname}
+                    size="sm"
+                  />
+                </div>
 
                 <div className="flex-1 min-w-0">
                   {isCourseActivity(activity) && activity.metadata.courseId ? (
@@ -124,7 +123,10 @@ export function CommunityPulseCard() {
                             className="font-medium cursor-pointer hover:underline"
                             onClick={() => handleAvatarClick(activity.userId)}
                           >
-                            {activity.userNickname}
+                            <NameWithColor
+                              userId={activity.userId}
+                              name={activity.userNickname}
+                            />
                           </span>{" "}
                           {formatActivityDescription(activity).replace(activity.userNickname, "").trim()}
                         </p>
@@ -158,7 +160,10 @@ export function CommunityPulseCard() {
                           className="font-medium cursor-pointer hover:underline"
                           onClick={() => handleAvatarClick(activity.userId)}
                         >
-                          {activity.userNickname}
+                          <NameWithColor
+                            userId={activity.userId}
+                            name={activity.userNickname}
+                          />
                         </span>{" "}
                         {formatActivityDescription(activity).replace(activity.userNickname, "").trim()}
                       </p>

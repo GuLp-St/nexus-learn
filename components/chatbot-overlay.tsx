@@ -23,6 +23,8 @@ export function ChatbotOverlay() {
   const buttonRef = useRef<HTMLButtonElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const pageContext = useChatbotPageContext()
+  const animationFrameRef = useRef<number | null>(null)
+  const tempPositionRef = useRef<{ x: number; y: number } | null>(null)
 
   // Load saved position from localStorage
   useEffect(() => {
@@ -60,20 +62,27 @@ export function ChatbotOverlay() {
     setHasMoved(false)
   }
 
-  // Handle drag
+  // Handle drag with requestAnimationFrame for smooth performance
   useEffect(() => {
-    if (!isDragging) return
+    if (!isDragging) {
+      // Cancel any pending animation frame
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+      return
+    }
 
     const handleMove = (e: MouseEvent | TouchEvent) => {
+      // Cancel previous frame if exists
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
+
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
       const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
       const newX = clientX - dragOffset.x
       const newY = clientY - dragOffset.y
-
-      // If moved more than a tiny bit, consider it a drag to prevent opening chat
-      if (Math.abs(newX - (position?.x || 0)) > 2 || Math.abs(newY - (position?.y || 0)) > 2) {
-        setHasMoved(true)
-      }
 
       // Constrain to viewport
       const buttonWidth = buttonRef.current?.offsetWidth || 56
@@ -83,18 +92,42 @@ export function ChatbotOverlay() {
       const constrainedX = Math.max(0, Math.min(newX, maxX))
       const constrainedY = Math.max(0, Math.min(newY, maxY))
 
-      setPosition({ x: constrainedX, y: constrainedY })
+      // Store in ref for smooth updates
+      tempPositionRef.current = { x: constrainedX, y: constrainedY }
+
+      // If moved more than a tiny bit, consider it a drag to prevent opening chat
+      const currentPos = position || { x: 0, y: 0 }
+      if (Math.abs(constrainedX - currentPos.x) > 2 || Math.abs(constrainedY - currentPos.y) > 2) {
+        setHasMoved(true)
+      }
+
+      // Use requestAnimationFrame for smooth updates
+      animationFrameRef.current = requestAnimationFrame(() => {
+        if (tempPositionRef.current) {
+          setPosition(tempPositionRef.current)
+        }
+      })
     }
 
     const handleEnd = () => {
       setIsDragging(false)
-      if (buttonRef.current) {
+      // Cancel any pending animation frame
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+      // Save final position to localStorage
+      if (tempPositionRef.current) {
+        savePosition(tempPositionRef.current.x, tempPositionRef.current.y)
+        setPosition(tempPositionRef.current)
+      } else if (buttonRef.current) {
         const rect = buttonRef.current.getBoundingClientRect()
         savePosition(rect.left, rect.top)
       }
+      tempPositionRef.current = null
     }
 
-    window.addEventListener("mousemove", handleMove)
+    window.addEventListener("mousemove", handleMove, { passive: true })
     window.addEventListener("mouseup", handleEnd)
     window.addEventListener("touchmove", handleMove, { passive: false })
     window.addEventListener("touchend", handleEnd)
@@ -104,6 +137,10 @@ export function ChatbotOverlay() {
       window.removeEventListener("mouseup", handleEnd)
       window.removeEventListener("touchmove", handleMove)
       window.removeEventListener("touchend", handleEnd)
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
     }
   }, [isDragging, dragOffset, position])
 
@@ -170,9 +207,9 @@ export function ChatbotOverlay() {
             setIsOpen(true)
           }
         }}
-        className={`fixed h-14 w-14 rounded-full shadow-lg bg-teal-600 hover:bg-teal-700 z-40 transition-all ${
+        className={`fixed h-14 w-14 rounded-full shadow-lg bg-teal-600 hover:bg-teal-700 z-40 ${
           isOpen ? "opacity-0 pointer-events-none" : "opacity-100"
-        } ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
+        } ${isDragging ? "cursor-grabbing transition-none" : "cursor-grab transition-all"}`}
         style={buttonStyle}
         aria-label="Open AI Chatbot"
       >

@@ -228,6 +228,17 @@ export async function checkAndUpdateBadges(userId: string): Promise<string[]> {
       newlyUnlocked.push("perfectionist")
     }
 
+    // Award Nexon for newly unlocked badges (100 per badge)
+    if (newlyUnlocked.length > 0) {
+      const { awardNexon } = await import("./nexon-utils")
+      for (const badgeId of newlyUnlocked) {
+        await awardNexon(userId, 100, "Badge Unlock", `Unlocked badge: ${badgeId}`, { badgeId }).catch((error) => {
+          console.error(`Error awarding Nexon for badge ${badgeId}:`, error)
+          // Don't throw - Nexon failure shouldn't block badge unlock
+        })
+      }
+    }
+
     // Update badges document if any were newly unlocked
     if (newlyUnlocked.length > 0) {
       await setDoc(

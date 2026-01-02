@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +9,7 @@ import { updateUserNickname, updateUserEmail, updateUserPassword, updateUserAvat
 import { useAuth } from "@/components/auth-provider"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { AvatarBuilder } from "@/components/avatar-builder"
+import { getUserCosmetics, getAllCosmetics } from "@/lib/cosmetics-utils"
 
 interface ProfileSettingsModalProps {
   open: boolean
@@ -29,6 +30,31 @@ export function ProfileSettingsModal({ open, onOpenChange, onUpdate }: ProfileSe
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showAvatarBuilder, setShowAvatarBuilder] = useState(false)
+  const [ownedAvatarStyles, setOwnedAvatarStyles] = useState<string[]>([])
+  const [currentAvatarSeed, setCurrentAvatarSeed] = useState("")
+
+  // Load owned avatar styles and current seed when modal opens
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (!user || !open) return
+      try {
+        const userCosmetics = await getUserCosmetics(user.uid)
+        setCurrentAvatarSeed(userCosmetics.avatarSeed || nickname || "")
+        
+        const allCosmetics = await getAllCosmetics()
+        const ownedAvatarIds = userCosmetics.ownedCosmetics?.avatars || []
+        // Map owned avatar IDs to their style values
+        const styles = allCosmetics
+          .filter(c => c.category === "avatar" && ownedAvatarIds.includes(c.id))
+          .map(c => c.config?.style)
+          .filter(Boolean) as string[]
+        setOwnedAvatarStyles(styles)
+      } catch (error) {
+        console.error("Error loading user cosmetic data:", error)
+      }
+    }
+    loadUserData()
+  }, [user, open, nickname])
 
   // Reset form when modal opens/closes
   const handleOpenChange = (newOpen: boolean) => {
@@ -162,11 +188,12 @@ export function ProfileSettingsModal({ open, onOpenChange, onUpdate }: ProfileSe
         {showAvatarBuilder ? (
           <div className="py-4">
             <AvatarBuilder
-              currentSeed={nickname || ""}
+              currentSeed={currentAvatarSeed}
               currentStyle="adventurer"
               onSave={handleAvatarSave}
               onCancel={() => setShowAvatarBuilder(false)}
               isLoading={loading}
+              allowedStyles={ownedAvatarStyles}
             />
           </div>
         ) : (

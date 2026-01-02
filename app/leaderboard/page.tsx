@@ -11,6 +11,9 @@ import { getLeaderboardWithUser, getFriendsLeaderboard, LeaderboardUser } from "
 import { areFriends, sendFriendRequest } from "@/lib/friends-utils"
 import { Spinner } from "@/components/ui/spinner"
 import { XPHistoryModal } from "@/components/xp-history-modal"
+import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
+import { NameWithColor } from "@/components/name-with-color"
+import { getLevelProgress } from "@/lib/level-utils"
 import Link from "next/link"
 
 export default function LeaderboardPage() {
@@ -25,6 +28,59 @@ export default function LeaderboardPage() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const { setPageContext } = useChatbotContext()
   const { user } = useAuth()
+
+  const getFrameXPClasses = (frameId: string | null | undefined) => {
+    if (!frameId) return "text-primary"
+    
+    // Glow frames
+    if (frameId === "frame-neon-blue") return "xp-glow-neon-blue"
+    if (frameId === "frame-radioactive") return "xp-glow-radioactive"
+    if (frameId === "frame-void") return "xp-glow-void"
+    
+    // Motion frames
+    if (frameId === "frame-rgb-gamer") return "xp-frame-rgb-gamer"
+    if (frameId === "frame-golden-lustre") return "xp-frame-golden-lustre"
+    if (frameId === "frame-nexus-glitch") return "xp-frame-nexus-glitch"
+
+    // Legendary Series (Structure) - Still provide a color for the frame
+    if (frameId === "frame-laurels") return "text-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.45)]"
+    if (frameId === "frame-devil-horns") return "text-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]"
+    if (frameId === "frame-crown") return "text-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.4)]"
+    
+    return "text-primary"
+  }
+
+  const renderStructuralXPFrame = (frameId: string | null | undefined, size: number = 40) => {
+    if (!frameId) return null
+
+    const iconSizeClass = size > 50 ? "text-2xl" : "text-sm"
+    const zIndex = "z-50"
+
+    // Structure frames
+    if (frameId === "frame-laurels") {
+      return (
+        <div className={`absolute ${size > 50 ? "-top-2" : "-top-1"} left-1/2 -translate-x-1/2 pointer-events-none ${zIndex}`}>
+          <div className={`text-emerald-400 ${iconSizeClass}`}>🌿</div>
+        </div>
+      )
+    }
+    if (frameId === "frame-devil-horns") {
+      return (
+        <div className={`absolute ${size > 50 ? "-top-2" : "-top-1"} left-1/2 -translate-x-1/2 flex gap-1 pointer-events-none ${zIndex}`}>
+          <div className={`text-red-500 ${iconSizeClass}`}>👹</div>
+        </div>
+      )
+    }
+    if (frameId === "frame-crown") {
+      return (
+        <div className={`absolute ${size > 50 ? "-top-3" : "-top-2"} left-1/2 -translate-x-1/2 pointer-events-none ${zIndex}`}>
+          <div className={`text-yellow-500 ${size > 50 ? "text-3xl" : "text-lg"}`}>👑</div>
+        </div>
+      )
+    }
+
+    return null
+  }
 
   // Fetch leaderboard data and friends
   useEffect(() => {
@@ -212,6 +268,8 @@ export default function LeaderboardPage() {
                   <div className="divide-y divide-border">
                     {leaderboardUsers.map((leaderboardUser) => {
                       const isMe = leaderboardUser.userId === user?.uid
+                      const levelProgress = getLevelProgress(leaderboardUser.xp)
+                      
                       return (
                         <div
                           key={leaderboardUser.userId}
@@ -227,30 +285,33 @@ export default function LeaderboardPage() {
                           </div>
 
                           {/* Avatar */}
-                          <div className="relative">
-                            {leaderboardUser.avatarUrl ? (
-                              <div
-                                className={`h-12 w-12 rounded-full overflow-hidden ${
-                                  isMe ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
-                                }`}
-                              >
-                                <img
-                                  src={leaderboardUser.avatarUrl}
-                                  alt={leaderboardUser.nickname}
-                                  className="h-full w-full object-cover"
-                                />
-                              </div>
+                          <div className="relative h-16 w-16 flex items-center justify-center">
+                            {/* Glitch ring (full circle) or regular SVG ring */}
+                            {leaderboardUser.avatarFrame === "frame-nexus-glitch" ? (
+                              <div className="glitch-ring-full" />
                             ) : (
-                              <div
-                                className={`h-12 w-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center ${
-                                  isMe ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
-                                }`}
-                              >
-                                <span className="text-lg font-semibold text-primary">
-                                  {leaderboardUser.nickname.charAt(0).toUpperCase()}
-                                </span>
-                              </div>
+                              <svg className="absolute inset-0 h-16 w-16 -rotate-90 transform" viewBox="0 0 64 64">
+                                <circle
+                                  cx="32"
+                                  cy="32"
+                                  r="30"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                  fill="none"
+                                  className={`${getFrameXPClasses(leaderboardUser.avatarFrame)} transition-all duration-1000`}
+                                />
+                              </svg>
                             )}
+                            <AvatarWithCosmetics
+                              userId={leaderboardUser.userId}
+                              nickname={leaderboardUser.nickname}
+                              avatarUrl={leaderboardUser.avatarUrl}
+                              size="lg"
+                              hideFrame={true}
+                              refreshKey={0}
+                              avatarSeed={leaderboardUser.avatarSeed}
+                            />
+                            {renderStructuralXPFrame(leaderboardUser.avatarFrame, 64)}
                           </div>
 
                           {/* Username */}
@@ -262,7 +323,10 @@ export default function LeaderboardPage() {
                                 href={`/profile/${leaderboardUser.userId}`}
                                 className="font-semibold text-foreground hover:text-primary hover:underline"
                               >
-                                {leaderboardUser.nickname}
+                                <NameWithColor
+                                  userId={leaderboardUser.userId}
+                                  name={leaderboardUser.nickname}
+                                />
                               </Link>
                             )}
                             {isMe && <p className="text-xs text-primary">My Rank</p>}

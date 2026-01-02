@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAuth } from "@/components/auth-provider"
@@ -11,6 +12,17 @@ import { getUserCourses, CourseWithProgress } from "@/lib/course-utils"
 import { useRouter } from "next/navigation"
 import { Spinner } from "@/components/ui/spinner"
 import { canAccessCourseQuiz, canAccessModuleQuiz, canAccessLessonQuiz } from "@/lib/quiz-access-utils"
+import { getUserNexon } from "@/lib/nexon-utils"
+
+// Custom Nexon icon component
+function NexonIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.2"/>
+      <path d="M12 2L15 9L22 10L17 15L18 22L12 18L6 22L7 15L2 10L9 9L12 2Z" fill="currentColor"/>
+    </svg>
+  )
+}
 
 interface ChallengeSelectionModalProps {
   open: boolean
@@ -35,28 +47,34 @@ export function ChallengeSelectionModal({
   const [selectedQuizType, setSelectedQuizType] = useState<"course" | "module" | "lesson">("course")
   const [selectedModuleIndex, setSelectedModuleIndex] = useState<number | null>(null)
   const [selectedLessonIndex, setSelectedLessonIndex] = useState<number | null>(null)
+  const [betAmount, setBetAmount] = useState<number>(0)
+  const [nexon, setNexon] = useState<number>(0)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    const fetchCourses = async () => {
+    const fetchData = async () => {
       if (!user) return
 
       try {
         setLoading(true)
-        const userCourses = await getUserCourses(user.uid)
+        const [userCourses, nexonBalance] = await Promise.all([
+          getUserCourses(user.uid),
+          getUserNexon(user.uid),
+        ])
         setCourses(userCourses)
+        setNexon(nexonBalance)
         if (userCourses.length > 0) {
           setSelectedCourseId(userCourses[0].id)
         }
       } catch (error) {
-        console.error("Error fetching courses:", error)
+        console.error("Error fetching data:", error)
       } finally {
         setLoading(false)
       }
     }
 
     if (open) {
-      fetchCourses()
+      fetchData()
     }
   }, [open, user])
 
@@ -72,11 +90,11 @@ export function ChallengeSelectionModal({
       let quizUrl = ""
 
       if (quizType === "course") {
-        quizUrl = `/quizzes/${selectedCourseId}/quiz?challenge=${friendId}`
+        quizUrl = `/quizzes/${selectedCourseId}/quiz?challenge=${friendId}&bet=${betAmount}`
       } else if (quizType === "module" && selectedModuleIndex !== null) {
-        quizUrl = `/quizzes/${selectedCourseId}/modules/${selectedModuleIndex}/quiz?challenge=${friendId}`
+        quizUrl = `/quizzes/${selectedCourseId}/modules/${selectedModuleIndex}/quiz?challenge=${friendId}&bet=${betAmount}`
       } else if (quizType === "lesson" && selectedModuleIndex !== null && selectedLessonIndex !== null) {
-        quizUrl = `/quizzes/${selectedCourseId}/modules/${selectedModuleIndex}/lessons/${selectedLessonIndex}/quiz?challenge=${friendId}`
+        quizUrl = `/quizzes/${selectedCourseId}/modules/${selectedModuleIndex}/lessons/${selectedLessonIndex}/quiz?challenge=${friendId}&bet=${betAmount}`
       } else {
         alert("Please select all required options")
         setSubmitting(false)
@@ -281,6 +299,32 @@ export function ChallengeSelectionModal({
               </div>
             )}
 
+            {/* Bet Amount Input */}
+            <div className="space-y-2">
+              <Label htmlFor="bet-amount">Bet Amount (Nexon)</Label>
+              <div className="flex items-center gap-2">
+                <NexonIcon className="h-5 w-5 text-primary" />
+                <Input
+                  id="bet-amount"
+                  type="number"
+                  min="0"
+                  max={nexon}
+                  value={betAmount}
+                  onChange={(e) => {
+                    const value = Math.max(0, Math.min(nexon, parseInt(e.target.value) || 0))
+                    setBetAmount(value)
+                  }}
+                  placeholder="0"
+                />
+                <span className="text-sm text-muted-foreground">
+                  (You have {nexon.toLocaleString()})
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Winner takes all bets. Both players must bet the same amount.
+              </p>
+            </div>
+
             {/* Submit Button */}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -291,6 +335,7 @@ export function ChallengeSelectionModal({
                 disabled={
                   submitting ||
                   !selectedCourseId ||
+                  betAmount > nexon ||
                   (selectedQuizType === "course" && selectedCourse && !canAccessCourseQuiz(selectedCourse)) ||
                   (selectedQuizType === "module" && (selectedModuleIndex === null || (selectedCourse && selectedModuleIndex !== null && !canAccessModuleQuiz(selectedCourse, selectedModuleIndex)))) ||
                   (selectedQuizType === "lesson" && (selectedModuleIndex === null || selectedLessonIndex === null || (selectedCourse && selectedModuleIndex !== null && selectedLessonIndex !== null && !canAccessLessonQuiz(selectedCourse, selectedModuleIndex, selectedLessonIndex))))

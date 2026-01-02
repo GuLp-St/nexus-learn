@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-export type AvatarStyle = "adventurer" | "bottts" | "lorelei" | "micah" | "notionists"
+export type AvatarStyle = "initials" | "identicon" | "pixel-art" | "adventurer" | "bottts" | "avataaars" | "notionists"
 
 interface AvatarBuilderProps {
   currentSeed?: string
@@ -22,13 +22,16 @@ interface AvatarBuilderProps {
   onSave: (avatarUrl: string, style: AvatarStyle, seed: string) => Promise<void>
   onCancel?: () => void
   isLoading?: boolean
+  allowedStyles?: string[] // Array of allowed style names (from owned cosmetics)
 }
 
 const AVATAR_STYLES: { value: AvatarStyle; label: string }[] = [
+  { value: "initials", label: "Initials" },
+  { value: "identicon", label: "Identicon" },
+  { value: "pixel-art", label: "Pixel Art" },
   { value: "adventurer", label: "Adventurer" },
   { value: "bottts", label: "Bottts" },
-  { value: "lorelei", label: "Lorelei" },
-  { value: "micah", label: "Micah" },
+  { value: "avataaars", label: "Avataaars" },
   { value: "notionists", label: "Notionists" },
 ]
 
@@ -38,10 +41,25 @@ export function AvatarBuilder({
   onSave,
   onCancel,
   isLoading = false,
+  allowedStyles = [], // If empty, allow all styles (for backward compatibility)
 }: AvatarBuilderProps) {
   const [selectedStyle, setSelectedStyle] = useState<AvatarStyle>(currentStyle)
   const [seed, setSeed] = useState(currentSeed || "")
   const [avatarUrl, setAvatarUrl] = useState("")
+  
+  // Filter available styles based on owned cosmetics
+  const availableStyles = allowedStyles.length > 0
+    ? AVATAR_STYLES.filter(style => allowedStyles.includes(style.value))
+    : AVATAR_STYLES
+  
+  // If current style is not available, use first available or default
+  useEffect(() => {
+    if (allowedStyles.length > 0 && !allowedStyles.includes(selectedStyle)) {
+      if (availableStyles.length > 0) {
+        setSelectedStyle(availableStyles[0].value as AvatarStyle)
+      }
+    }
+  }, [allowedStyles, selectedStyle, availableStyles])
 
   // Generate avatar URL whenever style or seed changes
   useEffect(() => {
@@ -104,11 +122,17 @@ export function AvatarBuilder({
               <SelectValue placeholder="Select a style" />
             </SelectTrigger>
             <SelectContent>
-              {AVATAR_STYLES.map((style) => (
-                <SelectItem key={style.value} value={style.value}>
-                  {style.label}
+              {availableStyles.length > 0 ? (
+                availableStyles.map((style) => (
+                  <SelectItem key={style.value} value={style.value}>
+                    {style.label}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="none" disabled>
+                  No avatar styles available. Purchase from the Store.
                 </SelectItem>
-              ))}
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -161,10 +185,10 @@ export function AvatarBuilder({
           <Button
             type="button"
             onClick={handleSave}
-            disabled={isLoading || !seed.trim()}
+            disabled={isLoading || !seed.trim() || availableStyles.length === 0}
             className="flex-1 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
           >
-            {isLoading ? "Saving..." : "Save Avatar"}
+            {isLoading ? "Saving..." : availableStyles.length === 0 ? "No Styles Available" : "Save Avatar"}
           </Button>
         </div>
       </CardContent>

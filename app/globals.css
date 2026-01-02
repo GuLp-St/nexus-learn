@@ -125,6 +125,16 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Hide scrollbars globally */
+  * {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+  
+  *::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
 }
 
 /* Ensure Sonner toasts are always on top */
@@ -134,4 +144,636 @@
 
 .xp-bar-animation {
   transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================
+   COSMETIC STYLES
+   ============================================ */
+
+/* XP Bar Specific Effects (SVG compatible) */
+.xp-glow-neon-blue {
+  stroke: #06b6d4;
+  filter: drop-shadow(0 0 5px #06b6d4);
+}
+.xp-glow-radioactive {
+  stroke: #22c55e;
+  filter: drop-shadow(0 0 5px #22c55e);
+  animation: pulse-glow 2s infinite;
+}
+.xp-glow-void {
+  stroke: #8b5cf6;
+  filter: drop-shadow(0 0 5px #8b5cf6);
+}
+
+@keyframes pulse-glow {
+  0%, 100% { filter: drop-shadow(0 0 3px #22c55e); opacity: 0.9; }
+  50% { filter: drop-shadow(0 0 8px #22c55e); opacity: 1; }
+}
+
+.xp-frame-rgb-gamer {
+  stroke: #ef4444; /* Fallback */
+  animation: rgb-stroke 3s linear infinite;
+  filter: drop-shadow(0 0 5px rgba(255, 0, 255, 0.5));
+}
+
+@keyframes rgb-stroke {
+  0% { stroke: #ff0000; }
+  14% { stroke: #ff7f00; }
+  28% { stroke: #ffff00; }
+  42% { stroke: #00ff00; }
+  57% { stroke: #0000ff; }
+  71% { stroke: #4b0082; }
+  85% { stroke: #9400d3; }
+  100% { stroke: #ff0000; }
+}
+
+.xp-frame-golden-lustre {
+  stroke: #ffd700;
+  filter: drop-shadow(0 0 5px #ffd700);
+  animation: gold-shimmer-stroke 2s ease-in-out infinite;
+}
+
+@keyframes gold-shimmer-stroke {
+  0%, 100% { filter: brightness(1) drop-shadow(0 0 3px #ffd700); }
+  50% { filter: brightness(1.3) drop-shadow(0 0 8px #ffd700); }
+}
+
+.xp-frame-nexus-glitch {
+  stroke: #06b6d4;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 2px #00eaff) drop-shadow(0 0 2px #ff00ff);
+  /* Keep XP progress intact; only tiny dashoffset jitter for the glitch */
+  animation:
+    glitch-stroke-progress 0.5s steps(3, end) infinite,
+    glitch-jitter-soft 0.6s steps(3, end) infinite;
+}
+
+@keyframes glitch-stroke-progress {
+  0%   { stroke: #06b6d4; opacity: 1;   stroke-dashoffset: 0;  filter: drop-shadow(0 0 2px #00eaff) drop-shadow(0 0 2px #ff00ff); }
+  20%  { stroke: #ff00ff; opacity: 0.92; stroke-dashoffset: 2;  filter: drop-shadow(2px 0 3px #ff00ff) drop-shadow(-1px 0 2px #00eaff); }
+  40%  { stroke: #00eaff; opacity: 1;   stroke-dashoffset: -2; filter: drop-shadow(-2px 0 3px #00eaff) drop-shadow(1px 0 2px #ff00ff); }
+  60%  { stroke: #ff00ff; opacity: 0.95; stroke-dashoffset: 3;  filter: drop-shadow(3px 0 3px #ff00ff) drop-shadow(-2px 0 2px #00eaff); }
+  80%  { stroke: #00eaff; opacity: 1;   stroke-dashoffset: -3; filter: drop-shadow(-3px 0 3px #00eaff) drop-shadow(2px 0 2px #ff00ff); }
+  100% { stroke: #06b6d4; opacity: 1;   stroke-dashoffset: 0;  filter: drop-shadow(0 0 2px #00eaff) drop-shadow(0 0 2px #ff00ff); }
+}
+
+@keyframes glitch-jitter-soft {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(1px, -1px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* Avatar Frames - Motion Series (Epic) */
+.cosmetic-frame-rgb-gamer {
+  border: 3px solid transparent;
+  background: linear-gradient(var(--card), var(--card)) padding-box,
+              linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000) border-box;
+  background-size: 200% 200%;
+  animation: rgb-rotate 3s linear infinite;
+}
+
+@keyframes rgb-rotate {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+.cosmetic-frame-golden-lustre {
+  border: 3px solid transparent;
+  background: linear-gradient(var(--card), var(--card)) padding-box,
+              linear-gradient(45deg, #ffd700, #ffed4e, #ffd700) border-box;
+  animation: gold-shimmer 2s ease-in-out infinite;
+}
+
+@keyframes gold-shimmer {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.3); }
+}
+
+.cosmetic-frame-nexus-glitch {
+  position: relative;
+  border: 3px solid #00eaff;
+  border-radius: 9999px;
+  box-shadow:
+    0 0 6px rgba(0, 234, 255, 0.6),
+    0 0 6px rgba(255, 0, 255, 0.5);
+  animation:
+    glitch-border 0.5s steps(2, end) infinite,
+    glitch-jitter 0.6s steps(3, end) infinite;
+}
+
+.cosmetic-frame-nexus-glitch::before,
+.cosmetic-frame-nexus-glitch::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border: inherit;
+  border-radius: 9999px;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.cosmetic-frame-nexus-glitch::before {
+  clip-path: inset(0 0 55% 0);
+  animation:
+    glitch-border-slice-top 0.45s steps(2, end) infinite,
+    glitch-jitter 0.6s steps(3, end) infinite;
+}
+.cosmetic-frame-nexus-glitch::after {
+  clip-path: inset(55% 0 0 0);
+  animation:
+    glitch-border-slice-bottom 0.5s steps(2, end) infinite,
+    glitch-jitter 0.7s steps(3, end) infinite;
+}
+
+@keyframes glitch-border {
+  0%   { transform: translate(0, 0);       border-color: #00eaff; box-shadow: 0 0 6px rgba(0,234,255,0.6), 0 0 6px rgba(255,0,255,0.5); }
+  20%  { transform: translate(-2px, 1px);  border-color: #ff00ff; box-shadow: 0 0 8px rgba(255,0,255,0.6), 0 0 4px rgba(0,234,255,0.4); }
+  40%  { transform: translate(2px, -2px);  border-color: #00eaff; box-shadow: 0 0 6px rgba(0,234,255,0.6), 0 0 6px rgba(255,0,255,0.4); }
+  60%  { transform: translate(-2px, -1px); border-color: #ff00ff; box-shadow: 0 0 8px rgba(255,0,255,0.6), 0 0 4px rgba(0,234,255,0.4); }
+  80%  { transform: translate(1px, 2px);   border-color: #00eaff; box-shadow: 0 0 6px rgba(0,234,255,0.6), 0 0 6px rgba(255,0,255,0.5); }
+  100% { transform: translate(0, 0);       border-color: #00eaff; box-shadow: 0 0 6px rgba(0,234,255,0.6), 0 0 6px rgba(255,0,255,0.5); }
+}
+
+@keyframes glitch-border-slice-top {
+  0%   { transform: translate(0, 0);       border-color: #00eaff; }
+  50%  { transform: translate(3px, -1px);  border-color: #ff00ff; }
+  100% { transform: translate(0, 0);       border-color: #00eaff; }
+}
+
+@keyframes glitch-border-slice-bottom {
+  0%   { transform: translate(0, 0);       border-color: #ff00ff; }
+  50%  { transform: translate(-3px, 2px);  border-color: #00eaff; }
+  100% { transform: translate(0, 0);       border-color: #ff00ff; }
+}
+
+/* Glitch XP Ring - CSS-based progress ring with glitch effect */
+.glitch-xp-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+  /* Progress is set via --progress CSS variable (0-100), starts at top (0deg) */
+  background: conic-gradient(
+    from 0deg,
+    #00eaff calc(var(--progress, 0) * 1%),
+    transparent calc(var(--progress, 0) * 1%)
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), black calc(100% - 6px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 6px), black calc(100% - 6px));
+  filter: drop-shadow(0 0 6px rgba(0, 234, 255, 0.6)) drop-shadow(0 0 4px rgba(255, 0, 255, 0.4));
+  animation: glitch-ring-color 0.5s steps(2, end) infinite;
+}
+
+.glitch-xp-ring::before,
+.glitch-xp-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: inherit;
+  -webkit-mask: inherit;
+  mask: inherit;
+  pointer-events: none;
+}
+
+.glitch-xp-ring::before {
+  clip-path: inset(0 0 50% 0);
+  animation: glitch-xp-slice-top 0.45s steps(2, end) infinite;
+}
+
+.glitch-xp-ring::after {
+  clip-path: inset(50% 0 0 0);
+  animation: glitch-xp-slice-bottom 0.5s steps(2, end) infinite;
+}
+
+@keyframes glitch-ring-color {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(0, 234, 255, 0.6)) drop-shadow(0 0 4px rgba(255, 0, 255, 0.4)); }
+  25% { filter: drop-shadow(0 0 8px rgba(255, 0, 255, 0.7)) drop-shadow(0 0 4px rgba(0, 234, 255, 0.4)); }
+  50% { filter: drop-shadow(0 0 6px rgba(0, 234, 255, 0.6)) drop-shadow(0 0 4px rgba(255, 0, 255, 0.4)); }
+  75% { filter: drop-shadow(0 0 8px rgba(255, 0, 255, 0.7)) drop-shadow(0 0 4px rgba(0, 234, 255, 0.4)); }
+}
+
+@keyframes glitch-xp-slice-top {
+  0%   { transform: translate(0, 0); background: conic-gradient(from 0deg, #00eaff calc(var(--progress, 0) * 1%), transparent calc(var(--progress, 0) * 1%)); }
+  25%  { transform: translate(4px, 0); background: conic-gradient(from 0deg, #ff00ff calc(var(--progress, 0) * 1%), transparent calc(var(--progress, 0) * 1%)); }
+  50%  { transform: translate(-3px, 0); background: conic-gradient(from 0deg, #00eaff calc(var(--progress, 0) * 1%), transparent calc(var(--progress, 0) * 1%)); }
+  75%  { transform: translate(5px, 0); background: conic-gradient(from 0deg, #ff00ff calc(var(--progress, 0) * 1%), transparent calc(var(--progress, 0) * 1%)); }
+  100% { transform: translate(0, 0); background: conic-gradient(from 0deg, #00eaff calc(var(--progress, 0) * 1%), transparent calc(var(--progress, 0) * 1%)); }
+}
+
+@keyframes glitch-xp-slice-bottom {
+  0%   { transform: translate(0, 0); background: conic-gradient(from 0deg, #ff00ff calc(var(--progress, 0) * 1%), transparent calc(var(--progress, 0) * 1%)); }
+  25%  { transform: translate(-4px, 0); background: conic-gradient(from 0deg, #00eaff calc(var(--progress, 0) * 1%), transparent calc(var(--progress, 0) * 1%)); }
+  50%  { transform: translate(3px, 0); background: conic-gradient(from 0deg, #ff00ff calc(var(--progress, 0) * 1%), transparent calc(var(--progress, 0) * 1%)); }
+  75%  { transform: translate(-5px, 0); background: conic-gradient(from 0deg, #00eaff calc(var(--progress, 0) * 1%), transparent calc(var(--progress, 0) * 1%)); }
+  100% { transform: translate(0, 0); background: conic-gradient(from 0deg, #ff00ff calc(var(--progress, 0) * 1%), transparent calc(var(--progress, 0) * 1%)); }
+}
+
+/* Glitch ring for leaderboard (complete circle, no XP progress) */
+.glitch-ring-full {
+  position: absolute;
+  inset: 0;
+  border: 4px solid #00eaff;
+  border-radius: 9999px;
+  box-shadow: 0 0 8px rgba(0, 234, 255, 0.6), 0 0 6px rgba(255, 0, 255, 0.5);
+  pointer-events: none;
+  animation: glitch-ring-color-border 0.5s steps(2, end) infinite;
+}
+
+.glitch-ring-full::before,
+.glitch-ring-full::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 4px solid #00eaff;
+  border-radius: 9999px;
+  pointer-events: none;
+}
+
+.glitch-ring-full::before {
+  clip-path: inset(0 0 50% 0);
+  animation: glitch-full-slice-top 0.45s steps(2, end) infinite;
+}
+
+.glitch-ring-full::after {
+  clip-path: inset(50% 0 0 0);
+  animation: glitch-full-slice-bottom 0.5s steps(2, end) infinite;
+}
+
+@keyframes glitch-ring-color-border {
+  0%, 100% { border-color: #00eaff; box-shadow: 0 0 8px rgba(0, 234, 255, 0.6), 0 0 6px rgba(255, 0, 255, 0.5); }
+  50% { border-color: #ff00ff; box-shadow: 0 0 8px rgba(255, 0, 255, 0.6), 0 0 6px rgba(0, 234, 255, 0.5); }
+}
+
+@keyframes glitch-full-slice-top {
+  0%   { transform: translate(0, 0); border-color: #00eaff; }
+  25%  { transform: translate(4px, 0); border-color: #ff00ff; }
+  50%  { transform: translate(-3px, 0); border-color: #00eaff; }
+  75%  { transform: translate(5px, 0); border-color: #ff00ff; }
+  100% { transform: translate(0, 0); border-color: #00eaff; }
+}
+
+@keyframes glitch-full-slice-bottom {
+  0%   { transform: translate(0, 0); border-color: #ff00ff; }
+  25%  { transform: translate(-4px, 0); border-color: #00eaff; }
+  50%  { transform: translate(3px, 0); border-color: #ff00ff; }
+  75%  { transform: translate(-5px, 0); border-color: #00eaff; }
+  100% { transform: translate(0, 0); border-color: #ff00ff; }
+}
+
+/* Name Colors - Rare Gradients */
+.cosmetic-name-golden-god {
+  background: linear-gradient(to right, #fbbf24, #f59e0b);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.cosmetic-name-cyberpunk {
+  background: linear-gradient(to right, #ec4899, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.cosmetic-name-ice-cold {
+  background: linear-gradient(to right, #ffffff, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Name Colors - Legendary Animated */
+.cosmetic-name-rgb-gamer {
+  background: linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: rgb-pan 3s linear infinite;
+}
+
+@keyframes rgb-pan {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+.cosmetic-name-neon {
+  color: white;
+  text-shadow: 0 0 10px rgba(34, 211, 238, 0.8),
+               0 0 20px rgba(34, 211, 238, 0.6),
+               0 0 30px rgba(34, 211, 238, 0.4);
+}
+
+.cosmetic-name-glitch {
+  position: relative;
+  display: inline-block;
+  color: white;
+  text-shadow:
+    1px 0 #00eaff,
+    -1px 0 #ff00ff,
+    0 0 4px rgba(0, 234, 255, 0.6),
+    0 0 4px rgba(255, 0, 255, 0.6);
+  animation:
+    glitch-text 0.4s steps(2, end) infinite,
+    glitch-jitter 0.65s steps(3, end) infinite;
+}
+.cosmetic-name-glitch::before,
+.cosmetic-name-glitch::after {
+  content: attr(data-glitch);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  overflow: hidden;
+  color: white;
+  text-shadow:
+    1px 0 #00eaff,
+    -1px 0 #ff00ff,
+    0 0 4px rgba(0, 234, 255, 0.6),
+    0 0 4px rgba(255, 0, 255, 0.6);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+.cosmetic-name-glitch::before {
+  clip-path: inset(0 0 60% 0);
+  animation:
+    glitch-slice-top 0.45s steps(2, end) infinite,
+    glitch-jitter 0.65s steps(3, end) infinite;
+}
+.cosmetic-name-glitch::after {
+  clip-path: inset(60% 0 0 0);
+  animation:
+    glitch-slice-bottom 0.5s steps(2, end) infinite,
+    glitch-jitter 0.7s steps(3, end) infinite;
+}
+
+@keyframes glitch-text {
+  0%   { transform: translate(0, 0);     text-shadow: 1px 0 #00eaff, -1px 0 #ff00ff, 0 0 4px rgba(0,234,255,0.6), 0 0 4px rgba(255,0,255,0.6); }
+  20%  { transform: translate(-2px, 1px); text-shadow: 1px 0 #ff00ff, -1px 0 #00eaff, 0 0 5px rgba(255,0,255,0.7), 0 0 5px rgba(0,234,255,0.5); }
+  40%  { transform: translate(2px, -2px); text-shadow: 2px 0 #00eaff, -2px 0 #ff00ff, 0 0 6px rgba(0,234,255,0.7), 0 0 6px rgba(255,0,255,0.5); }
+  60%  { transform: translate(-3px, -1px);text-shadow: 2px 0 #ff00ff, -2px 0 #00eaff, 0 0 6px rgba(255,0,255,0.7), 0 0 6px rgba(0,234,255,0.5); }
+  80%  { transform: translate(1px, 3px);  text-shadow: 1px 0 #00eaff, -1px 0 #ff00ff, 0 0 5px rgba(0,234,255,0.6), 0 0 5px rgba(255,0,255,0.6); }
+  100% { transform: translate(0, 0);     text-shadow: 1px 0 #00eaff, -1px 0 #ff00ff, 0 0 4px rgba(0,234,255,0.6), 0 0 4px rgba(255,0,255,0.6); }
+}
+
+@keyframes glitch-jitter {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(-2px, 1px); }
+  50%  { transform: translate(2px, -2px); }
+  75%  { transform: translate(-3px, -1px); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes glitch-slice-top {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(3px, -1px); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes glitch-slice-bottom {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(-3px, 2px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* Wallpapers - Common Solid */
+.cosmetic-wallpaper-midnight-blue {
+  background-color: rgb(15, 23, 42) !important; /* slate-900 */
+}
+.dark .cosmetic-wallpaper-midnight-blue {
+  background-color: rgb(15, 23, 42) !important;
+}
+
+.cosmetic-wallpaper-forest {
+  background-color: rgb(5, 46, 22) !important; /* green-950 */
+}
+.dark .cosmetic-wallpaper-forest {
+  background-color: rgb(5, 46, 22) !important;
+}
+
+.cosmetic-wallpaper-espresso {
+  background-color: rgb(28, 25, 23) !important; /* stone-900 */
+}
+.dark .cosmetic-wallpaper-espresso {
+  background-color: rgb(28, 25, 23) !important;
+}
+
+/* Wallpapers - Uncommon Gradients */
+.cosmetic-wallpaper-dusk {
+  background: linear-gradient(to bottom right, rgb(30, 27, 75), rgb(154, 52, 18)) !important; /* indigo-900 to orange-900 */
+}
+.dark .cosmetic-wallpaper-dusk {
+  background: linear-gradient(to bottom right, rgb(30, 27, 75), rgb(154, 52, 18)) !important;
+}
+
+.cosmetic-wallpaper-deep-ocean {
+  background: linear-gradient(to bottom right, rgb(22, 78, 99), rgb(23, 37, 84)) !important; /* cyan-900 to blue-950 */
+}
+.dark .cosmetic-wallpaper-deep-ocean {
+  background: linear-gradient(to bottom right, rgb(22, 78, 99), rgb(23, 37, 84)) !important;
+}
+
+.cosmetic-wallpaper-vampire {
+  background: linear-gradient(to bottom, rgb(0, 0, 0), rgb(69, 10, 10)) !important; /* black to red-950 */
+}
+.dark .cosmetic-wallpaper-vampire {
+  background: linear-gradient(to bottom, rgb(0, 0, 0), rgb(69, 10, 10)) !important;
+}
+
+/* Wallpapers - Rare Patterns */
+.cosmetic-wallpaper-blueprint {
+  background-color: rgb(30, 58, 138) !important; /* blue-800 */
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.dark .cosmetic-wallpaper-blueprint {
+  background-color: rgb(30, 58, 138) !important;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+}
+
+.cosmetic-wallpaper-carbon-fiber {
+  background: 
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.1) 0px,
+      rgba(0, 0, 0, 0.1) 1px,
+      transparent 1px,
+      transparent 2px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.1) 0px,
+      rgba(0, 0, 0, 0.1) 1px,
+      transparent 1px,
+      transparent 2px
+    ),
+    rgb(15, 23, 42) !important;
+}
+.dark .cosmetic-wallpaper-carbon-fiber {
+  background: 
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.05) 0px,
+      rgba(255, 255, 255, 0.05) 1px,
+      transparent 1px,
+      transparent 2px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.05) 0px,
+      rgba(255, 255, 255, 0.05) 1px,
+      transparent 1px,
+      transparent 2px
+    ),
+    rgb(15, 23, 42) !important;
+}
+
+.cosmetic-wallpaper-hexagon-hive {
+  background-color: rgb(15, 23, 42) !important;
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 30px 30px;
+  background-position: 0 0, 15px 15px;
+}
+.dark .cosmetic-wallpaper-hexagon-hive {
+  background-color: rgb(15, 23, 42) !important;
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+}
+
+/* Wallpapers - Epic Mesh Gradients */
+.cosmetic-wallpaper-aurora {
+  background: 
+    radial-gradient(at 0% 0%, rgba(34, 197, 94, 0.3) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(236, 72, 153, 0.3) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.3) 0px, transparent 50%),
+    rgb(15, 23, 42) !important;
+}
+.dark .cosmetic-wallpaper-aurora {
+  background: 
+    radial-gradient(at 0% 0%, rgba(34, 197, 94, 0.2) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(236, 72, 153, 0.2) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.2) 0px, transparent 50%),
+    rgb(15, 23, 42) !important;
+}
+
+.cosmetic-wallpaper-nebula {
+  background: 
+    radial-gradient(at 20% 50%, rgba(168, 85, 247, 0.4) 0px, transparent 50%),
+    radial-gradient(at 80% 80%, rgba(236, 72, 153, 0.4) 0px, transparent 50%),
+    rgb(15, 23, 42) !important;
+}
+.dark .cosmetic-wallpaper-nebula {
+  background: 
+    radial-gradient(at 20% 50%, rgba(168, 85, 247, 0.3) 0px, transparent 50%),
+    radial-gradient(at 80% 80%, rgba(236, 72, 153, 0.3) 0px, transparent 50%),
+    rgb(15, 23, 42) !important;
+}
+
+.cosmetic-wallpaper-holo {
+  background: 
+    radial-gradient(at 0% 50%, rgba(192, 192, 192, 0.2) 0px, transparent 50%),
+    radial-gradient(at 100% 50%, rgba(236, 72, 153, 0.2) 0px, transparent 50%),
+    radial-gradient(at 50% 0%, rgba(59, 130, 246, 0.2) 0px, transparent 50%),
+    rgb(15, 23, 42) !important;
+}
+.dark .cosmetic-wallpaper-holo {
+  background: 
+    radial-gradient(at 0% 50%, rgba(192, 192, 192, 0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 50%, rgba(236, 72, 153, 0.15) 0px, transparent 50%),
+    radial-gradient(at 50% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+    rgb(15, 23, 42) !important;
+}
+
+/* Wallpapers - Legendary Animated */
+.cosmetic-wallpaper-matrix {
+  background-color: rgb(0, 0, 0) !important;
+  background-image: 
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 255, 0, 0.03) 2px,
+      rgba(0, 255, 0, 0.03) 4px
+    );
+  animation: matrix-rain 20s linear infinite;
+  position: relative;
+}
+
+.cosmetic-wallpaper-matrix::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 0, 0.05) 2px,
+    rgba(0, 255, 0, 0.05) 4px
+  );
+  animation: matrix-rain 15s linear infinite reverse;
+}
+
+@keyframes matrix-rain {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 100vh; }
+}
+
+.dark .cosmetic-wallpaper-matrix {
+  background-color: rgb(0, 0, 0) !important;
+}
+
+.cosmetic-wallpaper-starfield {
+  background-color: rgb(15, 23, 42) !important;
+  background-image: 
+    radial-gradient(2px 2px at 20% 30%, white, transparent),
+    radial-gradient(2px 2px at 60% 70%, white, transparent),
+    radial-gradient(1px 1px at 50% 50%, white, transparent),
+    radial-gradient(1px 1px at 80% 10%, white, transparent),
+    radial-gradient(2px 2px at 90% 40%, white, transparent),
+    radial-gradient(1px 1px at 33% 60%, white, transparent),
+    radial-gradient(2px 2px at 10% 80%, white, transparent);
+  background-size: 200% 200%;
+  animation: starfield-twinkle 20s ease-in-out infinite;
+}
+
+@keyframes starfield-twinkle {
+  0%, 100% { 
+    background-position: 0% 0%;
+    opacity: 1;
+  }
+  50% { 
+    background-position: 100% 100%;
+    opacity: 0.8;
+  }
+}
+
+.dark .cosmetic-wallpaper-starfield {
+  background-color: rgb(15, 23, 42) !important;
+}
+
+.cosmetic-wallpaper-pulse {
+  background: linear-gradient(135deg, rgb(15, 23, 42), rgb(30, 41, 59)) !important;
+  animation: pulse-bg 4s ease-in-out infinite;
+}
+
+@keyframes pulse-bg {
+  0%, 100% { 
+    background: linear-gradient(135deg, rgb(15, 23, 42), rgb(30, 41, 59)) !important;
+  }
+  50% { 
+    background: linear-gradient(135deg, rgb(30, 41, 59), rgb(15, 23, 42)) !important;
+  }
+}
+
+.dark .cosmetic-wallpaper-pulse {
+  background: linear-gradient(135deg, rgb(15, 23, 42), rgb(30, 41, 59)) !important;
+  animation: pulse-bg 4s ease-in-out infinite;
 }

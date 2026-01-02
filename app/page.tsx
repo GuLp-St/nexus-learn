@@ -78,16 +78,20 @@ export default function LearningDashboard() {
             </div>
 
             {/* Dashboard Cards Grid */}
-            <div className="grid gap-6 lg:grid-cols-2">
-              {/* Left Column: Daily Quest (full height) */}
-              <div className="lg:row-span-2">
+            <div className="grid gap-6 lg:grid-cols-3">
+              {/* Daily Quest */}
+              <div>
                 <DailyQuestCard />
               </div>
 
-              {/* Right Column: AI Suggested Course and Community Pulse */}
-              <div className="space-y-6">
-                <AISuggestedCourseCard />
+              {/* Community Pulse */}
+              <div>
                 <CommunityPulseCard />
+              </div>
+
+              {/* AI Suggested Course */}
+              <div>
+                <AISuggestedCourseCard />
               </div>
             </div>
           </div>

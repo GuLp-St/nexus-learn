@@ -12,6 +12,7 @@ export interface XPAwardResult {
   newLevel: number
   leveledUp: boolean
   source?: string
+  nexonAwarded?: number
 }
 
 /**
@@ -34,8 +35,16 @@ export async function awardXP(userId: string, amount: number, source?: string, d
     const newLevel = calculateLevel(newXP)
     const leveledUp = newLevel > oldLevel
 
-    // Record community activity for level up
+    // Award Nexon on level up (50 + level * 10)
     if (leveledUp && newLevel > 1) {
+      const nexonAmount = 50 + (newLevel * 10)
+      const { awardNexon } = await import("./nexon-utils")
+      awardNexon(userId, nexonAmount, "Level Up", `Reached level ${newLevel}`, { level: newLevel }).catch((error) => {
+        console.error("Error awarding Nexon for level up:", error)
+        // Don't throw - Nexon failure shouldn't block XP award
+      })
+
+      // Record community activity for level up
       const { recordActivity } = await import("./community-pulse-utils")
       recordActivity(userId, "leveled_up", {
         newLevel,
@@ -92,6 +101,9 @@ export async function awardXP(userId: string, amount: number, source?: string, d
       // Don't throw - badge check failure shouldn't block XP award
     })
 
+    // Calculate Nexon awarded (if leveled up)
+    const nexonAwarded = leveledUp && newLevel > 1 ? 50 + (newLevel * 10) : undefined
+
     return {
       amount,
       oldXP,
@@ -100,6 +112,7 @@ export async function awardXP(userId: string, amount: number, source?: string, d
       newLevel,
       leveledUp,
       source,
+      nexonAwarded,
     }
   } catch (error) {
     console.error("Error awarding XP:", error)
@@ -403,6 +416,18 @@ export async function awardPerfectQuizBonus(
       console.error("Error recording perfect quiz bonus XP history:", error)
       // Don't throw - history recording failures shouldn't block XP award
     })
+
+    // Award Nexon for perfect course quiz (200 Nexon, first time only)
+    if (quizType === "course") {
+      const { awardNexon } = await import("./nexon-utils")
+      await awardNexon(userId, 200, "Perfect Course Quiz", `Got 100% on course quiz`, {
+        courseId,
+        quizType,
+      }).catch((error) => {
+        console.error("Error awarding Nexon for perfect course quiz:", error)
+        // Don't throw - Nexon failure shouldn't block XP award
+      })
+    }
 
     // Record community activity for perfect quiz
     const { getDoc } = await import("firebase/firestore")

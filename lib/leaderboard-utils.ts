@@ -9,6 +9,8 @@ export interface LeaderboardUser {
   rank: number
   challengeWins?: number
   avatarUrl?: string | null
+  avatarFrame?: string | null
+  avatarSeed?: string | null
 }
 
 /**
@@ -34,6 +36,8 @@ export async function getGlobalLeaderboard(limitCount: number = 10): Promise<Lea
         rank: index + 1,
         challengeWins: data.challengeWins || 0,
         avatarUrl: data.avatarUrl || null,
+        avatarFrame: data.cosmetics?.avatarFrame || null,
+        avatarSeed: data.avatarSeed || data.cosmetics?.avatarSeed || null,
       })
     })
 
@@ -129,6 +133,8 @@ export async function getLeaderboardWithUser(
     const userNickname = userData.nickname || "Anonymous"
     const userChallengeWins = userData.challengeWins || 0
     const userAvatarUrl = userData.avatarUrl || null
+    const userAvatarFrame = userData.cosmetics?.avatarFrame || null
+    const userAvatarSeed = userData.avatarSeed || userData.cosmetics?.avatarSeed || null
 
     // Check if user is already in top N
     const userInTop = topUsers.findIndex((u) => u.userId === userId) !== -1
@@ -148,6 +154,8 @@ export async function getLeaderboardWithUser(
           rank: userRank || limitCount + 1,
           challengeWins: userChallengeWins,
           avatarUrl: userAvatarUrl,
+          avatarFrame: userAvatarFrame,
+          avatarSeed: userAvatarSeed,
         }
       } else {
         // If top N has fewer than limit users, just add the user
@@ -158,6 +166,8 @@ export async function getLeaderboardWithUser(
           rank: userRank || finalLeaderboard.length + 1,
           challengeWins: userChallengeWins,
           avatarUrl: userAvatarUrl,
+          avatarFrame: userAvatarFrame,
+          avatarSeed: userAvatarSeed,
         })
       }
 
@@ -205,6 +215,8 @@ export async function getFriendsLeaderboard(
     const userXP = userData.xp || 0
     const userNickname = userData.nickname || "Anonymous"
     const userAvatarUrl = userData.avatarUrl || null
+    const userAvatarFrame = userData.cosmetics?.avatarFrame || null
+    const userAvatarSeed = userData.avatarSeed || userData.cosmetics?.avatarSeed || null
     
     // Get challenge wins for user and friends
     const userChallengeWins = userData.challengeWins || 0
@@ -217,6 +229,8 @@ export async function getFriendsLeaderboard(
         const friendData = friendDoc.exists() ? friendDoc.data() : {}
         const friendChallengeWins = friendData.challengeWins || 0
         const friendAvatarUrl = friendData.avatarUrl || null
+        const friendAvatarFrame = friendData.cosmetics?.avatarFrame || null
+        const friendAvatarSeed = friendData.avatarSeed || friendData.cosmetics?.avatarSeed || null
         
         return {
           userId: friend.userId,
@@ -225,6 +239,8 @@ export async function getFriendsLeaderboard(
           rank: 0, // Will be set after sorting
           challengeWins: friendChallengeWins,
           avatarUrl: friendAvatarUrl,
+          avatarFrame: friendAvatarFrame,
+          avatarSeed: friendAvatarSeed,
         }
       })
     )
@@ -238,6 +254,8 @@ export async function getFriendsLeaderboard(
         rank: 0, // Will be set after sorting
         challengeWins: userChallengeWins,
         avatarUrl: userAvatarUrl,
+        avatarFrame: userAvatarFrame,
+        avatarSeed: userAvatarSeed,
       },
       ...friendsWithWins,
     ]

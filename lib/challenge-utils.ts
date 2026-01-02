@@ -20,6 +20,7 @@ export interface Challenge {
   challengedScore: number | null
   challengedTime: number | null
   winnerId: string | null
+  betAmount: number // Nexon bet amount (both users bet the same amount)
   createdAt: Timestamp
   completedAt?: Timestamp | null
 }
@@ -70,11 +71,22 @@ export async function createChallenge(
   questionIds: string[],
   challengerAttemptId: string,
   challengerScore: number,
-  challengerTime: number
+  challengerTime: number,
+  betAmount: number = 0
 ): Promise<string> {
   try {
     const challengeRef = doc(collection(db, "challenges"))
     const challengeId = challengeRef.id
+
+    // Deduct bet amount from challenger if betting
+    if (betAmount > 0) {
+      const { spendNexon, getUserNexon } = await import("./nexon-utils")
+      const challengerNexon = await getUserNexon(challengerId)
+      if (challengerNexon < betAmount) {
+        throw new Error("Insufficient Nexon to place bet")
+      }
+      await spendNexon(challengerId, betAmount, `Placed bet on challenge`, { challengeId: challengeRef.id, betAmount })
+    }
 
     await setDoc(challengeRef, {
       challengerId,
@@ -92,6 +104,7 @@ export async function createChallenge(
       challengedScore: null,
       challengedTime: null,
       winnerId: null,
+      betAmount,
       createdAt: serverTimestamp(),
       completedAt: null,
     })
@@ -106,15 +119,34 @@ export async function createChallenge(
 /**
  * Accept a challenge (challenged user starts taking the quiz)
  */
-export async function acceptChallenge(challengeId: string): Promise<void> {
+export async function acceptChallenge(challengeId: string, challengedUserId: string): Promise<void> {
   try {
     const challengeRef = doc(db, "challenges", challengeId)
+    const challengeDoc = await getDoc(challengeRef)
+    
+    if (!challengeDoc.exists()) {
+      throw new Error("Challenge not found")
+    }
+
+    const challengeData = challengeDoc.data() as Challenge
+    const betAmount = challengeData.betAmount || 0
+
+    // Check if challenged user has enough Nexon and deduct bet
+    if (betAmount > 0) {
+      const { spendNexon, getUserNexon } = await import("./nexon-utils")
+      const challengedNexon = await getUserNexon(challengedUserId)
+      if (challengedNexon < betAmount) {
+        throw new Error("Insufficient Nexon to accept challenge")
+      }
+      await spendNexon(challengedUserId, betAmount, `Accepted challenge bet`, { challengeId, betAmount })
+    }
+
     await updateDoc(challengeRef, {
       status: "accepted",
     })
   } catch (error) {
     console.error("Error accepting challenge:", error)
-    throw new Error("Failed to accept challenge")
+    throw error
   }
 }
 
@@ -136,7 +168,7 @@ export async function completeChallenge(
     }
 
     const challengeData = challengeDoc.data() as Challenge
-    const { challengerId, challengedId, challengerScore, challengerTime, questionIds, challengerAttemptId } = challengeData
+    const { challengerId, challengedId, challengerScore, challengerTime, questionIds, challengerAttemptId, betAmount } = challengeData
 
     // Determine winner
     const winnerId = determineWinner(
@@ -147,6 +179,16 @@ export async function completeChallenge(
       challengerTime,
       challengedTime
     )
+
+    // Award Nexon to winner (both bets if betting)
+    if (betAmount > 0 && winnerId) {
+      const totalWinnings = betAmount * 2 // Both users' bets
+      const { awardNexon } = await import("./nexon-utils")
+      await awardNexon(winnerId, totalWinnings, "Challenge Win", `Won challenge and took all bets`, { challengeId, betAmount: totalWinnings }).catch((error) => {
+        console.error("Error awarding Nexon for challenge win:", error)
+        // Don't throw - Nexon failure shouldn't block challenge completion
+      })
+    }
 
     // Update challenge with results
     await updateDoc(challengeRef, {

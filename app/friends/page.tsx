@@ -5,7 +5,8 @@ import { Search, Users, MessageCircle, Zap, Check, XIcon, Trophy, UserPlus, User
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
+import { NameWithColor } from "@/components/name-with-color"
 import { Badge } from "@/components/ui/badge"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { useChatbotContext } from "@/components/chatbot-context-provider"
@@ -300,10 +301,12 @@ export default function SocialPage() {
                             {/* Avatar with Status */}
                             <div className="relative">
                               <Link href={`/profile/${friend.userId}`}>
-                                <Avatar className="h-14 w-14 cursor-pointer">
-                                  <AvatarImage src={friend.avatarUrl} alt={friend.nickname} />
-                                  <AvatarFallback>{getInitials(friend.nickname)}</AvatarFallback>
-                                </Avatar>
+                                <AvatarWithCosmetics
+                                  userId={friend.userId}
+                                  nickname={friend.nickname}
+                                  avatarUrl={friend.avatarUrl}
+                                  size="lg"
+                                />
                               </Link>
                               <div
                                 className={`absolute bottom-0 right-0 h-4 w-4 rounded-full border-2 border-background ${
@@ -317,7 +320,10 @@ export default function SocialPage() {
                               <div className="flex items-center gap-2">
                                 <Link href={`/profile/${friend.userId}`}>
                                   <h3 className="font-semibold text-foreground hover:text-primary hover:underline cursor-pointer">
-                                    {friend.nickname}
+                                    <NameWithColor
+                                      userId={friend.userId}
+                                      name={friend.nickname}
+                                    />
                                   </h3>
                                 </Link>
                               </div>
@@ -392,10 +398,12 @@ export default function SocialPage() {
                           <div className="flex items-center gap-4">
                             {/* Avatar */}
                             <Link href={`/profile/${request.userId}`}>
-                              <Avatar className="h-14 w-14 cursor-pointer">
-                                <AvatarImage src={request.avatarUrl} alt={request.nickname} />
-                                <AvatarFallback>{getInitials(request.nickname)}</AvatarFallback>
-                              </Avatar>
+                              <AvatarWithCosmetics
+                                userId={request.userId}
+                                nickname={request.nickname}
+                                avatarUrl={request.avatarUrl}
+                                size="lg"
+                              />
                             </Link>
 
                             {/* Request Info */}
@@ -484,10 +492,12 @@ export default function SocialPage() {
                           <div className="flex items-center gap-4">
                             {/* Avatar */}
                             <Link href={`/profile/${searchUser.userId}`}>
-                              <Avatar className="h-14 w-14 cursor-pointer">
-                                <AvatarImage src={searchUser.avatarUrl} alt={searchUser.nickname} />
-                                <AvatarFallback>{getInitials(searchUser.nickname)}</AvatarFallback>
-                              </Avatar>
+                              <AvatarWithCosmetics
+                                userId={searchUser.userId}
+                                nickname={searchUser.nickname}
+                                avatarUrl={searchUser.avatarUrl}
+                                size="lg"
+                              />
                             </Link>
 
                             {/* User Info */}

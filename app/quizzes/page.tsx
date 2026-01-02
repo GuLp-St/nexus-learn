@@ -11,7 +11,7 @@ import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
 import { useChatbotContext } from "@/components/chatbot-context-provider"
 import { getUserCourses, CourseWithProgress } from "@/lib/course-utils"
-import { getAnyIncompleteQuizAttempt, QuizAttempt, getUserQuizStats } from "@/lib/quiz-utils"
+import { getAnyIncompleteQuizAttempt, QuizAttempt, getUserQuizStats, getQuizAttempts, getCourseAverageAccuracy } from "@/lib/quiz-utils"
 import {
   Dialog,
   DialogContent,
@@ -95,13 +95,13 @@ function ContinueQuizButton() {
   return (
     <>
       <Button 
-        variant="default" 
+        variant="outline" 
         size="sm" 
-        className="bg-yellow-600 hover:bg-yellow-700 text-white shadow-md"
+        className="max-w-full text-foreground hover:text-primary"
         onClick={() => setConfirmOpen(true)}
       >
-        <Clock className="mr-2 h-4 w-4 shrink-0" />
-        <span>Resume Quiz</span>
+        <Clock className="mr-2 h-4 w-4 shrink-0 text-primary" />
+        <span className="truncate">Resume Quiz</span>
       </Button>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -147,6 +147,8 @@ export default function QuizzesPage() {
     perfectStreaks: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [courseHasQuizzes, setCourseHasQuizzes] = useState<Set<string>>(new Set())
+  const [courseAccuracies, setCourseAccuracies] = useState<Map<string, number>>(new Map())
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
   const { setPageContext } = useChatbotContext()
@@ -168,6 +170,27 @@ export default function QuizzesPage() {
         ])
         setCourses(fetchedCourses)
         setStats(fetchedStats)
+        
+        // Check which courses have completed quizzes and calculate average accuracy
+        const hasQuizzesSet = new Set<string>()
+        const accuraciesMap = new Map<string, number>()
+        await Promise.all(
+          fetchedCourses.map(async (course) => {
+            try {
+              const attempts = await getQuizAttempts(user.uid, course.id)
+              if (attempts.length > 0) {
+                hasQuizzesSet.add(course.id)
+                // Calculate average accuracy for this course
+                const avgAccuracy = await getCourseAverageAccuracy(user.uid, course.id)
+                accuraciesMap.set(course.id, avgAccuracy)
+              }
+            } catch (error) {
+              console.error(`Error checking quizzes for course ${course.id}:`, error)
+            }
+          })
+        )
+        setCourseHasQuizzes(hasQuizzesSet)
+        setCourseAccuracies(accuraciesMap)
       } catch (error) {
         console.error("Error fetching data:", error)
       } finally {
@@ -296,33 +319,63 @@ export default function QuizzesPage() {
                 {courses.map((course, index) => {
                   const initials = getCourseInitials(course.title)
                   const color = colorGradients[index % colorGradients.length]
+                  const hasQuizzes = courseHasQuizzes.has(course.id)
+                  const avgAccuracy = courseAccuracies.get(course.id) || 0
+                  
+                  // Get badge based on average accuracy
+                  const getBadge = (accuracy: number) => {
+                    if (accuracy > 100) return { text: "Perfectionist", color: "text-yellow-500" }
+                    if (accuracy > 90) return { text: "Grandmaster", color: "text-purple-500" }
+                    if (accuracy > 80) return { text: "Expert", color: "text-blue-500" }
+                    if (accuracy > 50) return { text: "Learner", color: "text-green-500" }
+                    if (accuracy > 0) return { text: "Learner", color: "text-green-500" }
+                    return { text: "Unranked", color: "text-muted-foreground" }
+                  }
+                  
+                  const badge = getBadge(avgAccuracy)
 
                   return (
-                    <Link key={course.id} href={`/quizzes/${course.id}`}>
-                      <Card className="group overflow-hidden transition-all hover:shadow-lg hover:border-primary/50">
-                        <CardContent className="p-6">
-                          <div className="space-y-4">
-                            {/* Header with Icon */}
-                            <div className="flex items-start justify-between">
-                              <div className="flex items-center gap-3">
-                                <div
-                                  className={`flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br ${color} text-lg font-bold text-white shadow-sm`}
-                                >
-                                  {initials}
-                                </div>
-                                <div>
-                                  <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                                    {course.title}
-                                  </h3>
-                                  <p className="text-sm text-muted-foreground">{course.userProgress?.progress || 0}% Complete</p>
+                    <div key={course.id} className="space-y-2">
+                      <Link href={`/quizzes/${course.id}`}>
+                        <Card className="group overflow-hidden transition-all hover:shadow-lg hover:border-primary/50">
+                          <CardContent className="p-6">
+                            <div className="space-y-4">
+                              {/* Header with Icon */}
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={`flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br ${color} text-lg font-bold text-white shadow-sm`}
+                                  >
+                                    {initials}
+                                  </div>
+                                  <div>
+                                    <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                                      {course.title}
+                                    </h3>
+                                    <p className={`text-sm font-medium ${badge.color}`}>
+                                      {badge.text}
+                                    </p>
+                                    {avgAccuracy > 0 && (
+                                      <p className="text-xs text-muted-foreground">
+                                        Avg: {avgAccuracy}%
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
-
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                      {hasQuizzes && (
+                        <Link href={`/quizzes/${course.id}/history`}>
+                          <Button variant="outline" size="sm" className="w-full">
+                            <FileQuestion className="h-4 w-4 mr-2" />
+                            Review Past Quiz
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
                   )
                 })}
               </div>
