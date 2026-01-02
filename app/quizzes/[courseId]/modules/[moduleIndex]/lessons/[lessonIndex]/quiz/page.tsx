@@ -335,7 +335,7 @@ export default function LessonQuizPage() {
     setSubmitting(true)
 
     try {
-      const newScores: { [questionId: string]: { correct: boolean; feedback?: string } } = {}
+      const newScores: { [questionId: string]: { correct: boolean; feedback?: string; marks?: number } } = {}
 
       // Evaluate all answers
       for (const question of questions) {

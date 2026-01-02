@@ -131,7 +131,7 @@ export default function ChallengeQuizPage() {
     setSubmitting(true)
 
     try {
-      const newScores: { [questionId: string]: { correct: boolean; feedback?: string } } = {}
+      const newScores: { [questionId: string]: { correct: boolean; feedback?: string; marks?: number } } = {}
 
       for (const question of questions) {
         const userAnswer = answers[question.questionId]
