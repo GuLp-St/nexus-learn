@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { BookOpen, Clock, CheckCircle, Play, Trash2, MoreVertical } from "lucide-react"
+import { BookOpen, Clock, CheckCircle, Play, Trash2, MoreVertical, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +14,8 @@ import { useChatbotContext } from "@/components/chatbot-context-provider"
 import { getUserCourses, CourseWithProgress } from "@/lib/course-utils"
 import { removeCourseFromLibrary } from "@/lib/library-utils"
 import { CompletedCoursesModal } from "@/components/completed-courses-modal"
+import { checkPublishRequirements, PublishRequirements } from "@/lib/publish-utils"
+import { Upload, AlertCircle, CheckCircle2, XCircle, Coins, Trophy } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -151,7 +153,7 @@ function ContinueLearningButton({ courses }: { courses: CourseWithProgress[] }) 
   )
 }
 
-const CourseCard = ({ course, index, onRemove }: { course: CourseWithProgress; index: number; onRemove: () => void }) => {
+const CourseCard = ({ course, index, onRemove, userId }: { course: CourseWithProgress; index: number; onRemove: () => void; userId: string }) => {
   const initials = course.title
     .split(" ")
     .map((word) => word[0])
@@ -164,6 +166,29 @@ const CourseCard = ({ course, index, onRemove }: { course: CourseWithProgress; i
     course.userProgress.createdAt.toDate &&
     (Date.now() - course.userProgress.createdAt.toDate().getTime()) / (1000 * 60 * 60 * 24) < 7
   const [showMenu, setShowMenu] = useState(false)
+  const [publishReqs, setPublishReqs] = useState<PublishRequirements | null>(null)
+  const [checkingReqs, setCheckingReqs] = useState(false)
+  const [expandedPublish, setExpandedPublish] = useState(false)
+
+  const isOwnCourse = course.userProgress?.isOwnCourse === true
+  const isPublished = course.isPublic === true
+
+  useEffect(() => {
+    if (isOwnCourse && !isPublished) {
+      const checkReqs = async () => {
+        try {
+          setCheckingReqs(true)
+          const reqs = await checkPublishRequirements(userId, course.id)
+          setPublishReqs(reqs)
+        } catch (error) {
+          console.error("Error checking publish requirements:", error)
+        } finally {
+          setCheckingReqs(false)
+        }
+      }
+      checkReqs()
+    }
+  }, [isOwnCourse, isPublished, userId, course.id])
 
   return (
     <Card className="group overflow-hidden transition-all hover:shadow-lg hover:border-primary/50 relative">
@@ -184,6 +209,7 @@ const CourseCard = ({ course, index, onRemove }: { course: CourseWithProgress; i
               </div>
             </Link>
             <div className="flex items-center gap-2">
+              {isPublished && <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-200">Published</Badge>}
               {isNew && <Badge className="bg-primary text-primary-foreground">New</Badge>}
               <div className="relative">
                 <Button
@@ -204,6 +230,18 @@ const CourseCard = ({ course, index, onRemove }: { course: CourseWithProgress; i
                       onClick={() => setShowMenu(false)}
                     />
                     <div className="absolute right-0 top-8 z-20 bg-background border border-border rounded-md shadow-lg min-w-[120px]">
+                      {isOwnCourse && !isPublished && (
+                        <Link href={`/courses/${course.id}/publish`}>
+                          <Button
+                            variant="ghost"
+                            className="w-full justify-start text-primary"
+                            disabled={!publishReqs?.canPublish}
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Publish
+                          </Button>
+                        </Link>
+                      )}
                       <Button
                         variant="ghost"
                         className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
@@ -230,6 +268,54 @@ const CourseCard = ({ course, index, onRemove }: { course: CourseWithProgress; i
               />
             </div>
           </div>
+
+          {/* Publish Option Below Card */}
+          {isOwnCourse && !isPublished && (
+            <div className="pt-2 border-t border-border mt-2">
+              {expandedPublish && !publishReqs?.canPublish && (
+                <div className="space-y-2 mb-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 p-2 rounded leading-relaxed">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span>Get at least 80% (Expert) on this course's course quiz to unlock publish</span>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-1">
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      {publishReqs?.quizPassed ? <CheckCircle2 className="h-3 w-3 text-green-500" /> : <XCircle className="h-3 w-3 text-red-500" />}
+                      <span className={publishReqs?.quizPassed ? "text-green-600 font-medium" : "text-muted-foreground"}>80% Quiz</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      {publishReqs?.isLevelFive ? <CheckCircle2 className="h-3 w-3 text-green-500" /> : <XCircle className="h-3 w-3 text-red-500" />}
+                      <span className={publishReqs?.isLevelFive ? "text-green-600 font-medium" : "text-muted-foreground"}>Level 5</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      {publishReqs?.hasEnoughNexon ? <CheckCircle2 className="h-3 w-3 text-green-500" /> : <XCircle className="h-3 w-3 text-red-500" />}
+                      <span className={publishReqs?.hasEnoughNexon ? "text-green-600 font-medium" : "text-muted-foreground"}>500 Nexon</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {!publishReqs?.canPublish ? (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className={`w-full transition-all ${expandedPublish ? "bg-muted text-foreground border-primary/20" : "text-muted-foreground border-dashed hover:border-primary/30 hover:bg-primary/5"}`}
+                  onClick={() => setExpandedPublish(!expandedPublish)}
+                >
+                  <Upload className="h-3.5 w-3.5 mr-2" />
+                  Publish Course
+                  {expandedPublish ? <ChevronUp className="h-3.5 w-3.5 ml-auto" /> : <ChevronDown className="h-3.5 w-3.5 ml-auto" />}
+                </Button>
+              ) : (
+                <Link href={`/courses/${course.id}/publish`} className="block">
+                  <Button variant="outline" size="sm" className="w-full text-primary border-primary/20 hover:bg-primary/5 shadow-sm">
+                    <Upload className="h-3.5 w-3.5 mr-2" />
+                    Publish Course
+                  </Button>
+                </Link>
+              )}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -441,7 +527,7 @@ export default function LibraryPage() {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {myCourses.map((course, index) => (
-                    <CourseCard key={course.id} course={course} index={index} onRemove={() => handleRemoveClick(course)} />
+                    <CourseCard key={course.id} course={course} index={index} onRemove={() => handleRemoveClick(course)} userId={user.uid} />
                   ))}
                 </div>
               )}
@@ -468,7 +554,7 @@ export default function LibraryPage() {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {addedCourses.map((course, index) => (
-                    <CourseCard key={course.id} course={course} index={index + myCourses.length} onRemove={() => handleRemoveClick(course)} />
+                    <CourseCard key={course.id} course={course} index={index + myCourses.length} onRemove={() => handleRemoveClick(course)} userId={user.uid} />
                   ))}
                 </div>
               )}

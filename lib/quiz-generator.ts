@@ -415,7 +415,8 @@ Return only the JSON object.`
  * Check if user's objective answer is correct
  */
 export function checkObjectiveAnswer(question: QuizQuestion, userAnswer: string | number | boolean | undefined): boolean {
-  if (!question.correctAnswer || userAnswer === undefined || userAnswer === null || userAnswer === "") {
+  // Note: correctAnswer can validly be `0` (first option) or `false` (False). Don't treat falsy as missing.
+  if (question.correctAnswer === undefined || question.correctAnswer === null || userAnswer === undefined || userAnswer === null || userAnswer === "") {
     return false
   }
 

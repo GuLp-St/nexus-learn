@@ -345,7 +345,7 @@ export default function LessonQuizPage() {
         const userAnswer = answers[question.questionId]
 
         if (question.type === "objective") {
-          const correct = checkObjectiveAnswer(question, userAnswer || "")
+          const correct = checkObjectiveAnswer(question, userAnswer)
           newScores[question.questionId] = { correct }
         } else {
           // Subjective: evaluate with AI

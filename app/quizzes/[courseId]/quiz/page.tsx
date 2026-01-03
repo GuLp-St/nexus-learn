@@ -356,7 +356,7 @@ export default function CourseQuizPage() {
         const userAnswer = answers[question.questionId]
 
         if (question.type === "objective") {
-          const correct = checkObjectiveAnswer(question, userAnswer || "")
+          const correct = checkObjectiveAnswer(question, userAnswer)
           newScores[question.questionId] = { correct }
         } else {
           if (userAnswer && typeof userAnswer === "string") {

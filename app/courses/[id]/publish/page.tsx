@@ -13,10 +13,11 @@ import { useAuth } from "@/components/auth-provider"
 import { checkPublishRequirements, publishCourse, PublishRequirements } from "@/lib/publish-utils"
 import { getCourseWithProgress } from "@/lib/course-utils"
 import { UnsplashImagePicker } from "@/components/unsplash-image-picker"
-import { CheckCircle2, XCircle, AlertCircle, Coins } from "lucide-react"
+import { CheckCircle2, XCircle, AlertCircle, Coins, Trophy } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
-const PUBLISH_XP_COST = 500
+const PUBLISH_NEXON_COST = 500
+const MIN_LEVEL = 5
 const MIN_QUIZ_SCORE = 80
 
 export default function PublishCoursePage() {
@@ -180,13 +181,24 @@ export default function PublishCoursePage() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {requirements.hasEnoughXP ? (
+                    {requirements.hasEnoughNexon ? (
                       <CheckCircle2 className="h-5 w-5 text-green-500" />
                     ) : (
                       <XCircle className="h-5 w-5 text-red-500" />
                     )}
-                    <span className={requirements.hasEnoughXP ? "" : "text-muted-foreground"}>
-                      Have {PUBLISH_XP_COST} XP (You have: {requirements.currentXP} XP)
+                    <span className={requirements.hasEnoughNexon ? "" : "text-muted-foreground"}>
+                      Have {PUBLISH_NEXON_COST} Nexon (You have: {requirements.currentNexon} Nexon)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {requirements.isLevelFive ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-500" />
+                    )}
+                    <span className={requirements.isLevelFive ? "" : "text-muted-foreground"}>
+                      Be at least Level {MIN_LEVEL} (You are: Level {requirements.currentLevel})
                     </span>
                   </div>
                 </div>
@@ -292,10 +304,10 @@ export default function PublishCoursePage() {
                     <div>
                       <h3 className="font-semibold flex items-center gap-2">
                         <Coins className="h-5 w-5" />
-                        Publishing Cost: {PUBLISH_XP_COST} XP
+                        Publishing Cost: {PUBLISH_NEXON_COST} Nexon
                       </h3>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Your current balance: {requirements.currentXP} XP
+                        Your current balance: {requirements.currentNexon} Nexon
                       </p>
                     </div>
                     <Button

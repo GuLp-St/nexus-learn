@@ -3,16 +3,21 @@ import { doc, getDoc, updateDoc, serverTimestamp, getDocs, query, where, collect
 import { awardXP, XPAwardResult } from "./xp-utils"
 import { QuizAttempt, getMostRecentQuizAttempt } from "./quiz-utils"
 import { getCourseWithProgress } from "./course-utils"
+import { spendNexon } from "./nexon-utils"
+import { calculateLevel } from "./level-utils"
 
-const PUBLISH_XP_COST = 500
+const PUBLISH_NEXON_COST = 500
+const MIN_LEVEL = 5
 const MIN_QUIZ_SCORE = 80 // Minimum quiz score percentage to publish
 
 export interface PublishRequirements {
   courseCompleted: boolean
   quizPassed: boolean
   quizScore?: number
-  hasEnoughXP: boolean
-  currentXP: number
+  hasEnoughNexon: boolean
+  currentNexon: number
+  isLevelFive: boolean
+  currentLevel: number
   canPublish: boolean
 }
 
@@ -62,25 +67,32 @@ export async function checkPublishRequirements(
     }
   }
 
-  // Check XP balance
+  // Check Nexon balance and Level
   const userDoc = await getDoc(doc(db, "users", userId))
-  const currentXP = userDoc.exists() ? (userDoc.data().xp || 0) : 0
-  const hasEnoughXP = currentXP >= PUBLISH_XP_COST
+  const userData = userDoc.exists() ? userDoc.data() : {}
+  const currentNexon = userData.nexon || 0
+  const currentXP = userData.xp || 0
+  const currentLevel = calculateLevel(currentXP)
+  
+  const hasEnoughNexon = currentNexon >= PUBLISH_NEXON_COST
+  const isLevelFive = currentLevel >= MIN_LEVEL
 
-  const canPublish = courseCompleted && quizPassed && hasEnoughXP
+  const canPublish = courseCompleted && quizPassed && hasEnoughNexon && isLevelFive
 
   return {
     courseCompleted,
     quizPassed,
     quizScore,
-    hasEnoughXP,
-    currentXP,
+    hasEnoughNexon,
+    currentNexon,
+    isLevelFive,
+    currentLevel,
     canPublish,
   }
 }
 
 /**
- * Publish a course (deducts XP, updates course metadata)
+ * Publish a course (deducts Nexon, updates course metadata)
  */
 export async function publishCourse(
   userId: string,
@@ -91,7 +103,7 @@ export async function publishCourse(
     imageUrl?: string
     tags?: string[]
   }
-): Promise<XPAwardResult> {
+): Promise<any> {
   // Verify requirements
   const requirements = await checkPublishRequirements(userId, courseId)
   
@@ -99,33 +111,8 @@ export async function publishCourse(
     throw new Error("Publish requirements not met")
   }
 
-  // Deduct XP
-  const userRef = doc(db, "users", userId)
-  const userDoc = await getDoc(userRef)
-  
-  if (!userDoc.exists()) {
-    throw new Error("User not found")
-  }
-
-  const oldXP = userDoc.data().xp || 0
-  const newXP = oldXP - PUBLISH_XP_COST
-
-  if (newXP < 0) {
-    throw new Error("Insufficient XP")
-  }
-
-  // Update user XP
-  await updateDoc(userRef, {
-    xp: newXP,
-    updatedAt: serverTimestamp(),
-  })
-
-  // Record XP deduction in history
-  const { recordXPHistory } = await import("./xp-history-utils")
-  await recordXPHistory(userId, -PUBLISH_XP_COST, "Course Publishing", `Published course: ${updates.title || courseId}`, { courseId }).catch((error) => {
-    console.error("Error recording XP history:", error)
-    // Don't throw - history recording failures shouldn't block publishing
-  })
+  // Deduct Nexon
+  await spendNexon(userId, PUBLISH_NEXON_COST, `Published course: ${updates.title || courseId}`, { courseId })
 
   // Get course title for activity
   const courseRef = doc(db, "courses", courseId)
@@ -136,7 +123,7 @@ export async function publishCourse(
   await updateDoc(courseRef, {
     isPublic: true,
     publishedAt: serverTimestamp(),
-    publishXP: PUBLISH_XP_COST,
+    publishCostNexon: PUBLISH_NEXON_COST,
     ...(updates.title && { title: updates.title }),
     ...(updates.description && { description: updates.description }),
     ...(updates.imageUrl && { imageUrl: updates.imageUrl }),
@@ -152,15 +139,6 @@ export async function publishCourse(
     console.error("Error recording course published activity:", error)
   })
 
-  // Return XP deduction result (negative amount for deduction)
-  return {
-    amount: -PUBLISH_XP_COST,
-    oldXP,
-    newXP,
-    oldLevel: Math.floor(Math.sqrt(oldXP / 100)),
-    newLevel: Math.floor(Math.sqrt(newXP / 100)),
-    leveledUp: false,
-    source: "Course Publishing",
-  }
+  return { success: true }
 }
 
