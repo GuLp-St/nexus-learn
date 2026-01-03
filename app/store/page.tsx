@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { ShoppingBag, Eye, Check, Sparkles, Image, Palette, Frame } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,6 +35,20 @@ export default function StorePage() {
   const [previewCosmetic, setPreviewCosmetic] = useState<Cosmetic | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const tabsListRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (tabsListRef.current) {
+      const activeTab = tabsListRef.current.querySelector('[data-state="active"]')
+      if (activeTab) {
+        activeTab.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "center",
+        })
+      }
+    }
+  }, [selectedCategory])
 
   useEffect(() => {
     if (authLoading) return
@@ -294,7 +308,7 @@ export default function StorePage() {
 
             {/* Category Tabs */}
             <Tabs value={selectedCategory} onValueChange={(v) => setSelectedCategory(v as CosmeticCategory)}>
-              <TabsList className="flex h-auto w-full items-center justify-start overflow-x-auto overflow-y-hidden bg-muted p-1 text-muted-foreground md:grid md:grid-cols-4 no-scrollbar">
+              <TabsList ref={tabsListRef} className="flex h-auto w-full items-center justify-start overflow-x-auto overflow-y-hidden bg-muted p-1 text-muted-foreground md:grid md:grid-cols-4 no-scrollbar">
                 <TabsTrigger value="avatar" className="flex items-center gap-2 px-4 py-2 flex-shrink-0 md:flex-shrink">
                   <Sparkles className="h-4 w-4" />
                   Avatars

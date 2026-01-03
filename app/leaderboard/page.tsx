@@ -95,7 +95,7 @@ export default function LeaderboardPage() {
         
         if (viewMode === "friends") {
           // Fetch friends-only leaderboard
-          const { leaderboard, userRank: rank } = await getFriendsLeaderboard(user.uid, 10)
+          const { leaderboard, userRank: rank } = await getFriendsLeaderboard(user.uid, 5)
           setLeaderboardUsers(leaderboard)
           setUserRank(rank)
 
@@ -117,7 +117,7 @@ export default function LeaderboardPage() {
           setFriendsSet(friends)
         } else {
           // Fetch global leaderboard
-          const { leaderboard, userRank: rank } = await getLeaderboardWithUser(user.uid, 10)
+          const { leaderboard, userRank: rank } = await getLeaderboardWithUser(user.uid, 5)
           setLeaderboardUsers(leaderboard)
           setUserRank(rank)
 

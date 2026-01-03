@@ -172,6 +172,7 @@ const CourseCard = ({ course, index, onRemove, onRate, userId }: { course: Cours
   const [checkingReqs, setCheckingReqs] = useState(false)
   const [expandedPublish, setExpandedPublish] = useState(false)
   const [showReviewHint, setShowReviewHint] = useState(false)
+  const [hasRated, setHasRated] = useState<boolean | null>(null) // null while checking
 
   const isOwnCourse = course.userProgress?.isOwnCourse === true
   const isPublished = course.isPublic === true
@@ -202,6 +203,25 @@ const CourseCard = ({ course, index, onRemove, onRate, userId }: { course: Cours
       checkReqs()
     }
   }, [isOwnCourse, isPublished, userId, course.id])
+
+  // Check if user has already rated this course
+  useEffect(() => {
+    if (isPublished && !isOwnCourse) {
+      const checkRating = async () => {
+        try {
+          const { getUserRating } = await import("@/lib/rating-utils")
+          const rating = await getUserRating(userId, course.id)
+          setHasRated(rating !== null)
+        } catch (error) {
+          console.error("Error checking user rating:", error)
+          setHasRated(false)
+        }
+      }
+      checkRating()
+    } else {
+      setHasRated(false)
+    }
+  }, [isPublished, isOwnCourse, userId, course.id])
 
   return (
     <Card className="group overflow-hidden transition-all hover:shadow-lg hover:border-primary/50 relative">
@@ -331,7 +351,7 @@ const CourseCard = ({ course, index, onRemove, onRate, userId }: { course: Cours
           )}
 
           {/* Review Option Below Card for Published Added Courses */}
-          {isPublished && !isOwnCourse && (
+          {isPublished && !isOwnCourse && hasRated === false && (
             <div className="pt-2 border-t border-border mt-2">
               {!canReview ? (
                 <div className="space-y-2">
@@ -416,40 +436,38 @@ export default function LibraryPage() {
   }, [user, authLoading, router])
 
   useEffect(() => {
-    const fetchCourses = async () => {
-      if (!user) return
-
-      try {
-        setLoading(true)
-        const [fetchedCourses, completedRecords] = await Promise.all([
-          getUserCourses(user.uid),
-          getCompletedCourses(user.uid)
-        ])
-        
-        setCourses(fetchedCourses)
-
-        const active = fetchedCourses.filter((c) => (c.userProgress?.progress || 0) < 100).length
-        const totalProgress =
-          fetchedCourses.length > 0
-            ? fetchedCourses.reduce((sum, c) => sum + (c.userProgress?.progress || 0), 0) / fetchedCourses.length
-            : 0
-
-        setStats({
-          activeCourses: active,
-          completedCourses: completedRecords.length,
-          totalProgress: Math.round(totalProgress),
-        })
-      } catch (error) {
-        console.error("Error fetching courses:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    if (user) {
-      fetchCourses()
-    }
+    fetchCourses()
   }, [user])
+
+  const fetchCourses = async () => {
+    if (!user) return
+
+    try {
+      setLoading(true)
+      const [fetchedCourses, completedRecords] = await Promise.all([
+        getUserCourses(user.uid),
+        getCompletedCourses(user.uid)
+      ])
+      
+      setCourses(fetchedCourses)
+
+      const active = fetchedCourses.filter((c) => (c.userProgress?.progress || 0) < 100).length
+      const totalProgress =
+        fetchedCourses.length > 0
+          ? fetchedCourses.reduce((sum, c) => sum + (c.userProgress?.progress || 0), 0) / fetchedCourses.length
+          : 0
+
+      setStats({
+        activeCourses: active,
+        completedCourses: completedRecords.length,
+        totalProgress: Math.round(totalProgress),
+      })
+    } catch (error) {
+      console.error("Error fetching courses:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     setPageContext({
@@ -758,6 +776,7 @@ export default function LibraryPage() {
           onClose={() => setRatingModal({ open: false, courseId: null, courseTitle: "" })}
           onRated={() => {
             setRatingModal({ open: false, courseId: null, courseTitle: "" })
+            fetchCourses()
           }}
         />
       )}

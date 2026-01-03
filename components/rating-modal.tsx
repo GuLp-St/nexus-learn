@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Star, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Textarea } from "@/components/ui/textarea"
 import { submitCourseRating } from "@/lib/rating-utils"
 import { useXP } from "./xp-context-provider"
 
@@ -19,7 +18,6 @@ interface RatingModalProps {
 export function RatingModal({ courseId, userId, courseTitle, onClose, onRated }: RatingModalProps) {
   const [rating, setRating] = useState(0)
   const [hoveredRating, setHoveredRating] = useState(0)
-  const [review, setReview] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
   const { showXPAward } = useXP()
@@ -34,7 +32,7 @@ export function RatingModal({ courseId, userId, courseTitle, onClose, onRated }:
     setError("")
 
     try {
-      const result = await submitCourseRating(userId, courseId, rating, review.trim() || undefined)
+      const result = await submitCourseRating(userId, courseId, rating)
       if (result) {
         showXPAward(result)
       }
@@ -99,20 +97,6 @@ export function RatingModal({ courseId, userId, courseTitle, onClose, onRated }:
                 This course will remain private. You can still share it with friends!
               </p>
             )}
-          </div>
-
-          <div>
-            <label htmlFor="review" className="text-sm font-medium text-foreground mb-2 block">
-              Review (Optional)
-            </label>
-            <Textarea
-              id="review"
-              placeholder="Share your thoughts about this course..."
-              value={review}
-              onChange={(e) => setReview(e.target.value)}
-              rows={4}
-              className="resize-none"
-            />
           </div>
 
           <div className="flex gap-2 justify-end">

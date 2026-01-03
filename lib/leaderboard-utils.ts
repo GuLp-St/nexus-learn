@@ -16,7 +16,7 @@ export interface LeaderboardUser {
 /**
  * Get top N users by XP from the global leaderboard
  */
-export async function getGlobalLeaderboard(limitCount: number = 10): Promise<LeaderboardUser[]> {
+export async function getGlobalLeaderboard(limitCount: number = 5): Promise<LeaderboardUser[]> {
   try {
     const usersQuery = query(
       collection(db, "users"),
@@ -114,7 +114,7 @@ export async function getUserRank(userId: string): Promise<number | null> {
  */
 export async function getLeaderboardWithUser(
   userId: string,
-  limitCount: number = 10
+  limitCount: number = 5
 ): Promise<{ leaderboard: LeaderboardUser[]; userRank: number | null }> {
   try {
     // Get top N users
@@ -197,7 +197,7 @@ export async function getLeaderboardWithUser(
  */
 export async function getFriendsLeaderboard(
   userId: string,
-  limitCount: number = 10
+  limitCount: number = 5
 ): Promise<{ leaderboard: LeaderboardUser[]; userRank: number | null }> {
   try {
     // Get user's friends

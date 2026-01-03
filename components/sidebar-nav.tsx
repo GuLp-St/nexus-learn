@@ -102,7 +102,7 @@ export function SidebarNav({ currentPath, title = "LearnHub", leftAction }: Side
           <div className="flex h-16 items-center justify-between border-b border-border px-6">
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-semibold text-foreground">LearnHub</h1>
-              <div className="flex items-center gap-1">
+              <div className="hidden lg:flex items-center gap-1">
                 <NotificationBell align="left" />
                 <Link href="/profile">
                   <Button variant="ghost" size="icon" className="h-8 w-8">

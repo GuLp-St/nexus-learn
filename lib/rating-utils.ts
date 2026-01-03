@@ -25,17 +25,19 @@ export async function submitCourseRating(
 
   // Save rating
   const ratingRef = doc(db, "courseRatings", `${userId}-${courseId}`)
-  await setDoc(
-    ratingRef,
-    {
-      userId,
-      courseId,
-      rating,
-      review,
-      createdAt: serverTimestamp(),
-    },
-    { merge: true }
-  )
+  
+  const ratingData: any = {
+    userId,
+    courseId,
+    rating,
+    createdAt: serverTimestamp(),
+  }
+
+  if (review !== undefined) {
+    ratingData.review = review
+  }
+
+  await setDoc(ratingRef, ratingData, { merge: true })
 
   // Update course average rating
   await updateCourseRating(courseId)

@@ -146,12 +146,14 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
           />
 
           {/* Dropdown */}
-          <div className={`absolute ${align === "right" ? "right-0" : "left-0"} top-full mt-2 z-50 w-80 max-w-[calc(100vw-1rem)] sm:max-w-[calc(100vw-2rem)] rounded-lg border bg-background shadow-lg overflow-hidden ${
-            align === "right" ? "sm:right-0 right-[-0.5rem]" : "sm:left-0 left-[-0.5rem]"
-          }`}
-          style={{
-            maxHeight: "calc(100vh - 6rem)",
-          }}>
+          <div 
+            className={`fixed inset-x-4 top-20 z-50 mx-auto w-auto max-w-[calc(100vw-2rem)] sm:max-w-[400px] rounded-lg border bg-background shadow-xl overflow-hidden sm:absolute sm:inset-auto sm:top-full sm:mt-2 sm:w-80 sm:mx-0 ${
+              align === "right" ? "sm:right-0 sm:left-auto" : "sm:left-0 sm:right-auto"
+            }`}
+            style={{
+              maxHeight: "calc(100vh - 6rem)",
+            }}
+          >
             <div className="flex items-center justify-between border-b p-4">
               <h3 className="font-semibold">Notifications</h3>
               {unreadCount > 0 && (
