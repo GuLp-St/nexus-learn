@@ -54,6 +54,9 @@ export default function LessonPage() {
     // Update last accessed module and lesson
     const updateLastAccessed = async () => {
       if (user) {
+        const { ensureUserProgress } = await import("@/lib/course-utils")
+        await ensureUserProgress(user.uid, courseId)
+        
         const progressRef = doc(db, "userCourseProgress", `${user.uid}-${courseId}`)
         await updateDoc(progressRef, {
           lastAccessedModule: moduleIndex,

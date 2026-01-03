@@ -54,81 +54,21 @@ export default function CourseContentPage() {
         const courseWithProgress = await getCourseWithProgress(courseId, user.uid)
 
         if (courseWithProgress) {
-          setCourse(courseWithProgress)
-          
-          // Fetch slide progress for each lesson
-          const progresses: LessonProgress = {}
-          for (let moduleIndex = 0; moduleIndex < courseWithProgress.modules.length; moduleIndex++) {
-            const module = courseWithProgress.modules[moduleIndex]
-            for (let lessonIndex = 0; lessonIndex < module.lessons.length; lessonIndex++) {
-              const lesson = module.lessons[lessonIndex]
-              const lessonKey = `${moduleIndex}-${lessonIndex}`
-              
-              // Check if lesson has slides (has been generated)
-              const lessonData = lesson as any
-              const totalSlides = lessonData.slides?.length || 0
-              
-              if (totalSlides > 0) {
-                // If slides exist, fetch progress
-                const slideProgress = await getLessonSlideProgress(
-                  user.uid,
-                  courseId,
-                  moduleIndex,
-                  lessonIndex,
-                  totalSlides
-                )
-                progresses[lessonKey] = {
-                  ...slideProgress,
-                  totalSlides,
-                }
-              } else {
-                // If slides don't exist yet, check if lesson is completed
-                const isCompleted = courseWithProgress.userProgress?.completedLessons?.includes(lessonKey) || false
-                progresses[lessonKey] = {
-                  currentSlide: 0,
-                  completed: isCompleted,
-                  progress: isCompleted ? 100 : 0,
-                  totalSlides: 0, // Will be determined when lesson is first accessed
-                }
-              }
+          // If the course is found but progress record is missing, create it
+          if (!courseWithProgress.userProgress) {
+            const { ensureUserProgress } = await import("@/lib/course-utils")
+            await ensureUserProgress(user.uid, courseId)
+            
+            // Re-fetch to get the new progress
+            const updatedCourse = await getCourseWithProgress(courseId, user.uid)
+            if (updatedCourse) {
+              setCourse(updatedCourse)
+              // Continue with the rest of the logic using the updated course
+              processCourseData(updatedCourse)
             }
-          }
-          setLessonProgresses(progresses)
-          
-          // Determine which modules to expand (last accessed one)
-          const expanded = new Set<number>()
-          const lastModuleIndex = courseWithProgress.userProgress?.lastAccessedModule
-          
-          if (lastModuleIndex !== undefined && lastModuleIndex >= 0 && lastModuleIndex < courseWithProgress.modules.length) {
-            // Expand the last accessed module
-            expanded.add(lastModuleIndex)
-          } else if (courseWithProgress.modules.length > 0) {
-            // If no lastAccessed, expand first module
-            expanded.add(0)
-          }
-          setExpandedModules(expanded)
-          
-          // Check if course is 100% complete and user hasn't rated yet (optional rating)
-          const progress = courseWithProgress.userProgress?.progress || 0
-          if (progress >= 100) {
-            const userRating = await getUserRating(user.uid, courseId)
-            if (!userRating) {
-              // Rating is now optional, don't auto-show modal
-              setHasRated(false)
-            } else {
-              setHasRated(true)
-            }
-          }
-
-          // Check publish requirements if user is creator and course is not public
-          if (courseWithProgress.createdBy === user.uid && !courseWithProgress.isPublic) {
-            try {
-              const reqs = await checkPublishRequirements(user.uid, courseId)
-              setCanPublish(reqs.canPublish)
-            } catch (error) {
-              console.error("Error checking publish requirements:", error)
-              setCanPublish(false)
-            }
+          } else {
+            setCourse(courseWithProgress)
+            processCourseData(courseWithProgress)
           }
         } else {
           router.push("/")
@@ -138,6 +78,80 @@ export default function CourseContentPage() {
         router.push("/")
       } finally {
         setLoading(false)
+      }
+    }
+
+    const processCourseData = async (courseData: CourseWithProgress) => {
+      if (!user) return
+      
+      // Fetch slide progress for each lesson
+      const progresses: LessonProgress = {}
+      for (let moduleIndex = 0; moduleIndex < courseData.modules.length; moduleIndex++) {
+        const module = courseData.modules[moduleIndex]
+        for (let lessonIndex = 0; lessonIndex < module.lessons.length; lessonIndex++) {
+          const lesson = module.lessons[lessonIndex]
+          const lessonKey = `${moduleIndex}-${lessonIndex}`
+          
+          // Check if lesson has slides (has been generated)
+          const lessonInfo = lesson as any
+          const totalSlides = lessonInfo.slides?.length || 0
+          
+          if (totalSlides > 0) {
+            const slideProgress = await getLessonSlideProgress(
+              user.uid,
+              courseId,
+              moduleIndex,
+              lessonIndex,
+              totalSlides
+            )
+            progresses[lessonKey] = {
+              ...slideProgress,
+              totalSlides,
+            }
+          } else {
+            const isCompleted = courseData.userProgress?.completedLessons?.includes(lessonKey) || false
+            progresses[lessonKey] = {
+              currentSlide: 0,
+              completed: isCompleted,
+              progress: isCompleted ? 100 : 0,
+              totalSlides: 0,
+            }
+          }
+        }
+      }
+      setLessonProgresses(progresses)
+      
+      // Determine which modules to expand
+      const expanded = new Set<number>()
+      const lastModuleIndex = courseData.userProgress?.lastAccessedModule
+      
+      if (lastModuleIndex !== undefined && lastModuleIndex >= 0 && lastModuleIndex < courseData.modules.length) {
+        expanded.add(lastModuleIndex)
+      } else if (courseData.modules.length > 0) {
+        expanded.add(0)
+      }
+      setExpandedModules(expanded)
+      
+      // Check if course is 100% complete
+      const progress = courseData.userProgress?.progress || 0
+      if (progress >= 100) {
+        const userRating = await getUserRating(user.uid, courseId)
+        if (!userRating) {
+          setHasRated(false)
+        } else {
+          setHasRated(true)
+        }
+      }
+
+      // Check publish requirements
+      if (courseData.createdBy === user.uid && !courseData.isPublic) {
+        try {
+          const reqs = await checkPublishRequirements(user.uid, courseId)
+          setCanPublish(reqs.canPublish)
+        } catch (error) {
+          console.error("Error checking publish requirements:", error)
+          setCanPublish(false)
+        }
       }
     }
 

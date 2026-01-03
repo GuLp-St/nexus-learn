@@ -33,7 +33,18 @@ export default function QuizSelectionPage() {
       try {
         const courseWithProgress = await getCourseWithProgress(courseId, user.uid)
         if (courseWithProgress) {
-          setCourse(courseWithProgress)
+          // Ensure progress exists if visiting quiz page
+          if (!courseWithProgress.userProgress) {
+            const { ensureUserProgress } = await import("@/lib/course-utils")
+            await ensureUserProgress(user.uid, courseId)
+            const updated = await getCourseWithProgress(courseId, user.uid)
+            if (updated) {
+              setCourse(updated)
+            }
+          } else {
+            setCourse(courseWithProgress)
+          }
+          
           // Fetch course quiz attempt
           const attempt = await getMostRecentQuizAttempt(user.uid, courseId, "course", null, null)
           setCourseAttempt(attempt)

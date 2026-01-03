@@ -354,7 +354,7 @@ export async function updateUserProgress(
 }
 
 /**
- * Get a single course with user progress
+ * Get a single course with user progress (without side effects)
  */
 export async function getCourseWithProgress(
   courseId: string,
@@ -377,15 +377,6 @@ export async function getCourseWithProgress(
     let userProgress: UserCourseProgress | undefined
     if (progressDoc.exists()) {
       userProgress = progressDoc.data() as UserCourseProgress
-    } else {
-      // Create progress entry if it doesn't exist
-      await ensureUserProgress(userId, courseId)
-      userProgress = {
-        userId,
-        courseId,
-        progress: 0,
-        completedLessons: [],
-      }
     }
     
     return {

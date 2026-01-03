@@ -424,6 +424,7 @@ function CourseShareMessageCard({
   const [course, setCourse] = useState<CourseWithProgress | null>(null)
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
+  const [hasAddedViaThisInvite, setHasAddedViaThisInvite] = useState(false)
 
   useEffect(() => {
     const fetchCourse = async () => {
@@ -433,6 +434,17 @@ function CourseShareMessageCard({
         if (courseData) {
           setCourse(courseData)
         }
+        
+        // Check if this specific user has already used this specific invite
+        const { getDoc, doc } = await import("firebase/firestore")
+        const { db } = await import("@/lib/firebase")
+        const msgDoc = await getDoc(doc(db, "chatMessages", messageId))
+        if (msgDoc.exists()) {
+          const usedBy = msgDoc.data().usedBy || []
+          if (usedBy.includes(user.uid)) {
+            setHasAddedViaThisInvite(true)
+          }
+        }
       } catch (error) {
         console.error("Error fetching course:", error)
       } finally {
@@ -440,23 +452,24 @@ function CourseShareMessageCard({
       }
     }
     fetchCourse()
-  }, [courseId, user])
+  }, [courseId, user, messageId])
 
   const handleAddToLibrary = async () => {
-    if (!user || !course || adding || isUsed) return
+    if (!user || !course || adding || hasAddedViaThisInvite) return
 
     setAdding(true)
     try {
       // Add course to library
       const newCourseId = await copyCourseToUserLibrary(user.uid, courseId)
       
-      // Mark invitation as used
-      const { updateDoc, doc } = await import("firebase/firestore")
+      // Mark this user as having used this specific invitation
+      const { updateDoc, doc, arrayUnion } = await import("firebase/firestore")
       const { db } = await import("@/lib/firebase")
       await updateDoc(doc(db, "chatMessages", messageId), {
-        isUsed: true
+        usedBy: arrayUnion(user.uid)
       })
 
+      setHasAddedViaThisInvite(true)
       router.push(`/courses/${newCourseId}`)
     } catch (error) {
       console.error("Error adding course to library:", error)
@@ -467,10 +480,9 @@ function CourseShareMessageCard({
   }
 
   if (loading) return <div className="p-4 bg-muted rounded-lg animate-pulse w-48 h-24" />
-  if (!course && !isUsed) return null
-
-  // If course was deleted and invitation is used, show expired state
-  if (!course && isUsed) {
+  
+  // If the course doesn't exist anymore, it's truly expired
+  if (!course) {
     return (
       <Card className={`overflow-hidden border-2 opacity-60 grayscale-[0.5] ${isOwnMessage ? "border-primary/20 bg-primary/5" : "border-blue-500/20 bg-blue-500/5"}`}>
         <CardContent className="p-4 flex flex-col items-center justify-center gap-2">
@@ -483,16 +495,51 @@ function CourseShareMessageCard({
     )
   }
 
+  // If the user already has the course in their library (from ANY source)
+  if (course.userProgress) {
+    return (
+      <Card className={`overflow-hidden border-2 ${isOwnMessage ? "border-primary/20 bg-primary/5" : "border-blue-500/20 bg-blue-500/5"}`}>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Share2 className={`h-4 w-4 ${isOwnMessage ? "text-primary" : "text-blue-500"}`} />
+            <span className="font-bold text-sm">COURSE SHARED</span>
+          </div>
+          <div className="space-y-2">
+            <h4 className="font-semibold text-sm truncate">{course.title}</h4>
+            <div className="flex items-center justify-center gap-2 text-xs font-medium text-muted-foreground bg-muted/50 py-2 rounded-md">
+              <Check className="h-3 w-3" />
+              <span>In Library</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // If the user previously had the course but removed it AND already used THIS invitation
+  if (hasAddedViaThisInvite) {
+    return (
+      <Card className={`overflow-hidden border-2 opacity-60 grayscale-[0.5] ${isOwnMessage ? "border-primary/20 bg-primary/5" : "border-blue-500/20 bg-blue-500/5"}`}>
+        <CardContent className="p-4 flex flex-col items-center justify-center gap-2">
+          <div className="rounded-full bg-muted p-2">
+            <Check className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <p className="text-xs font-medium text-muted-foreground">Invitation Already Used</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
-    <Card className={`overflow-hidden border-2 ${isUsed ? "opacity-60 grayscale-[0.5]" : ""} ${isOwnMessage ? "border-primary/20 bg-primary/5" : "border-blue-500/20 bg-blue-500/5"}`}>
+    <Card className={`overflow-hidden border-2 ${isOwnMessage ? "border-primary/20 bg-primary/5" : "border-blue-500/20 bg-blue-500/5"}`}>
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Share2 className={`h-4 w-4 ${isOwnMessage ? "text-primary" : "text-blue-500"}`} />
-          <span className="font-bold text-sm">{isUsed ? "COURSE ADDED" : "COURSE SHARED"}</span>
+          <span className="font-bold text-sm">COURSE SHARED</span>
         </div>
         
         <div className="space-y-2">
-          {course?.imageUrl && (
+          {course.imageUrl && (
             <img 
               src={course.imageUrl} 
               alt={course.title}
@@ -500,46 +547,25 @@ function CourseShareMessageCard({
             />
           )}
           <div>
-            <h4 className="font-semibold text-sm truncate">{course?.title || "Deleted Course"}</h4>
-            {course?.description && (
+            <h4 className="font-semibold text-sm truncate">{course.title}</h4>
+            {course.description && (
               <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
                 {course.description}
               </p>
             )}
           </div>
-          {course?.tags && course.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {course.tags.slice(0, 3).map((tag, idx) => (
-                <span key={idx} className="text-[10px] px-2 py-0.5 bg-muted rounded-full">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
 
         {!isOwnMessage && (
-          course?.userProgress ? (
-            <div className="flex items-center justify-center gap-2 text-xs font-medium text-muted-foreground bg-muted/50 py-2 rounded-md">
-              <Check className="h-3 w-3" />
-              <span>In Library</span>
-            </div>
-          ) : isUsed ? (
-            <div className="flex items-center justify-center gap-2 text-xs font-medium text-muted-foreground bg-muted/50 py-2 rounded-md">
-              <Clock className="h-3 w-3" />
-              <span>Invitation Used</span>
-            </div>
-          ) : (
-            <Button
-              size="sm"
-              className="w-full text-xs gap-2 bg-blue-500 hover:bg-blue-600"
-              onClick={handleAddToLibrary}
-              disabled={adding}
-            >
-              <Plus className="h-3 w-3" />
-              {adding ? "Adding..." : "Add to Library"}
-            </Button>
-          )
+          <Button
+            size="sm"
+            className="w-full text-xs gap-2 bg-blue-500 hover:bg-blue-600"
+            onClick={handleAddToLibrary}
+            disabled={adding}
+          >
+            <Plus className="h-3 w-3" />
+            {adding ? "Adding..." : "Add to Library"}
+          </Button>
         )}
       </CardContent>
     </Card>
