@@ -331,11 +331,20 @@ export default function LibraryPage() {
     completedCourses: 0,
     totalProgress: 0,
   })
-  const [removeDialog, setRemoveDialog] = useState<{ open: boolean; courseId: string | null; courseTitle: string; isPublic?: boolean }>({
+  const [removeDialog, setRemoveDialog] = useState<{ 
+    open: boolean; 
+    courseId: string | null; 
+    courseTitle: string; 
+    isPublic?: boolean;
+    isLastSubscriber?: boolean;
+    checkingSubscribers?: boolean;
+  }>({
     open: false,
     courseId: null,
     courseTitle: "",
     isPublic: false,
+    isLastSubscriber: false,
+    checkingSubscribers: false,
   })
   const [removing, setRemoving] = useState(false)
   const [completedCoursesOpen, setCompletedCoursesOpen] = useState(false)
@@ -401,13 +410,40 @@ export default function LibraryPage() {
   const myCourses = courses.filter(c => c.userProgress?.isOwnCourse === true)
   const addedCourses = courses.filter(c => c.userProgress?.isOwnCourse === false)
 
-  const handleRemoveClick = (course: CourseWithProgress) => {
+  const handleRemoveClick = async (course: CourseWithProgress) => {
     setRemoveDialog({
       open: true,
       courseId: course.id,
       courseTitle: course.title,
       isPublic: course.isPublic || false,
+      checkingSubscribers: !course.isPublic,
+      isLastSubscriber: false,
     })
+
+    if (!course.isPublic) {
+      try {
+        const { collection, query, where, getDocs, limit } = await import("firebase/firestore")
+        const { db } = await import("@/lib/firebase")
+        // Check how many users have this course in their library
+        // We only care if it's 1 (the current user) or more than 1
+        const q = query(
+          collection(db, "userCourseProgress"),
+          where("courseId", "==", course.id),
+          limit(2)
+        )
+        const snapshot = await getDocs(q)
+        const isLast = snapshot.size <= 1
+        
+        setRemoveDialog(prev => ({
+          ...prev,
+          checkingSubscribers: false,
+          isLastSubscriber: isLast
+        }))
+      } catch (error) {
+        console.error("Error checking subscribers:", error)
+        setRemoveDialog(prev => ({ ...prev, checkingSubscribers: false }))
+      }
+    }
   }
 
   const handleRemoveConfirm = async () => {
@@ -436,7 +472,14 @@ export default function LibraryPage() {
         totalProgress: Math.round(totalProgress),
       })
 
-      setRemoveDialog({ open: false, courseId: null, courseTitle: "" })
+      setRemoveDialog({ 
+        open: false, 
+        courseId: null, 
+        courseTitle: "", 
+        isPublic: false,
+        isLastSubscriber: false,
+        checkingSubscribers: false
+      })
     } catch (error) {
       console.error("Error removing course:", error)
       alert("Failed to remove course")
@@ -574,26 +617,52 @@ export default function LibraryPage() {
       </main>
 
       {/* Remove Course Confirmation Dialog */}
-      <Dialog open={removeDialog.open} onOpenChange={(open) => setRemoveDialog({ open, courseId: null, courseTitle: "", isPublic: false })}>
+      <Dialog 
+        open={removeDialog.open} 
+        onOpenChange={(open) => setRemoveDialog({ 
+          open, 
+          courseId: null, 
+          courseTitle: "", 
+          isPublic: false,
+          isLastSubscriber: false,
+          checkingSubscribers: false
+        })}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove Course</DialogTitle>
-            <DialogDescription>
-              {removeDialog.isPublic ? (
-                <>
-                  Are you sure you want to remove <strong>{removeDialog.courseTitle}</strong> from your library? This will remove it from your active dashboard, but your progress will be saved if you decide to add it back from the public library later.
-                </>
-              ) : (
-                <>
-                  Are you sure you want to remove <strong>{removeDialog.courseTitle}</strong>? Since this course is not published, it will be <strong>permanently deleted</strong> and all progress will be lost.
-                </>
-              )}
-            </DialogDescription>
+          <DialogDescription>
+            {removeDialog.checkingSubscribers ? (
+              <div className="flex items-center gap-2 py-2">
+                <Spinner className="h-4 w-4" />
+                <span>Checking course status...</span>
+              </div>
+            ) : removeDialog.isPublic ? (
+              <>
+                Are you sure you want to remove <strong>{removeDialog.courseTitle}</strong> from your library? This will remove it from your active dashboard, but your progress will be saved if you decide to add it back from the public library later.
+              </>
+            ) : removeDialog.isLastSubscriber ? (
+              <>
+                Are you sure you want to remove <strong>{removeDialog.courseTitle}</strong>? Since you are the <strong>last user</strong> with this private course, it will be <strong>permanently deleted</strong> from the database and all progress will be lost.
+              </>
+            ) : (
+              <>
+                Are you sure you want to remove <strong>{removeDialog.courseTitle}</strong>? This is a private course, and while it will stay in the database for other users, it will be <strong>removed from your library</strong> and your personal progress will be lost.
+              </>
+            )}
+          </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setRemoveDialog({ open: false, courseId: null, courseTitle: "" })}
+              onClick={() => setRemoveDialog({ 
+                open: false, 
+                courseId: null, 
+                courseTitle: "", 
+                isPublic: false,
+                isLastSubscriber: false,
+                checkingSubscribers: false
+              })}
               disabled={removing}
             >
               Cancel
