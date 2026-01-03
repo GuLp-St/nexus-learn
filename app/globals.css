@@ -777,3 +777,14 @@
   background: linear-gradient(135deg, rgb(15, 23, 42), rgb(30, 41, 59)) !important;
   animation: pulse-bg 4s ease-in-out infinite;
 }
+
+/* Hide scrollbar utility */
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

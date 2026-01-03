@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react"
+import { useRouter } from "next/navigation"
 import { User, onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth"
 import { auth, db } from "@/lib/firebase"
 import { doc, getDoc } from "firebase/firestore"
@@ -23,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const { showXPAward } = useXP()
+  const router = useRouter()
 
   const fetchUserProfile = async (userId: string) => {
     try {
@@ -96,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await firebaseSignOut(auth)
     setNickname(null)
     setAvatarUrl(null)
+    router.push("/auth")
   }
 
   const refreshProfile = async () => {

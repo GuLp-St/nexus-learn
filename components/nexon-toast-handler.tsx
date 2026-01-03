@@ -6,99 +6,101 @@ import { NexonIcon } from "./ui/nexon-icon"
 import { eventBus } from "@/lib/event-bus"
 import { getUserNexon } from "@/lib/nexon-utils"
 import { useAuth } from "./auth-provider"
+import { ArrowRight } from "lucide-react"
 
 /**
  * Animated number component for Nexon balance change
  */
-function AnimatedNumber({ value }: { value: number }) {
-  const [displayValue, setDisplayValue] = useState(value)
+function AnimatedNumber({ startValue, endValue }: { startValue: number, endValue: number }) {
+  const [displayValue, setDisplayValue] = useState(startValue)
 
   useEffect(() => {
-    let start = displayValue
-    const end = value
-    if (start === end) return
+    // 1 second delay before starting shuffle
+    const delayTimer = setTimeout(() => {
+      const duration = 2000 // 2 seconds shuffling
+      const startTime = performance.now()
 
-    const duration = 1000
-    const startTime = performance.now()
+      const animate = (currentTime: number) => {
+        const elapsed = currentTime - startTime
+        const progress = Math.min(elapsed / duration, 1)
+        
+        // Smooth exponential easing for the shuffle
+        const easeOutExpo = 1 - Math.pow(2, -10 * progress)
+        
+        const current = Math.floor(startValue + (endValue - startValue) * easeOutExpo)
+        setDisplayValue(current)
 
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime
-      const progress = Math.min(elapsed / duration, 1)
-      const easeOutQuad = 1 - (1 - progress) * (1 - progress)
-      
-      const current = Math.floor(start + (end - start) * easeOutQuad)
-      setDisplayValue(current)
-
-      if (progress < 1) {
-        requestAnimationFrame(animate)
+        if (progress < 1) {
+          requestAnimationFrame(animate)
+        }
       }
-    }
 
-    requestAnimationFrame(animate)
-  }, [value])
+      requestAnimationFrame(animate)
+    }, 1000)
+
+    return () => clearTimeout(delayTimer)
+  }, [startValue, endValue])
 
   return <span>{displayValue.toLocaleString()}</span>
 }
 
 export function NexonToastHandler() {
   const { user } = useAuth()
-  const [currentBalance, setCurrentBalance] = useState<number | null>(null)
 
   useEffect(() => {
-    if (!user) {
-      setCurrentBalance(null)
-      return
-    }
-
-    // Initial balance fetch
-    getUserNexon(user.uid).then(setCurrentBalance)
+    if (!user) return
 
     // Subscribe to Nexon award events
-    const unsubscribe = eventBus.subscribe("nexon_awarded", (event: any) => {
+    const unsubscribe = eventBus.subscribe("nexon_awarded", async (event: any) => {
       if (event.userId !== user.uid) return
 
       const data = event.metadata
-      const prevBalance = currentBalance || 0
-      const newBalance = prevBalance + data.amount
-      setCurrentBalance(newBalance)
+      const amount = Number(data.amount) || 0
+      
+      // Fetch latest balance from DB
+      const latestBalance = await getUserNexon(user.uid)
+      const prevBalance = latestBalance - amount
 
       // Show toast
       toast.custom((t) => (
-        <div className="flex flex-col gap-2 p-4 bg-card border rounded-lg shadow-lg w-full max-w-[300px] animate-in slide-in-from-right duration-300">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+        <div className="w-full max-w-sm rounded-lg border bg-background p-4 shadow-lg">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 rounded-full bg-primary/10 p-2">
               <NexonIcon className="h-5 w-5 text-primary" />
-              <span className="font-bold text-lg">+{data.amount} Nexon</span>
             </div>
-            <span className="text-xs text-muted-foreground">{data.source}</span>
-          </div>
-          
-          <div className="text-xs text-muted-foreground flex justify-between items-center border-t pt-2 mt-1">
-            <span>Balance Update:</span>
-            <div className="flex items-center gap-1 font-mono">
-              <span>{prevBalance.toLocaleString()}</span>
-              <span>→</span>
-              <span className="text-primary font-bold">
-                <AnimatedNumber value={newBalance} />
-              </span>
+            
+            <div className="flex-1 space-y-1">
+              {/* Line 1: +Amount and Icon */}
+              <div className="flex items-center gap-1.5 font-bold text-lg text-foreground">
+                <span>+{amount}</span>
+                <NexonIcon className="h-5 w-5 text-primary" />
+              </div>
+              
+              {/* Line 2: Shuffle Animation */}
+              <div className="font-mono text-xl font-black text-primary py-0.5">
+                <AnimatedNumber startValue={prevBalance} endValue={latestBalance} />
+              </div>
+
+              {/* Line 3: Source Name */}
+              <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                {data.source || "Nexon Award"}
+              </div>
+
+              {data.description && (
+                <p className="text-[10px] text-muted-foreground italic leading-tight mt-1">
+                  {data.description}
+                </p>
+              )}
             </div>
           </div>
-          
-          {data.description && (
-            <p className="text-[10px] text-muted-foreground italic leading-tight mt-1 truncate">
-              "{data.description}"
-            </p>
-          )}
         </div>
       ), {
-        duration: 4000,
-        position: "bottom-right",
+        duration: 5000,
       })
     })
 
     return () => unsubscribe()
-  }, [user, currentBalance])
+  }, [user])
 
   return null
 }
-

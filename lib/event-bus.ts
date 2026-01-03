@@ -20,10 +20,14 @@ export interface QuestEventMetadata {
   quizType?: "lesson" | "module" | "course"
   rating?: number
   xpAmount?: number
+  isReward?: boolean
+  questId?: string
+  questType?: string
   // For nexon_awarded
   amount?: number
   source?: string
   description?: string
+  [key: string]: any // Allow additional metadata
 }
 
 export interface QuestEvent {

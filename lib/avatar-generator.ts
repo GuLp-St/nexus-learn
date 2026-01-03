@@ -5,12 +5,26 @@
 
 export type AvatarStyle = 
   | "initials" 
+  | "icons"
   | "identicon" 
-  | "pixel-art" 
-  | "adventurer" 
+  | "rings"
+  | "shapes"
+  | "fun-emoji"
   | "bottts" 
-  | "avataaars" 
+  | "thumbs"
+  | "personas"
+  | "pixel-art" 
+  | "dylan"
+  | "croodles"
+  | "big-ears"
+  | "adventurer" 
+  | "miniavs"
   | "notionists"
+  | "open-peeps"
+  | "big-smile"
+  | "avataaars" 
+  | "lorelei"
+  | "micah"
 
 /**
  * Generate avatar URL from DiceBear API
@@ -22,24 +36,8 @@ export function generateAvatarUrl(
 ): string {
   const baseUrl = "https://api.dicebear.com/9.x"
   
-  switch (style) {
-    case "initials":
-      return `${baseUrl}/initials/svg?seed=${encodeURIComponent(seed)}&size=${size}`
-    case "identicon":
-      return `${baseUrl}/identicon/svg?seed=${encodeURIComponent(seed)}&size=${size}`
-    case "pixel-art":
-      return `${baseUrl}/pixel-art/svg?seed=${encodeURIComponent(seed)}&size=${size}`
-    case "adventurer":
-      return `${baseUrl}/adventurer/svg?seed=${encodeURIComponent(seed)}&size=${size}`
-    case "bottts":
-      return `${baseUrl}/bottts/svg?seed=${encodeURIComponent(seed)}&size=${size}`
-    case "avataaars":
-      return `${baseUrl}/avataaars/svg?seed=${encodeURIComponent(seed)}&size=${size}`
-    case "notionists":
-      return `${baseUrl}/notionists/svg?seed=${encodeURIComponent(seed)}&size=${size}`
-    default:
-      return `${baseUrl}/initials/svg?seed=${encodeURIComponent(seed)}&size=${size}`
-  }
+  // All DiceBear styles follow the same URL pattern
+  return `${baseUrl}/${style}/svg?seed=${encodeURIComponent(seed || "default")}&size=${size}`
 }
 
 /**
@@ -48,4 +46,3 @@ export function generateAvatarUrl(
 export function getDefaultAvatarStyle(): AvatarStyle {
   return "initials"
 }
-

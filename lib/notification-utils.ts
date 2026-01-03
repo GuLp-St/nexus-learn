@@ -45,10 +45,15 @@ export async function createNotification(
     const notificationRef = doc(collection(db, "notifications"))
     const notificationId = notificationRef.id
 
+    // Remove undefined values from data to prevent Firestore errors
+    const cleanData = Object.fromEntries(
+      Object.entries(data).filter(([_, v]) => v !== undefined)
+    )
+
     await setDoc(notificationRef, {
       userId,
       type,
-      data,
+      data: cleanData,
       read: false,
       createdAt: serverTimestamp(),
     })

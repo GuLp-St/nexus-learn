@@ -1,5 +1,5 @@
 import { db } from "./firebase"
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore"
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, runTransaction } from "firebase/firestore"
 import { getUTCDateString, getUTCDateStringFromTimestamp, isSameUTCDay } from "./date-utils"
 import { eventBus, QuestEvent } from "./event-bus"
 import { awardXP, XPAwardResult } from "./xp-utils"
@@ -188,49 +188,48 @@ async function updateQuestProgress(
 ): Promise<void> {
   try {
     const questsRef = doc(db, "dailyQuests", userId)
-    const questsDoc = await getDoc(questsRef)
+    
+    // Use transaction to prevent race conditions when multiple events occur simultaneously
+    await runTransaction(db, async (transaction) => {
+      const questsDoc = await transaction.get(questsRef)
+      if (!questsDoc.exists()) return
 
-    if (!questsDoc.exists()) {
-      return // No quests yet
-    }
+      const data = questsDoc.data() as DailyQuests
+      const quest = data.quests.find((q) => q.type === questType && !q.completed)
 
-    const data = questsDoc.data() as DailyQuests
-    const quest = data.quests.find((q) => q.type === questType && !q.completed)
+      if (!quest) return
 
-    if (!quest) {
-      return // Quest not found or already completed
-    }
+      // Update progress based on quest type
+      let newProgress = quest.progress
 
-    // Update progress based on quest type
-    let newProgress = quest.progress
-
-    switch (questType) {
-      case "complete_module":
-      case "complete_quiz":
-      case "rate_course":
-      case "add_course":
-        newProgress = quest.progress + 1
-        break
-      case "earn_xp":
-        newProgress = quest.progress + (metadata.xpAmount || 0)
-        break
-    }
-
-    const updatedQuests = data.quests.map((q) => {
-      if (q.id === quest.id) {
-        const completed = newProgress >= q.target
-        return {
-          ...q,
-          progress: Math.min(newProgress, q.target),
-          completed,
-        }
+      switch (questType) {
+        case "complete_module":
+        case "complete_quiz":
+        case "rate_course":
+        case "add_course":
+          newProgress = quest.progress + 1
+          break
+        case "earn_xp":
+          newProgress = quest.progress + (metadata.xpAmount || 0)
+          break
       }
-      return q
-    })
 
-    await updateDoc(questsRef, {
-      quests: updatedQuests,
-      updatedAt: serverTimestamp(),
+      const updatedQuests = data.quests.map((q) => {
+        if (q.id === quest.id) {
+          const completed = newProgress >= q.target
+          return {
+            ...q,
+            progress: Math.min(newProgress, q.target),
+            completed,
+          }
+        }
+        return q
+      })
+
+      transaction.update(questsRef, {
+        quests: updatedQuests,
+        updatedAt: serverTimestamp(),
+      })
     })
   } catch (error) {
     console.error("Error updating quest progress:", error)
@@ -262,12 +261,13 @@ export async function claimQuestReward(userId: string, questId: string): Promise
       quest.xpReward,
       "Daily Quest",
       `Completed quest: ${quest.title}`,
-      { questId, questType: quest.type }
+      { questId, questType: quest.type, isReward: true, source: "Daily Quest" }
     )
 
     // Award Nexon
     const { awardNexon } = await import("./nexon-utils")
-    await awardNexon(userId, quest.nexonReward, "Daily Quest", `Completed quest: ${quest.title}`, { questId, questType: quest.type }).catch((error) => {
+    const nexonReward = quest.nexonReward || 25 // Fallback for old quests
+    await awardNexon(userId, nexonReward, "Daily Quest", `Completed quest: ${quest.title}`, { questId, questType: quest.type }).catch((error) => {
       console.error("Error awarding Nexon for daily quest:", error)
       // Don't throw - Nexon failure shouldn't block quest claim
     })

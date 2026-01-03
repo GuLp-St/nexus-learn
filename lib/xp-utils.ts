@@ -71,7 +71,7 @@ export async function awardXP(userId: string, amount: number, source?: string, d
       trackQuestProgress({
         type: "quest.xp_earned",
         userId,
-        metadata: { xpAmount: amount },
+        metadata: { xpAmount: amount, ...metadata },
       }).catch((error) => {
         console.error("Error emitting XP earned event:", error)
       })
@@ -85,11 +85,14 @@ export async function awardXP(userId: string, amount: number, source?: string, d
     // If user is offline, create a notification
     if (!isOnline && amount > 0) {
       const { createNotification } = await import("./notification-utils")
-      await createNotification(userId, "xp_award", {
+      const notificationData: any = {
         amount,
         source,
-        newLevel: leveledUp ? newLevel : undefined,
-      }).catch((error) => {
+      }
+      if (leveledUp) {
+        notificationData.newLevel = newLevel
+      }
+      await createNotification(userId, "xp_award", notificationData).catch((error) => {
         console.error("Error creating XP notification:", error)
       })
     }
@@ -300,7 +303,7 @@ export async function awardQuizQuestionXP(
     trackQuestProgress({
       type: "quest.xp_earned",
       userId,
-      metadata: { xpAmount: XP_AMOUNT },
+      metadata: { xpAmount: XP_AMOUNT, source: "Quiz Question" },
     }).catch((error) => {
       console.error("Error emitting XP earned event:", error)
     })
@@ -399,24 +402,6 @@ export async function awardPerfectQuizBonus(
       })
     })
 
-    // Record in XP history using the utility function (outside transaction)
-    const { recordXPHistory } = await import("./xp-history-utils")
-    await recordXPHistory(
-      userId,
-      XP_AMOUNT,
-      "Perfect Quiz Bonus",
-      `Got 100% on ${quizType} quiz`,
-      {
-        courseId,
-        quizType,
-        ...(moduleIndex !== null && moduleIndex !== undefined ? { moduleIndex } : {}),
-        ...(lessonIndex !== null && lessonIndex !== undefined ? { lessonIndex } : {}),
-      }
-    ).catch((error) => {
-      console.error("Error recording perfect quiz bonus XP history:", error)
-      // Don't throw - history recording failures shouldn't block XP award
-    })
-
     // Award Nexon for perfect course quiz (200 Nexon, first time only)
     if (quizType === "course") {
       const { awardNexon } = await import("./nexon-utils")
@@ -428,6 +413,16 @@ export async function awardPerfectQuizBonus(
         // Don't throw - Nexon failure shouldn't block XP award
       })
     }
+
+    // Emit quest event for XP earned
+    const { trackQuestProgress } = await import("./event-bus")
+    trackQuestProgress({
+      type: "quest.xp_earned",
+      userId,
+      metadata: { xpAmount: XP_AMOUNT, source: "Perfect Quiz Bonus" },
+    }).catch((error) => {
+      console.error("Error emitting XP earned event:", error)
+    })
 
     // Record community activity for perfect quiz
     const { getDoc } = await import("firebase/firestore")
@@ -453,39 +448,79 @@ export async function awardPerfectQuizBonus(
 export async function checkAndAwardDailyLoginXP(userId: string): Promise<XPAwardResult | null> {
   try {
     const userRef = doc(db, "users", userId)
-    const userDoc = await getDoc(userRef)
+    
+    // Use a transaction to ensure atomic check-and-award
+    const result = await runTransaction(db, async (transaction) => {
+      const userDoc = await transaction.get(userRef)
+      if (!userDoc.exists()) return null
 
-    if (!userDoc.exists()) {
-      return null
-    }
+      const userData = userDoc.data()
+      const lastDailyLogin = userData.lastDailyLogin as Timestamp | undefined
 
-    const userData = userDoc.data()
-    const lastDailyLogin = userData.lastDailyLogin as Timestamp | undefined
-
-    // Check if we've already awarded today (using UTC)
-    if (lastDailyLogin) {
-      // Check if last login was today in UTC
-      const todayUTC = getUTCDateString()
-      const lastLoginUTC = getUTCDateStringFromTimestamp(lastDailyLogin)
-      
-      if (todayUTC === lastLoginUTC) {
-        return null // Already awarded today
+      // Check if we've already awarded today (using UTC)
+      if (lastDailyLogin) {
+        const todayUTC = getUTCDateString()
+        const lastLoginUTC = getUTCDateStringFromTimestamp(lastDailyLogin)
+        if (todayUTC === lastLoginUTC) return null
       }
-    }
 
-    // Award daily login XP
-    const XP_AMOUNT = 10
-    const currentStreak = userData.dailyLoginStreak || 0
-    const newStreak = lastDailyLogin ? currentStreak + 1 : 1
+      // Award daily login XP
+      const XP_AMOUNT = 10
+      const currentStreak = userData.dailyLoginStreak || 0
+      const newStreak = lastDailyLogin ? currentStreak + 1 : 1
 
-    const result = await awardXP(userId, XP_AMOUNT, "Daily Login", "Logged in today")
+      const oldXP = userData.xp || 0
+      const oldLevel = calculateLevel(oldXP)
+      const newXP = oldXP + XP_AMOUNT
+      const newLevel = calculateLevel(newXP)
+      const leveledUp = newLevel > oldLevel
 
-    await updateDoc(userRef, {
-      lastDailyLogin: serverTimestamp(),
-      dailyLoginStreak: newStreak,
+      // Update user doc
+      transaction.update(userRef, {
+        xp: increment(XP_AMOUNT),
+        lastDailyLogin: serverTimestamp(),
+        dailyLoginStreak: newStreak,
+        updatedAt: serverTimestamp(),
+      })
+
+      // We'll record history and emit events OUTSIDE the transaction for simplicity
+      // but the atomic check is what matters for duplicates.
+      return {
+        amount: XP_AMOUNT,
+        oldXP,
+        newXP,
+        oldLevel,
+        newLevel,
+        leveledUp,
+        source: "Daily Login"
+      }
     })
 
-    return result
+    if (!result) return null
+
+    // Record in history (outside transaction)
+    const { recordXPHistory } = await import("./xp-history-utils")
+    await recordXPHistory(userId, result.amount, "Daily Login", "Logged in today", { isReward: true }).catch(console.error)
+
+    // Emit quest event (outside transaction)
+    const { trackQuestProgress } = await import("./event-bus")
+    await trackQuestProgress({
+      type: "quest.xp_earned",
+      userId,
+      metadata: { xpAmount: result.amount, isReward: true, source: "Daily Login" },
+    }).catch(console.error)
+
+    // Handle level up rewards and activity
+    if (result.leveledUp && result.newLevel > 1) {
+      const nexonAmount = 50 + (result.newLevel * 10)
+      const { awardNexon } = await import("./nexon-utils")
+      awardNexon(userId, nexonAmount, "Level Up", `Reached level ${result.newLevel}`, { level: result.newLevel }).catch(console.error)
+
+      const { recordActivity } = await import("./community-pulse-utils")
+      recordActivity(userId, "leveled_up", { newLevel: result.newLevel }).catch(console.error)
+    }
+
+    return result as XPAwardResult
   } catch (error) {
     console.error("Error awarding daily login XP:", error)
     return null

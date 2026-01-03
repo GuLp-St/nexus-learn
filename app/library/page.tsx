@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { BookOpen, Clock, CheckCircle, Play, Trash2, MoreVertical, ChevronDown, ChevronUp } from "lucide-react"
+import { BookOpen, Clock, CheckCircle, Play, Trash2, MoreVertical, ChevronDown, ChevronUp, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -16,6 +16,7 @@ import { removeCourseFromLibrary } from "@/lib/library-utils"
 import { CompletedCoursesModal } from "@/components/completed-courses-modal"
 import { checkPublishRequirements, PublishRequirements } from "@/lib/publish-utils"
 import { getCompletedCourses } from "@/lib/completion-utils"
+import { RatingModal } from "@/components/rating-modal"
 import { Upload, AlertCircle, CheckCircle2, XCircle, Trophy } from "lucide-react"
 import {
   Dialog,
@@ -154,7 +155,7 @@ function ContinueLearningButton({ courses }: { courses: CourseWithProgress[] }) 
   )
 }
 
-const CourseCard = ({ course, index, onRemove, userId }: { course: CourseWithProgress; index: number; onRemove: () => void; userId: string }) => {
+const CourseCard = ({ course, index, onRemove, onRate, userId }: { course: CourseWithProgress; index: number; onRemove: () => void; onRate: () => void; userId: string }) => {
   const initials = course.title
     .split(" ")
     .map((word) => word[0])
@@ -170,9 +171,20 @@ const CourseCard = ({ course, index, onRemove, userId }: { course: CourseWithPro
   const [publishReqs, setPublishReqs] = useState<PublishRequirements | null>(null)
   const [checkingReqs, setCheckingReqs] = useState(false)
   const [expandedPublish, setExpandedPublish] = useState(false)
+  const [showReviewHint, setShowReviewHint] = useState(false)
 
   const isOwnCourse = course.userProgress?.isOwnCourse === true
   const isPublished = course.isPublic === true
+
+  // Calculate completed modules
+  const completedModulesCount = course.modules.filter((module, moduleIndex) => {
+    return module.lessons.every((lesson, lessonIndex) => {
+      const lessonId = `${moduleIndex}-${lessonIndex}`
+      return course.userProgress?.completedLessons?.includes(lessonId)
+    })
+  }).length
+
+  const canReview = completedModulesCount >= 1
 
   useEffect(() => {
     if (isOwnCourse && !isPublished) {
@@ -317,6 +329,42 @@ const CourseCard = ({ course, index, onRemove, userId }: { course: CourseWithPro
               )}
             </div>
           )}
+
+          {/* Review Option Below Card for Published Added Courses */}
+          {isPublished && !isOwnCourse && (
+            <div className="pt-2 border-t border-border mt-2">
+              {!canReview ? (
+                <div className="space-y-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full text-muted-foreground border-dashed bg-muted/30 cursor-not-allowed opacity-60"
+                    onClick={() => setShowReviewHint(!showReviewHint)}
+                  >
+                    <Star className="h-3.5 w-3.5 mr-2" />
+                    Review
+                    {showReviewHint ? <ChevronUp className="h-3.5 w-3.5 ml-auto" /> : <ChevronDown className="h-3.5 w-3.5 ml-auto" />}
+                  </Button>
+                  {showReviewHint && (
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground bg-muted/50 p-2 rounded leading-relaxed animate-in fade-in slide-in-from-top-1">
+                      <AlertCircle className="h-3 w-3 shrink-0 text-amber-500" />
+                      <span>Complete at least 1 module to rate the course</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full text-primary border-primary/20 hover:bg-primary/5 shadow-sm"
+                  onClick={onRate}
+                >
+                  <Star className="h-3.5 w-3.5 mr-2 fill-primary/10" />
+                  Review Course
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -348,6 +396,15 @@ export default function LibraryPage() {
   })
   const [removing, setRemoving] = useState(false)
   const [completedCoursesOpen, setCompletedCoursesOpen] = useState(false)
+  const [ratingModal, setRatingModal] = useState<{
+    open: boolean;
+    courseId: string | null;
+    courseTitle: string;
+  }>({
+    open: false,
+    courseId: null,
+    courseTitle: "",
+  })
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
   const { setPageContext } = useChatbotContext()
@@ -580,7 +637,14 @@ export default function LibraryPage() {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {myCourses.map((course, index) => (
-                    <CourseCard key={course.id} course={course} index={index} onRemove={() => handleRemoveClick(course)} userId={user.uid} />
+                    <CourseCard 
+                      key={course.id} 
+                      course={course} 
+                      index={index} 
+                      onRemove={() => handleRemoveClick(course)} 
+                      onRate={() => setRatingModal({ open: true, courseId: course.id, courseTitle: course.title })}
+                      userId={user.uid} 
+                    />
                   ))}
                 </div>
               )}
@@ -607,7 +671,14 @@ export default function LibraryPage() {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {addedCourses.map((course, index) => (
-                    <CourseCard key={course.id} course={course} index={index + myCourses.length} onRemove={() => handleRemoveClick(course)} userId={user.uid} />
+                    <CourseCard 
+                      key={course.id} 
+                      course={course} 
+                      index={index + myCourses.length} 
+                      onRemove={() => handleRemoveClick(course)} 
+                      onRate={() => setRatingModal({ open: true, courseId: course.id, courseTitle: course.title })}
+                      userId={user.uid} 
+                    />
                   ))}
                 </div>
               )}
@@ -677,6 +748,19 @@ export default function LibraryPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Rating Modal */}
+      {ratingModal.open && ratingModal.courseId && user && (
+        <RatingModal
+          courseId={ratingModal.courseId}
+          userId={user.uid}
+          courseTitle={ratingModal.courseTitle}
+          onClose={() => setRatingModal({ open: false, courseId: null, courseTitle: "" })}
+          onRated={() => {
+            setRatingModal({ open: false, courseId: null, courseTitle: "" })
+          }}
+        />
+      )}
 
       {/* Completed Courses Modal */}
       {user && (

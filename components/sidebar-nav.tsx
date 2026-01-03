@@ -1,13 +1,22 @@
 "use client"
 
 import { useState } from "react"
-import { LayoutDashboard, FileQuestion, Trophy, Menu, X, Library, User, Users, Moon, Sun, ShoppingBag } from "lucide-react"
+import { LayoutDashboard, FileQuestion, Trophy, Menu, X, Library, User, Users, Moon, Sun, ShoppingBag, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useTheme } from "@/components/theme-provider"
 import { NotificationBell } from "@/components/notification-bell"
 import { useSocialNotifications } from "@/hooks/use-social-notifications"
 import { Badge } from "@/components/ui/badge"
+import { useAuth } from "@/components/auth-provider"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface SidebarNavProps {
   currentPath?: string
@@ -17,8 +26,23 @@ interface SidebarNavProps {
 
 export function SidebarNav({ currentPath, title = "LearnHub", leftAction }: SidebarNavProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const { theme, toggleTheme } = useTheme()
   const { totalSocialNotifications } = useSocialNotifications()
+  const { signOut } = useAuth()
+
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true)
+      await signOut()
+      setLogoutDialogOpen(false)
+    } catch (error) {
+      console.error("Error signing out:", error)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
 
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/" },
@@ -78,13 +102,16 @@ export function SidebarNav({ currentPath, title = "LearnHub", leftAction }: Side
           <div className="flex h-16 items-center justify-between border-b border-border px-6">
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-semibold text-foreground">LearnHub</h1>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <NotificationBell align="left" />
                 <Link href="/profile">
                   <Button variant="ghost" size="icon" className="h-8 w-8">
                     <User className="h-5 w-5" />
                   </Button>
                 </Link>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleTheme}>
+                  {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+                </Button>
               </div>
             </div>
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
@@ -116,22 +143,37 @@ export function SidebarNav({ currentPath, title = "LearnHub", leftAction }: Side
           </nav>
 
           <div className="border-t border-border p-4">
-            <Button variant="outline" className="w-full justify-start gap-3 bg-transparent" onClick={toggleTheme}>
-              {theme === "light" ? (
-                <>
-                  <Moon className="h-5 w-5" />
-                  <span>Dark Mode</span>
-                </>
-              ) : (
-                <>
-                  <Sun className="h-5 w-5" />
-                  <span>Light Mode</span>
-                </>
-              )}
+            <Button 
+              variant="outline" 
+              className="w-full justify-start gap-3 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive border-dashed border-destructive/30" 
+              onClick={() => setLogoutDialogOpen(true)}
+            >
+              <LogOut className="h-5 w-5" />
+              <span>Log Out</span>
             </Button>
           </div>
         </div>
       </aside>
+
+      {/* Logout Confirmation Dialog */}
+      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Logout</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to log out of your account? Your current session will be ended.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setLogoutDialogOpen(false)} disabled={isLoggingOut}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleLogout} disabled={isLoggingOut}>
+              {isLoggingOut ? "Logging out..." : "Log Out"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

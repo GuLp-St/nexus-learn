@@ -58,7 +58,7 @@ export default function RootLayout({
             </AuthProvider>
           </XPContextProvider>
         </ThemeProvider>
-        <Toaster position="top-right" richColors expand={true} />
+        <Toaster position="top-right" richColors expand={true} gap={12} />
         <Analytics />
       </body>
     </html>

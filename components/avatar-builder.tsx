@@ -13,8 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-
-export type AvatarStyle = "initials" | "identicon" | "pixel-art" | "adventurer" | "bottts" | "avataaars" | "notionists"
+import { generateAvatarUrl, AvatarStyle } from "@/lib/avatar-generator"
 
 interface AvatarBuilderProps {
   currentSeed?: string
@@ -26,18 +25,37 @@ interface AvatarBuilderProps {
 }
 
 const AVATAR_STYLES: { value: AvatarStyle; label: string }[] = [
+  // Common
   { value: "initials", label: "Initials" },
+  { value: "icons", label: "Icons" },
   { value: "identicon", label: "Identicon" },
-  { value: "pixel-art", label: "Pixel Art" },
-  { value: "adventurer", label: "Adventurer" },
+  // Uncommon
+  { value: "rings", label: "Rings" },
+  { value: "shapes", label: "Shapes" },
+  { value: "fun-emoji", label: "Fun Emoji" },
   { value: "bottts", label: "Bottts" },
-  { value: "avataaars", label: "Avataaars" },
+  // Rare
+  { value: "thumbs", label: "Thumbs" },
+  { value: "personas", label: "Personas" },
+  { value: "pixel-art", label: "Pixel Art" },
+  { value: "dylan", label: "Dylan" },
+  { value: "croodles", label: "Croodles" },
+  { value: "big-ears", label: "Big Ears" },
+  { value: "adventurer", label: "Adventurer" },
+  // Epic
+  { value: "miniavs", label: "Miniavs" },
   { value: "notionists", label: "Notionists" },
+  { value: "open-peeps", label: "Open Peeps" },
+  { value: "big-smile", label: "Big Smile" },
+  { value: "avataaars", label: "Avataaars" },
+  // Legendary
+  { value: "lorelei", label: "Lorelei" },
+  { value: "micah", label: "Micah" },
 ]
 
 export function AvatarBuilder({
   currentSeed = "",
-  currentStyle = "adventurer",
+  currentStyle = "initials",
   onSave,
   onCancel,
   isLoading = false,
@@ -47,6 +65,16 @@ export function AvatarBuilder({
   const [seed, setSeed] = useState(currentSeed || "")
   const [avatarUrl, setAvatarUrl] = useState("")
   
+  // Sync selected style if prop changes
+  useEffect(() => {
+    setSelectedStyle(currentStyle)
+  }, [currentStyle])
+
+  // Sync seed if prop changes
+  useEffect(() => {
+    setSeed(currentSeed || "")
+  }, [currentSeed])
+
   // Filter available styles based on owned cosmetics
   const availableStyles = allowedStyles.length > 0
     ? AVATAR_STYLES.filter(style => allowedStyles.includes(style.value))
@@ -63,7 +91,7 @@ export function AvatarBuilder({
 
   // Generate avatar URL whenever style or seed changes
   useEffect(() => {
-    const url = `https://api.dicebear.com/9.x/${selectedStyle}/svg?seed=${encodeURIComponent(seed || "default")}`
+    const url = generateAvatarUrl(selectedStyle, seed || "default")
     setAvatarUrl(url)
   }, [selectedStyle, seed])
 
@@ -195,4 +223,3 @@ export function AvatarBuilder({
     </Card>
   )
 }
-

@@ -239,57 +239,55 @@ function QuestItem({ quest, onClaim, onRefresh, claiming, refreshing, canRefresh
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 flex-shrink-0">
+        <div className="flex flex-col gap-3 flex-shrink-0 items-end">
           {quest.claimed ? (
-            <div className="text-xs text-center text-muted-foreground py-1 px-2">
+            <div className="text-xs text-center text-muted-foreground py-1">
               <QuestCompletedCountdown />
             </div>
-          ) : isCompleted ? (
-            <Button
-              size="sm"
-              onClick={onClaim}
-              disabled={claiming}
-              className="text-xs h-auto py-1.5 flex flex-col items-center"
-            >
-              {claiming ? (
-                <Spinner className="h-3 w-3" />
-              ) : (
-                <>
-                  <span>Claim</span>
-                  <div className="flex flex-col items-center text-[10px] opacity-90 leading-tight">
-                    <span>+{quest.xpReward} XP</span>
-                    <div className="flex items-center gap-0.5 mt-0.5">
-                      <NexonIcon className="h-2.5 w-2.5" />
-                      <span>+{quest.nexonReward}</span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </Button>
           ) : (
-          <div className="flex flex-col gap-1 items-end">
-            <div className="text-xs text-muted-foreground">+{quest.xpReward} XP</div>
-            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-              <NexonIcon className="h-3 w-3" />
-              <span>+{quest.nexonReward}</span>
-            </div>
-          </div>
-          )}
-          
-          {canRefresh && !quest.claimed && !quest.completed && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onRefresh}
-              disabled={refreshing}
-              className="text-xs h-7"
-            >
-              {refreshing ? (
-                <Spinner className="h-3 w-3" />
+            <>
+              {/* Rewards - Always visible at the top */}
+              <div className="flex flex-col gap-1 items-end">
+                <div className="text-xs font-medium text-foreground">+{quest.xpReward} XP</div>
+                <div className="flex items-center gap-1 text-xs font-medium text-foreground">
+                  <span>+{quest.nexonReward}</span>
+                  <NexonIcon className="h-3.5 w-3.5" />
+                </div>
+              </div>
+
+              {/* Action Button - Replaces refresh spot when completed */}
+              {isCompleted ? (
+                <Button
+                  size="sm"
+                  onClick={onClaim}
+                  disabled={claiming}
+                  className="text-xs h-8 px-4"
+                >
+                  {claiming ? (
+                    <Spinner className="h-3 w-3" />
+                  ) : (
+                    "Claim"
+                  )}
+                </Button>
               ) : (
-                <RefreshCw className="h-3 w-3" />
+                canRefresh && !quest.completed && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={onRefresh}
+                    disabled={refreshing}
+                    className="text-xs h-8 w-8 p-0"
+                    title="Refresh Quest"
+                  >
+                    {refreshing ? (
+                      <Spinner className="h-3 w-3" />
+                    ) : (
+                      <RefreshCw className="h-3 w-3" />
+                    )}
+                  </Button>
+                )
               )}
-            </Button>
+            </>
           )}
         </div>
       </div>

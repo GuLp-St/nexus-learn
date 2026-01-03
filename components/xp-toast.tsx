@@ -48,7 +48,7 @@ function XPToastContent({ result }: XPToastContentProps) {
   }, [oldProgress.progressPercentage, newProgress.progressPercentage])
 
   return (
-    <div className="w-full max-w-sm rounded-lg border bg-background p-4 shadow-lg animate-in slide-in-from-right-5 duration-300">
+    <div className="w-full max-w-sm rounded-lg border bg-background p-4 shadow-lg">
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 rounded-full bg-primary/10 p-2">
           <Trophy className="h-5 w-5 text-primary" />

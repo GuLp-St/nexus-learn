@@ -155,10 +155,10 @@ export function LevelUpModal({ open, onClose, result }: LevelUpModalProps) {
               <div className={`flex items-center justify-center gap-2 p-4 rounded-lg bg-primary/10 transition-all duration-700 delay-600 ${
                 showContent ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
               }`}>
-                <NexonIcon className="h-6 w-6 text-primary" />
                 <span className="text-lg font-semibold text-foreground">
-                  +{result.nexonAwarded} Nexon
+                  +{result.nexonAwarded}
                 </span>
+                <NexonIcon className="h-6 w-6 text-primary" />
               </div>
             )}
 

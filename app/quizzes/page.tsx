@@ -12,6 +12,7 @@ import { useAuth } from "@/components/auth-provider"
 import { useChatbotContext } from "@/components/chatbot-context-provider"
 import { getUserCourses, CourseWithProgress } from "@/lib/course-utils"
 import { getAnyIncompleteQuizAttempt, QuizAttempt, getUserQuizStats, getQuizAttempts, getCourseAverageAccuracy } from "@/lib/quiz-utils"
+import { PerfectStreakHistoryModal } from "@/components/perfect-streak-history-modal"
 import {
   Dialog,
   DialogContent,
@@ -149,6 +150,7 @@ export default function QuizzesPage() {
   const [loading, setLoading] = useState(true)
   const [courseHasQuizzes, setCourseHasQuizzes] = useState<Set<string>>(new Set())
   const [courseAccuracies, setCourseAccuracies] = useState<Map<string, number>>(new Map())
+  const [perfectStreakHistoryOpen, setPerfectStreakHistoryOpen] = useState(false)
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
   const { setPageContext } = useChatbotContext()
@@ -287,7 +289,10 @@ export default function QuizzesPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card 
+                className="cursor-pointer hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50"
+                onClick={() => setPerfectStreakHistoryOpen(true)}
+              >
                 <CardContent className="flex items-center gap-4 p-6">
                   <div className="rounded-full bg-primary/10 p-3">
                     <Trophy className="h-6 w-6 text-primary" />
@@ -295,6 +300,7 @@ export default function QuizzesPage() {
                   <div>
                     <p className="text-2xl font-bold text-foreground">{stats.perfectStreaks}</p>
                     <p className="text-sm text-muted-foreground">Perfect Streaks</p>
+                    <p className="text-xs text-muted-foreground mt-1">Click to view history</p>
                   </div>
                 </CardContent>
               </Card>
@@ -383,6 +389,14 @@ export default function QuizzesPage() {
           </div>
         </div>
       </main>
+
+      {user && (
+        <PerfectStreakHistoryModal
+          open={perfectStreakHistoryOpen}
+          onOpenChange={setPerfectStreakHistoryOpen}
+          userId={user.uid}
+        />
+      )}
     </div>
   )
 }

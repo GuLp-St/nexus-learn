@@ -294,20 +294,20 @@ export default function StorePage() {
 
             {/* Category Tabs */}
             <Tabs value={selectedCategory} onValueChange={(v) => setSelectedCategory(v as CosmeticCategory)}>
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="avatar" className="flex items-center gap-2">
+              <TabsList className="flex h-auto w-full items-center justify-start overflow-x-auto overflow-y-hidden bg-muted p-1 text-muted-foreground md:grid md:grid-cols-4 no-scrollbar">
+                <TabsTrigger value="avatar" className="flex items-center gap-2 px-4 py-2 flex-shrink-0 md:flex-shrink">
                   <Sparkles className="h-4 w-4" />
                   Avatars
                 </TabsTrigger>
-                <TabsTrigger value="frame" className="flex items-center gap-2">
+                <TabsTrigger value="frame" className="flex items-center gap-2 px-4 py-2 flex-shrink-0 md:flex-shrink">
                   <Frame className="h-4 w-4" />
                   Frames
                 </TabsTrigger>
-                <TabsTrigger value="wallpaper" className="flex items-center gap-2">
+                <TabsTrigger value="wallpaper" className="flex items-center gap-2 px-4 py-2 flex-shrink-0 md:flex-shrink">
                   <Image className="h-4 w-4" />
                   Wallpapers
                 </TabsTrigger>
-                <TabsTrigger value="nameColor" className="flex items-center gap-2">
+                <TabsTrigger value="nameColor" className="flex items-center gap-2 px-4 py-2 flex-shrink-0 md:flex-shrink">
                   <Palette className="h-4 w-4" />
                   Name Colors
                 </TabsTrigger>

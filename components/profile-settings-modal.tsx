@@ -9,7 +9,8 @@ import { updateUserNickname, updateUserEmail, updateUserPassword, updateUserAvat
 import { useAuth } from "@/components/auth-provider"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { AvatarBuilder } from "@/components/avatar-builder"
-import { getUserCosmetics, getAllCosmetics } from "@/lib/cosmetics-utils"
+import { getUserCosmetics, getAllCosmetics, resolveAvatarStyle } from "@/lib/cosmetics-utils"
+import { AvatarStyle } from "@/lib/avatar-generator"
 
 interface ProfileSettingsModalProps {
   open: boolean
@@ -32,6 +33,7 @@ export function ProfileSettingsModal({ open, onOpenChange, onUpdate }: ProfileSe
   const [showAvatarBuilder, setShowAvatarBuilder] = useState(false)
   const [ownedAvatarStyles, setOwnedAvatarStyles] = useState<string[]>([])
   const [currentAvatarSeed, setCurrentAvatarSeed] = useState("")
+  const [currentAvatarStyle, setCurrentAvatarStyle] = useState<AvatarStyle>("initials")
 
   // Load owned avatar styles and current seed when modal opens
   useEffect(() => {
@@ -40,14 +42,12 @@ export function ProfileSettingsModal({ open, onOpenChange, onUpdate }: ProfileSe
       try {
         const userCosmetics = await getUserCosmetics(user.uid)
         setCurrentAvatarSeed(userCosmetics.avatarSeed || nickname || "")
+        setCurrentAvatarStyle(resolveAvatarStyle(userCosmetics.avatarStyle))
         
-        const allCosmetics = await getAllCosmetics()
         const ownedAvatarIds = userCosmetics.ownedCosmetics?.avatars || []
-        // Map owned avatar IDs to their style values
-        const styles = allCosmetics
-          .filter(c => c.category === "avatar" && ownedAvatarIds.includes(c.id))
-          .map(c => c.config?.style)
-          .filter(Boolean) as string[]
+        
+        // Map owned avatar IDs to their style values using resolveAvatarStyle for safety
+        const styles = ownedAvatarIds.map(id => resolveAvatarStyle(id))
         setOwnedAvatarStyles(styles)
       } catch (error) {
         console.error("Error loading user cosmetic data:", error)
@@ -189,7 +189,7 @@ export function ProfileSettingsModal({ open, onOpenChange, onUpdate }: ProfileSe
           <div className="py-4">
             <AvatarBuilder
               currentSeed={currentAvatarSeed}
-              currentStyle="adventurer"
+              currentStyle={currentAvatarStyle}
               onSave={handleAvatarSave}
               onCancel={() => setShowAvatarBuilder(false)}
               isLoading={loading}

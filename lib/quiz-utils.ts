@@ -68,7 +68,7 @@ export async function getUserQuizStats(userId: string): Promise<{
         totalPointsPossible += attempt.maxScore
         totalQuestionsAnswered += Object.keys(attempt.answers || {}).length
         
-        if (attempt.totalScore === attempt.maxScore && attempt.maxScore > 0) {
+        if (attempt.quizType === "course" && attempt.totalScore === attempt.maxScore && attempt.maxScore > 0) {
           perfectStreaks++
         }
       }
@@ -90,6 +90,56 @@ export async function getUserQuizStats(userId: string): Promise<{
       totalQuestionsAnswered: 0,
       perfectStreaks: 0,
     }
+  }
+}
+
+/**
+ * Get all perfect course quiz attempts for history
+ */
+export async function getPerfectQuizHistory(userId: string): Promise<(QuizAttempt & { courseTitle?: string })[]> {
+  try {
+    const attemptsQuery = query(
+      collection(db, "quizAttempts"),
+      where("userId", "==", userId),
+      where("quizType", "==", "course")
+    )
+    
+    const snapshot = await getDocs(attemptsQuery)
+    const perfectAttempts: (QuizAttempt & { courseTitle?: string })[] = []
+    
+    // Use a map to cache course titles
+    const courseTitles = new Map<string, string>()
+
+    for (const docSnap of snapshot.docs) {
+      const attempt = docSnap.data() as QuizAttempt
+      // Only count completed, not abandoned, and perfect score
+      if (attempt.completedAt && !(attempt as any).abandoned && attempt.totalScore === attempt.maxScore && attempt.maxScore > 0) {
+        let courseTitle = courseTitles.get(attempt.courseId)
+        if (!courseTitle) {
+          const courseRef = doc(db, "courses", attempt.courseId)
+          const courseSnap = await getDoc(courseRef)
+          const fetchedTitle = courseSnap.data()?.title || "Unknown Course"
+          courseTitles.set(attempt.courseId, fetchedTitle)
+          courseTitle = fetchedTitle
+        }
+        
+        perfectAttempts.push({
+          id: docSnap.id,
+          ...attempt,
+          courseTitle
+        })
+      }
+    }
+    
+    // Sort by completion date
+    return perfectAttempts.sort((a, b) => {
+      const aTime = a.completedAt?.toMillis() || 0
+      const bTime = b.completedAt?.toMillis() || 0
+      return bTime - aTime
+    })
+  } catch (error) {
+    console.error("Error fetching perfect quiz history:", error)
+    return []
   }
 }
 

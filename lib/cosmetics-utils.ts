@@ -34,12 +34,34 @@ export interface UserCosmetics {
 const COSMETICS: Cosmetic[] = [
   // Avatars - Commons are unlocked by default
   { id: "avatar-initials", category: "avatar", rarity: "common", price: 0, name: "Initials", description: "Simple letter-based avatar", config: { style: "initials" } },
+  { id: "avatar-icons", category: "avatar", rarity: "common", price: 0, name: "Icons", description: "Clean symbol icons", config: { style: "icons" } },
   { id: "avatar-identicon", category: "avatar", rarity: "common", price: 0, name: "Identicon", description: "Geometric shapes avatar", config: { style: "identicon" } },
-  { id: "avatar-pixel-art", category: "avatar", rarity: "common", price: 0, name: "Pixel Art", description: "Basic pixel avatar", config: { style: "pixel-art" } },
-  { id: "avatar-adventurer", category: "avatar", rarity: "uncommon", price: 100, name: "Adventurer", description: "RPG character avatar", config: { style: "adventurer" } },
-  { id: "avatar-bottts", category: "avatar", rarity: "rare", price: 200, name: "Bottts", description: "Cool robot avatar", config: { style: "bottts" } },
-  { id: "avatar-avataaars", category: "avatar", rarity: "epic", price: 500, name: "Avataaars", description: "Detailed people avatar", config: { style: "avataaars" } },
-  { id: "avatar-notionists", category: "avatar", rarity: "legendary", price: 1000, name: "Notionists", description: "Artistic sketch avatar", config: { style: "notionists" } },
+  
+  // Uncommon Avatars
+  { id: "avatar-rings", category: "avatar", rarity: "uncommon", price: 100, name: "Rings", description: "Concentric ring patterns", config: { style: "rings" } },
+  { id: "avatar-shapes", category: "avatar", rarity: "uncommon", price: 100, name: "Shapes", description: "Abstract geometric shapes", config: { style: "shapes" } },
+  { id: "avatar-fun-emoji", category: "avatar", rarity: "uncommon", price: 100, name: "Fun Emoji", description: "Expressive emoji characters", config: { style: "fun-emoji" } },
+  { id: "avatar-bottts", category: "avatar", rarity: "uncommon", price: 100, name: "Bottts", description: "Cool robot avatar", config: { style: "bottts" } },
+
+  // Rare Avatars
+  { id: "avatar-thumbs", category: "avatar", rarity: "rare", price: 250, name: "Thumbs", description: "Hand gesture avatars", config: { style: "thumbs" } },
+  { id: "avatar-personas", category: "avatar", rarity: "rare", price: 250, name: "Personas", description: "Stylized character portraits", config: { style: "personas" } },
+  { id: "avatar-pixel-art", category: "avatar", rarity: "rare", price: 250, name: "Pixel Art", description: "Classic pixelated characters", config: { style: "pixel-art" } },
+  { id: "avatar-dylan", category: "avatar", rarity: "rare", price: 250, name: "Dylan", description: "Unique hand-drawn style", config: { style: "dylan" } },
+  { id: "avatar-croodles", category: "avatar", rarity: "rare", price: 250, name: "Croodles", description: "Doodle-style characters", config: { style: "croodles" } },
+  { id: "avatar-big-ears", category: "avatar", rarity: "rare", price: 250, name: "Big Ears", description: "Cute characters with big ears", config: { style: "big-ears" } },
+  { id: "avatar-adventurer", category: "avatar", rarity: "rare", price: 250, name: "Adventurer", description: "RPG character avatar", config: { style: "adventurer" } },
+
+  // Epic Avatars
+  { id: "avatar-miniavs", category: "avatar", rarity: "epic", price: 500, name: "Miniavs", description: "Minimalist character avatars", config: { style: "miniavs" } },
+  { id: "avatar-notionists", category: "avatar", rarity: "epic", price: 500, name: "Notionists", description: "Artistic sketch avatar", config: { style: "notionists" } },
+  { id: "avatar-open-peeps", category: "avatar", rarity: "epic", price: 500, name: "Open Peeps", description: "Hand-drawn people illustrations", config: { style: "open-peeps" } },
+  { id: "avatar-big-smile", category: "avatar", rarity: "epic", price: 500, name: "Big Smile", description: "Friendly smiling faces", config: { style: "big-smile" } },
+  { id: "avatar-avataaars", category: "avatar", rarity: "epic", price: 500, name: "Avataaars", description: "Detailed customizable people", config: { style: "avataaars" } },
+
+  // Legendary Avatars
+  { id: "avatar-lorelei", category: "avatar", rarity: "legendary", price: 1000, name: "Lorelei", description: "Beautiful anime-style portraits", config: { style: "lorelei" } },
+  { id: "avatar-micah", category: "avatar", rarity: "legendary", price: 1000, name: "Micah", description: "Unique abstract person style", config: { style: "micah" } },
   
   // Avatar Frames - Rare (Glow)
   { id: "frame-neon-blue", category: "frame", rarity: "rare", price: 200, name: "Neon Blue Glow", description: "Sharp cyan glow effect", config: { type: "glow", color: "cyan" } },
@@ -151,9 +173,16 @@ export async function getUserCosmetics(userId: string): Promise<UserCosmetics> {
       nameColors: [],
     }
 
-    // Ensure common avatars are always included
-    const defaultAvatars = ["avatar-initials", "avatar-identicon", "avatar-pixel-art"]
-    const avatars = Array.from(new Set([...owned.avatars, ...defaultAvatars]))
+    // Ensure common avatars are always included and normalize all IDs
+    const defaultAvatars = ["avatar-initials", "avatar-icons", "avatar-identicon"]
+    const rawAvatars = Array.isArray(owned.avatars) ? owned.avatars : []
+    
+    // Normalize existing IDs (e.g., "initials" -> "avatar-initials")
+    const normalizedOwnedAvatars = rawAvatars.map((id: string) => 
+      id.startsWith("avatar-") ? id : `avatar-${id}`
+    )
+    
+    const avatars = Array.from(new Set([...normalizedOwnedAvatars, ...defaultAvatars]))
 
     return {
       avatarStyle: data.cosmetics?.avatarStyle || (data.avatarStyle ? (data.avatarStyle.startsWith("avatar-") ? data.avatarStyle : `avatar-${data.avatarStyle}`) : undefined),
@@ -170,7 +199,7 @@ export async function getUserCosmetics(userId: string): Promise<UserCosmetics> {
     console.error("Error getting user cosmetics:", error)
     return {
       ownedCosmetics: {
-        avatars: ["avatar-initials", "avatar-identicon", "avatar-pixel-art"],
+        avatars: ["avatar-initials", "avatar-icons", "avatar-identicon"],
         frames: [],
         wallpapers: [],
         nameColors: [],
@@ -269,16 +298,23 @@ export async function equipCosmetic(userId: string, cosmeticId: string, category
 export function resolveAvatarStyle(cosmeticId: string | undefined): AvatarStyle {
   if (!cosmeticId) return "initials"
   
-  const cosmetic = COSMETICS.find(c => c.id === cosmeticId)
+  // 1. Check if it's already a clean style name
+  const cleanStyle = cosmeticId.replace("avatar-", "") as AvatarStyle
+  const validStyles: AvatarStyle[] = [
+    "initials", "icons", "identicon", "rings", "shapes", "fun-emoji", 
+    "bottts", "thumbs", "personas", "pixel-art", "dylan", "croodles", 
+    "big-ears", "adventurer", "miniavs", "notionists", "open-peeps", 
+    "big-smile", "avataaars", "lorelei", "micah"
+  ]
+  
+  if (validStyles.includes(cleanStyle)) {
+    return cleanStyle
+  }
+
+  // 2. Check the COSMETICS mapping
+  const cosmetic = COSMETICS.find(c => c.id === cosmeticId || c.id === `avatar-${cosmeticId}`)
   if (cosmetic && cosmetic.category === "avatar" && cosmetic.config?.style) {
     return cosmetic.config.style as AvatarStyle
-  }
-  
-  // Fallback for cases where the style name might be stored directly or is initials
-  if (cosmeticId === "initials" || cosmeticId === "identicon" || cosmeticId === "pixel-art" || 
-      cosmeticId === "adventurer" || cosmeticId === "bottts" || cosmeticId === "avataaars" || 
-      cosmeticId === "notionists") {
-    return cosmeticId as AvatarStyle
   }
   
   return "initials"
