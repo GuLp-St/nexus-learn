@@ -10,6 +10,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/components/auth-provider"
 import { XPContextProvider } from "@/components/xp-context-provider"
 import { QuestInitializer } from "@/components/quest-initializer"
+import { NexonToastHandler } from "@/components/nexon-toast-handler"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
@@ -50,6 +51,7 @@ export default function RootLayout({
             <AuthProvider>
               <ChatbotContextProvider>
                 <QuestInitializer />
+                <NexonToastHandler />
                 {children}
                 <ChatbotOverlay />
               </ChatbotContextProvider>

@@ -12,6 +12,7 @@ import { useAuth } from "@/components/auth-provider"
 import { getChallenge, Challenge } from "@/lib/challenge-utils"
 import { doc, onSnapshot } from "firebase/firestore"
 import { db } from "@/lib/firebase"
+import { NexonIcon } from "@/components/ui/nexon-icon"
 
 export default function ChallengeWaitingPage() {
   const [challenge, setChallenge] = useState<Challenge | null>(null)
@@ -245,11 +246,22 @@ export default function ChallengeWaitingPage() {
                   <h2 className="text-3xl font-bold mb-2">
                     {userWon ? "You Won!" : `${opponentName} Won`}
                   </h2>
-                  <p className="text-muted-foreground">
-                    {userWon
-                      ? "Congratulations! You earned double XP!"
-                      : "Better luck next time!"}
-                  </p>
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">
+                      {userWon
+                        ? "Congratulations on your victory!"
+                        : "Better luck next time!"}
+                    </p>
+                    {challenge.betAmount > 0 && userWon && (
+                      <div className="flex items-center justify-center gap-2 text-primary font-bold animate-bounce mt-2">
+                        <span>You won the pot:</span>
+                        <div className="flex items-center gap-1 bg-primary/10 px-2 py-1 rounded-full border border-primary/20">
+                          <NexonIcon className="h-5 w-5" />
+                          <span>{challenge.betAmount * 2} Nexon</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Scores Comparison */}

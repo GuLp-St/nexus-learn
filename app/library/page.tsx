@@ -16,7 +16,7 @@ import { removeCourseFromLibrary } from "@/lib/library-utils"
 import { CompletedCoursesModal } from "@/components/completed-courses-modal"
 import { checkPublishRequirements, PublishRequirements } from "@/lib/publish-utils"
 import { getCompletedCourses } from "@/lib/completion-utils"
-import { Upload, AlertCircle, CheckCircle2, XCircle, Coins, Trophy } from "lucide-react"
+import { Upload, AlertCircle, CheckCircle2, XCircle, Trophy } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -647,7 +647,7 @@ export default function LibraryPage() {
               </>
             ) : (
               <>
-                Are you sure you want to remove <strong>{removeDialog.courseTitle}</strong>? This is a private course, and while it will stay in the database for other users, it will be <strong>removed from your library</strong> and your personal progress will be lost.
+                Are you sure you want to remove <strong>{removeDialog.courseTitle}</strong>? This is a private course, and while it will stay in the database for other users, it will be <strong>removed from your library</strong>.
               </>
             )}
           </DialogDescription>

@@ -102,7 +102,8 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
         return `${notification.data.challengerName || "Someone"} challenged you to a quiz!`
       case "challenge_result":
         if (notification.data.winnerId === user?.uid) {
-          return `You won the challenge! +${notification.data.xpAwarded || 0} XP`
+          const nexonText = notification.data.nexonWon ? ` and ${notification.data.nexonWon} Nexon` : ""
+          return `You won the challenge! +${notification.data.xpAwarded || 0} XP${nexonText}`
         } else {
           return `You lost the challenge. Better luck next time!`
         }

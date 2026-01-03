@@ -17,10 +17,14 @@ import { getUserCosmetics } from "@/lib/cosmetics-utils"
 import { getUserBadges, getBadgeDisplayInfo, checkAndUpdateBadges } from "@/lib/badge-utils"
 import { XPHistoryModal } from "@/components/xp-history-modal"
 import { CompletedCoursesModal } from "@/components/completed-courses-modal"
+import { NexonIcon } from "@/components/ui/nexon-icon"
+import { NexonHistoryModal } from "@/components/nexon-history-modal"
+import { getUserNexon } from "@/lib/nexon-utils"
 
 export default function UserProfile() {
   const { nickname, user, loading, avatarUrl, refreshProfile } = useAuth()
   const [xp, setXP] = useState<number>(0)
+  const [nexon, setNexon] = useState<number>(0)
   const [dailyStreak, setDailyStreak] = useState<number>(0)
   const [coursesCompleted, setCoursesCompleted] = useState<number>(0)
   const [loadingStats, setLoadingStats] = useState(true)
@@ -41,6 +45,7 @@ export default function UserProfile() {
   const [activityData, setActivityData] = useState<Array<{ day: string; hours: number }>>([])
   const [loadingActivity, setLoadingActivity] = useState(true)
   const [xpHistoryOpen, setXpHistoryOpen] = useState(false)
+  const [nexonHistoryOpen, setNexonHistoryOpen] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [completedCoursesOpen, setCompletedCoursesOpen] = useState(false)
   const [wallpaper, setWallpaper] = useState<string | null>(null)
@@ -105,8 +110,12 @@ export default function UserProfile() {
       }
 
       try {
-        // Fetch XP
-        const xpData = await getUserXP(user.uid)
+        // Fetch XP and Nexon
+        const [xpData, nexonBalance] = await Promise.all([
+          getUserXP(user.uid),
+          getUserNexon(user.uid)
+        ])
+        
         if (xpData) {
           setXP(xpData.xp)
           setDailyStreak(xpData.dailyLoginStreak || 0)
@@ -120,6 +129,8 @@ export default function UserProfile() {
             xpNeededForNext: progress.xpNeededForNext,
           })
         }
+
+        setNexon(nexonBalance)
 
         // Fetch courses and count completed
         const courses = await getUserCourses(user.uid)
@@ -389,9 +400,9 @@ export default function UserProfile() {
             />
 
             {/* Stats Row */}
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Card 
-                className="cursor-pointer hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50"
+                className="cursor-pointer hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
                 onClick={() => {
                   setSelectedUserId(user?.uid || null)
                   setXpHistoryOpen(true)
@@ -405,14 +416,32 @@ export default function UserProfile() {
                     <span className="text-3xl font-bold text-foreground">
                       {loadingStats ? "..." : xp.toLocaleString()}
                     </span>
-                    <Star className="h-5 w-5 fill-amber-500 text-amber-500" />
+                    <Star className="h-5 w-5 fill-amber-500 text-amber-500 group-hover:scale-110 transition-transform" />
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">Click to view history</p>
                 </CardContent>
               </Card>
 
               <Card 
-                className="cursor-pointer hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50"
+                className="cursor-pointer hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
+                onClick={() => setNexonHistoryOpen(true)}
+              >
+                <CardHeader className="pb-3">
+                  <CardDescription className="text-sm">Nexon Balance</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold text-foreground">
+                      {loadingStats ? "..." : nexon.toLocaleString()}
+                    </span>
+                    <NexonIcon className="h-5 w-5 text-primary group-hover:scale-110 transition-transform" />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Click to view history</p>
+                </CardContent>
+              </Card>
+
+              <Card 
+                className="cursor-pointer hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
                 onClick={() => setCompletedCoursesOpen(true)}
               >
                 <CardHeader className="pb-3">
@@ -423,7 +452,7 @@ export default function UserProfile() {
                     <span className="text-3xl font-bold text-foreground">
                       {loadingStats ? "..." : coursesCompleted}
                     </span>
-                    <Award className="h-5 w-5 text-teal-600" />
+                    <Award className="h-5 w-5 text-teal-600 group-hover:scale-110 transition-transform" />
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">Click to view all</p>
                 </CardContent>
@@ -527,6 +556,13 @@ export default function UserProfile() {
         <CompletedCoursesModal
           open={completedCoursesOpen}
           onOpenChange={setCompletedCoursesOpen}
+          userId={user.uid}
+        />
+      )}
+      {user && (
+        <NexonHistoryModal
+          open={nexonHistoryOpen}
+          onOpenChange={setNexonHistoryOpen}
           userId={user.uid}
         />
       )}

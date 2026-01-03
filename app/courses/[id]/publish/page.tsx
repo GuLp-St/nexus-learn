@@ -13,8 +13,9 @@ import { useAuth } from "@/components/auth-provider"
 import { checkPublishRequirements, publishCourse, PublishRequirements } from "@/lib/publish-utils"
 import { getCourseWithProgress } from "@/lib/course-utils"
 import { UnsplashImagePicker } from "@/components/unsplash-image-picker"
-import { CheckCircle2, XCircle, AlertCircle, Coins, Trophy } from "lucide-react"
+import { CheckCircle2, XCircle, AlertCircle, Trophy } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { NexonIcon } from "@/components/ui/nexon-icon"
 
 const PUBLISH_NEXON_COST = 500
 const MIN_LEVEL = 5
@@ -303,7 +304,7 @@ export default function PublishCoursePage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold flex items-center gap-2">
-                        <Coins className="h-5 w-5" />
+                        <NexonIcon className="h-5 w-5" />
                         Publishing Cost: {PUBLISH_NEXON_COST} Nexon
                       </h3>
                       <p className="text-sm text-muted-foreground mt-1">

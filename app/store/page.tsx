@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ShoppingBag, Coins, Eye, Check, Sparkles, Image, Palette, Frame } from "lucide-react"
+import { ShoppingBag, Eye, Check, Sparkles, Image, Palette, Frame } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -18,16 +18,8 @@ import { toast } from "sonner"
 import Link from "next/link"
 import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
 import { NameWithColor } from "@/components/name-with-color"
-
-// Custom Nexon icon component
-function NexonIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.2"/>
-      <path d="M12 2L15 9L22 10L17 15L18 22L12 18L6 22L7 15L2 10L9 9L12 2Z" fill="currentColor"/>
-    </svg>
-  )
-}
+import { NexonIcon } from "@/components/ui/nexon-icon"
+import { NexonHistoryModal } from "@/components/nexon-history-modal"
 
 export default function StorePage() {
   const { user, nickname, loading: authLoading } = useAuth()
@@ -42,6 +34,7 @@ export default function StorePage() {
   const [equipping, setEquipping] = useState<string | null>(null)
   const [previewCosmetic, setPreviewCosmetic] = useState<Cosmetic | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   useEffect(() => {
     if (authLoading) return
@@ -285,12 +278,16 @@ export default function StorePage() {
                 <h1 className="text-3xl font-bold text-foreground">Store</h1>
                 <p className="text-muted-foreground mt-1">Purchase cosmetics to customize your profile</p>
               </div>
-              <Card>
+              <Card 
+                className="cursor-pointer hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
+                onClick={() => setHistoryOpen(true)}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2">
-                    <NexonIcon className="h-6 w-6 text-primary" />
+                    <NexonIcon className="h-6 w-6 text-primary group-hover:scale-110 transition-transform" />
                     <span className="text-2xl font-bold">{nexon.toLocaleString()}</span>
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1">Click to view history</p>
                 </CardContent>
               </Card>
             </div>
@@ -395,7 +392,7 @@ export default function StorePage() {
                                   </>
                                 ) : (
                                   <>
-                                    <Coins className="h-4 w-4 mr-2" />
+                                    <NexonIcon className="h-4 w-4 mr-2" />
                                     Purchase
                                   </>
                                 )}
@@ -548,6 +545,12 @@ export default function StorePage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <NexonHistoryModal 
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        userId={user?.uid || ""}
+      />
     </div>
   )
 }

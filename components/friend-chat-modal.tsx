@@ -18,6 +18,7 @@ import { getCourseWithProgress, CourseWithProgress } from "@/lib/course-utils"
 import { copyCourseToUserLibrary } from "@/lib/course-copy-utils"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { NexonIcon } from "./ui/nexon-icon"
 
 interface FriendChatModalProps {
   open: boolean
@@ -353,9 +354,17 @@ function ChallengeMessageCard({
         </div>
         
         <div className="space-y-1">
-          <p className="text-xs text-muted-foreground capitalize">
-            {challenge.quizType} Quiz
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground capitalize">
+              {challenge.quizType} Quiz
+            </p>
+            {challenge.betAmount > 0 && (
+              <div className="flex items-center gap-1 bg-primary/10 px-1.5 py-0.5 rounded text-[10px] font-bold text-primary">
+                <NexonIcon className="h-3 w-3" />
+                <span>{challenge.betAmount}</span>
+              </div>
+            )}
+          </div>
           <p className="text-sm font-semibold truncate">
             {isOwnMessage ? `You challenged ${friendNickname}` : `${friendNickname} challenged you`}
           </p>

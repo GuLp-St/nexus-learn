@@ -8,6 +8,7 @@ import { RefreshCw, Trophy, CheckCircle2, RotateCcw } from "lucide-react"
 import { getUserDailyQuests, claimQuestReward, refreshQuest, Quest, DailyQuests } from "@/lib/daily-quest-utils"
 import { useAuth } from "@/components/auth-provider"
 import { useXP } from "@/components/xp-context-provider"
+import { NexonIcon } from "@/components/ui/nexon-icon"
 
 export function DailyQuestCard() {
   const { user } = useAuth()
@@ -113,7 +114,7 @@ export function DailyQuestCard() {
               Daily Quests
             </CardTitle>
             <CardDescription className="mt-1">
-              Complete quests to earn XP
+              Complete quests to earn XP & Nexon
             </CardDescription>
           </div>
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -248,18 +249,31 @@ function QuestItem({ quest, onClaim, onRefresh, claiming, refreshing, canRefresh
               size="sm"
               onClick={onClaim}
               disabled={claiming}
-              className="text-xs"
+              className="text-xs h-auto py-1.5 flex flex-col items-center"
             >
               {claiming ? (
                 <Spinner className="h-3 w-3" />
               ) : (
-                <>Claim +{quest.xpReward} XP</>
+                <>
+                  <span>Claim</span>
+                  <div className="flex flex-col items-center text-[10px] opacity-90 leading-tight">
+                    <span>+{quest.xpReward} XP</span>
+                    <div className="flex items-center gap-0.5 mt-0.5">
+                      <NexonIcon className="h-2.5 w-2.5" />
+                      <span>+{quest.nexonReward}</span>
+                    </div>
+                  </div>
+                </>
               )}
             </Button>
           ) : (
-            <div className="text-xs text-center text-muted-foreground py-1 px-2">
-              +{quest.xpReward} XP
+          <div className="flex flex-col gap-1 items-end">
+            <div className="text-xs text-muted-foreground">+{quest.xpReward} XP</div>
+            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+              <NexonIcon className="h-3 w-3" />
+              <span>+{quest.nexonReward}</span>
             </div>
+          </div>
           )}
           
           {canRefresh && !quest.claimed && !quest.completed && (

@@ -23,6 +23,7 @@ export interface Notification {
     yourScore?: number
     opponentScore?: number
     xpAwarded?: number
+    nexonWon?: number
     // xp_award
     amount?: number
     source?: string

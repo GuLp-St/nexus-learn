@@ -11,6 +11,7 @@ export type QuestEventType =
   | "quest.course_rated"
   | "quest.xp_earned"
   | "quest.course_added"
+  | "nexon_awarded"
 
 export interface QuestEventMetadata {
   courseId?: string
@@ -19,6 +20,10 @@ export interface QuestEventMetadata {
   quizType?: "lesson" | "module" | "course"
   rating?: number
   xpAmount?: number
+  // For nexon_awarded
+  amount?: number
+  source?: string
+  description?: string
 }
 
 export interface QuestEvent {

@@ -16,6 +16,7 @@ export interface Quest {
   completed: boolean
   claimed: boolean
   xpReward: number
+  nexonReward: number
 }
 
 export interface DailyQuests {
@@ -36,6 +37,7 @@ const QUEST_POOL: Omit<Quest, "progress" | "completed" | "claimed">[] = [
     description: "Complete 1 module",
     target: 1,
     xpReward: 30,
+    nexonReward: 25,
   },
   {
     id: "complete_quiz",
@@ -44,6 +46,7 @@ const QUEST_POOL: Omit<Quest, "progress" | "completed" | "claimed">[] = [
     description: "Complete 1 quiz",
     target: 1,
     xpReward: 25,
+    nexonReward: 25,
   },
   {
     id: "rate_course",
@@ -52,6 +55,7 @@ const QUEST_POOL: Omit<Quest, "progress" | "completed" | "claimed">[] = [
     description: "Rate a course 4+ stars",
     target: 1,
     xpReward: 20,
+    nexonReward: 25,
   },
   {
     id: "earn_xp",
@@ -60,6 +64,7 @@ const QUEST_POOL: Omit<Quest, "progress" | "completed" | "claimed">[] = [
     description: "Earn 50 XP from any source",
     target: 50,
     xpReward: 15,
+    nexonReward: 25,
   },
   {
     id: "add_course",
@@ -68,6 +73,7 @@ const QUEST_POOL: Omit<Quest, "progress" | "completed" | "claimed">[] = [
     description: "Add a course to your library",
     target: 1,
     xpReward: 35,
+    nexonReward: 25,
   },
 ]
 
@@ -259,9 +265,9 @@ export async function claimQuestReward(userId: string, questId: string): Promise
       { questId, questType: quest.type }
     )
 
-    // Award Nexon (25 per quest)
+    // Award Nexon
     const { awardNexon } = await import("./nexon-utils")
-    await awardNexon(userId, 25, "Daily Quest", `Completed quest: ${quest.title}`, { questId, questType: quest.type }).catch((error) => {
+    await awardNexon(userId, quest.nexonReward, "Daily Quest", `Completed quest: ${quest.title}`, { questId, questType: quest.type }).catch((error) => {
       console.error("Error awarding Nexon for daily quest:", error)
       // Don't throw - Nexon failure shouldn't block quest claim
     })

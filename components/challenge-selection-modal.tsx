@@ -13,16 +13,7 @@ import { useRouter } from "next/navigation"
 import { Spinner } from "@/components/ui/spinner"
 import { canAccessCourseQuiz, canAccessModuleQuiz, canAccessLessonQuiz } from "@/lib/quiz-access-utils"
 import { getUserNexon } from "@/lib/nexon-utils"
-
-// Custom Nexon icon component
-function NexonIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.2"/>
-      <path d="M12 2L15 9L22 10L17 15L18 22L12 18L6 22L7 15L2 10L9 9L12 2Z" fill="currentColor"/>
-    </svg>
-  )
-}
+import { NexonIcon } from "@/components/ui/nexon-icon"
 
 interface ChallengeSelectionModalProps {
   open: boolean

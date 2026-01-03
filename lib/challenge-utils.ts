@@ -205,6 +205,29 @@ export async function completeChallenge(
     let challengerXP = 0
     let challengedXP = 0
 
+    // Send notifications to both users
+    const { createNotification } = await import("./notification-utils")
+    
+    // Notification for challenger
+    await createNotification(challengerId, "challenge_result", {
+      challengeId,
+      winnerId: winnerId || undefined,
+      yourScore: challengerScore,
+      opponentScore: challengedScore,
+      xpAwarded: winnerId === challengerId ? await calculateChallengeXP(questionIds, challengerScore, maxScore) : 0,
+      nexonWon: (winnerId === challengerId && betAmount > 0) ? betAmount * 2 : 0
+    }).catch(err => console.error("Error creating challenger notification:", err))
+
+    // Notification for challenged user
+    await createNotification(challengedId, "challenge_result", {
+      challengeId,
+      winnerId: winnerId || undefined,
+      yourScore: challengedScore,
+      opponentScore: challengerScore,
+      xpAwarded: winnerId === challengedId ? await calculateChallengeXP(questionIds, challengedScore, maxScore) : 0,
+      nexonWon: (winnerId === challengedId && betAmount > 0) ? betAmount * 2 : 0
+    }).catch(err => console.error("Error creating challenged notification:", err))
+
     // Get course title for activity
     const courseRef = doc(db, "courses", challengeData.courseId)
     const courseDoc = await getDoc(courseRef)

@@ -3,18 +3,9 @@
 import { useEffect, useState } from "react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Trophy, Sparkles, Coins } from "lucide-react"
+import { Trophy, Sparkles } from "lucide-react"
 import { XPAwardResult } from "@/lib/xp-utils"
-
-// Custom Nexon icon component
-function NexonIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.2"/>
-      <path d="M12 2L15 9L22 10L17 15L18 22L12 18L6 22L7 15L2 10L9 9L12 2Z" fill="currentColor"/>
-    </svg>
-  )
-}
+import { NexonIcon } from "@/components/ui/nexon-icon"
 
 interface LevelUpModalProps {
   open: boolean

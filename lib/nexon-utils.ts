@@ -42,6 +42,18 @@ export async function awardNexon(
     // Record in history
     await recordNexonHistory(userId, amount, source || "Nexon Award", description, metadata)
 
+    // Emit event for Nexon award
+    const { eventBus } = await import("./event-bus")
+    eventBus.emit({
+      type: "nexon_awarded",
+      userId,
+      metadata: {
+        amount,
+        source: source || "Nexon Award",
+        description
+      }
+    })
+
     // Get updated balance
     const updatedDoc = await getDoc(userRef)
     return updatedDoc.data()?.nexon || 0
