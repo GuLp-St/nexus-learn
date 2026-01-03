@@ -9,12 +9,12 @@ import { NameWithColor } from "@/components/name-with-color"
 import { sendMessage, subscribeToChatMessages, markMessagesAsRead, setTypingStatus, subscribeToTypingStatus, ChatMessage } from "@/lib/chat-utils"
 import { useAuth } from "@/components/auth-provider"
 import { format } from "date-fns"
-import { Send, Check, CheckCheck, Zap, Trophy, Play, Share2, BookOpen, Plus } from "lucide-react"
+import { Send, Check, CheckCheck, Zap, Trophy, Play, Share2, BookOpen, Plus, Clock } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { ChallengeSelectionModal } from "./challenge-selection-modal"
 import { CourseShareModal } from "./course-share-modal"
 import { getChallenge, Challenge } from "@/lib/challenge-utils"
-import { getCourseWithProgress, PublicCourse } from "@/lib/course-utils"
+import { getCourseWithProgress, CourseWithProgress } from "@/lib/course-utils"
 import { copyCourseToUserLibrary } from "@/lib/course-copy-utils"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -223,8 +223,10 @@ export function FriendChatModal({
                       />
                     ) : message.type === "course_share" ? (
                       <CourseShareMessageCard
+                        messageId={message.id}
                         courseId={message.courseId!}
                         isOwnMessage={isOwnMessage}
+                        isUsed={message.isUsed}
                       />
                     ) : (
                       <div
@@ -407,15 +409,19 @@ function ChallengeMessageCard({
 }
 
 function CourseShareMessageCard({
+  messageId,
   courseId,
   isOwnMessage,
+  isUsed,
 }: {
+  messageId: string
   courseId: string
   isOwnMessage: boolean
+  isUsed?: boolean
 }) {
   const { user } = useAuth()
   const router = useRouter()
-  const [course, setCourse] = useState<PublicCourse | null>(null)
+  const [course, setCourse] = useState<CourseWithProgress | null>(null)
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
 
@@ -437,11 +443,20 @@ function CourseShareMessageCard({
   }, [courseId, user])
 
   const handleAddToLibrary = async () => {
-    if (!user || !course) return
+    if (!user || !course || adding || isUsed) return
 
     setAdding(true)
     try {
+      // Add course to library
       const newCourseId = await copyCourseToUserLibrary(user.uid, courseId)
+      
+      // Mark invitation as used
+      const { updateDoc, doc } = await import("firebase/firestore")
+      const { db } = await import("@/lib/firebase")
+      await updateDoc(doc(db, "chatMessages", messageId), {
+        isUsed: true
+      })
+
       router.push(`/courses/${newCourseId}`)
     } catch (error) {
       console.error("Error adding course to library:", error)
@@ -452,18 +467,32 @@ function CourseShareMessageCard({
   }
 
   if (loading) return <div className="p-4 bg-muted rounded-lg animate-pulse w-48 h-24" />
-  if (!course) return null
+  if (!course && !isUsed) return null
+
+  // If course was deleted and invitation is used, show expired state
+  if (!course && isUsed) {
+    return (
+      <Card className={`overflow-hidden border-2 opacity-60 grayscale-[0.5] ${isOwnMessage ? "border-primary/20 bg-primary/5" : "border-blue-500/20 bg-blue-500/5"}`}>
+        <CardContent className="p-4 flex flex-col items-center justify-center gap-2">
+          <div className="rounded-full bg-muted p-2">
+            <Share2 className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <p className="text-xs font-medium text-muted-foreground">Invitation Expired</p>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
-    <Card className={`overflow-hidden border-2 ${isOwnMessage ? "border-primary/20 bg-primary/5" : "border-blue-500/20 bg-blue-500/5"}`}>
+    <Card className={`overflow-hidden border-2 ${isUsed ? "opacity-60 grayscale-[0.5]" : ""} ${isOwnMessage ? "border-primary/20 bg-primary/5" : "border-blue-500/20 bg-blue-500/5"}`}>
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Share2 className={`h-4 w-4 ${isOwnMessage ? "text-primary" : "text-blue-500"}`} />
-          <span className="font-bold text-sm">COURSE SHARED</span>
+          <span className="font-bold text-sm">{isUsed ? "COURSE ADDED" : "COURSE SHARED"}</span>
         </div>
         
         <div className="space-y-2">
-          {course.imageUrl && (
+          {course?.imageUrl && (
             <img 
               src={course.imageUrl} 
               alt={course.title}
@@ -471,14 +500,14 @@ function CourseShareMessageCard({
             />
           )}
           <div>
-            <h4 className="font-semibold text-sm truncate">{course.title}</h4>
-            {course.description && (
+            <h4 className="font-semibold text-sm truncate">{course?.title || "Deleted Course"}</h4>
+            {course?.description && (
               <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
                 {course.description}
               </p>
             )}
           </div>
-          {course.tags && course.tags.length > 0 && (
+          {course?.tags && course.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {course.tags.slice(0, 3).map((tag, idx) => (
                 <span key={idx} className="text-[10px] px-2 py-0.5 bg-muted rounded-full">
@@ -490,15 +519,27 @@ function CourseShareMessageCard({
         </div>
 
         {!isOwnMessage && (
-          <Button
-            size="sm"
-            className="w-full text-xs gap-2 bg-blue-500 hover:bg-blue-600"
-            onClick={handleAddToLibrary}
-            disabled={adding}
-          >
-            <Plus className="h-3 w-3" />
-            {adding ? "Adding..." : "Add to Library"}
-          </Button>
+          course?.userProgress ? (
+            <div className="flex items-center justify-center gap-2 text-xs font-medium text-muted-foreground bg-muted/50 py-2 rounded-md">
+              <Check className="h-3 w-3" />
+              <span>In Library</span>
+            </div>
+          ) : isUsed ? (
+            <div className="flex items-center justify-center gap-2 text-xs font-medium text-muted-foreground bg-muted/50 py-2 rounded-md">
+              <Clock className="h-3 w-3" />
+              <span>Invitation Used</span>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              className="w-full text-xs gap-2 bg-blue-500 hover:bg-blue-600"
+              onClick={handleAddToLibrary}
+              disabled={adding}
+            >
+              <Plus className="h-3 w-3" />
+              {adding ? "Adding..." : "Add to Library"}
+            </Button>
+          )
         )}
       </CardContent>
     </Card>

@@ -243,7 +243,7 @@ Respond naturally and conversationally.`
  * Generate course name suggestions based on user's library courses
  * Returns an array of suggested course names/topics
  */
-export async function generateCourseSuggestions(courseTitles: string[]): Promise<string[]> {
+export async function generateCourseSuggestions(courseTitles: string[], count: number = 3): Promise<string[]> {
   if (!genAI) {
     throw new Error("Gemini API key is not configured")
   }
@@ -254,11 +254,11 @@ export async function generateCourseSuggestions(courseTitles: string[]): Promise
 
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
 
-  const coursesList = courseTitles.slice(0, 5).join(", ")
+  const coursesList = courseTitles.join(", ")
 
   const prompt = `Based on these courses the user has in their library: ${coursesList}
 
-Generate 3-5 related course name suggestions that would be good next steps for learning. 
+Generate exactly ${count} related course name suggestions that would be good next steps for learning. 
 Return ONLY a JSON array of course names, like this:
 ["Course Name 1", "Course Name 2", "Course Name 3"]
 

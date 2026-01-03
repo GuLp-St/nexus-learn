@@ -23,6 +23,7 @@ export function CommunityPulseCard() {
   const [activities, setActivities] = useState<CommunityActivity[]>([])
   const [loading, setLoading] = useState(true)
   const [addingCourse, setAddingCourse] = useState<string | null>(null)
+  const [userCourseIds, setUserCourseIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (!user) return
@@ -32,6 +33,18 @@ export function CommunityPulseCard() {
       setActivities(newActivities)
       setLoading(false)
     })
+
+    // Fetch user's library courses to show "In Library" status
+    const fetchUserCourses = async () => {
+      try {
+        const { getUserCourses } = await import("@/lib/course-utils")
+        const courses = await getUserCourses(user.uid)
+        setUserCourseIds(new Set(courses.map(c => c.id)))
+      } catch (error) {
+        console.error("Error fetching user courses for pulse:", error)
+      }
+    }
+    fetchUserCourses()
 
     return () => {
       unsubscribe()
@@ -135,22 +148,28 @@ export function CommunityPulseCard() {
                         </p>
                       </div>
                       {activity.activityType === "course_published" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleAddCourse(activity.metadata.courseId!)}
-                          disabled={addingCourse === activity.metadata.courseId}
-                          className="flex-shrink-0 h-7 text-xs"
-                        >
-                          {addingCourse === activity.metadata.courseId ? (
-                            <Spinner className="h-3 w-3" />
-                          ) : (
-                            <>
-                              <Plus className="h-3 w-3 mr-1" />
-                              Add
-                            </>
-                          )}
-                        </Button>
+                        userCourseIds.has(activity.metadata.courseId!) ? (
+                          <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0 self-center">
+                            In Library
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleAddCourse(activity.metadata.courseId!)}
+                            disabled={addingCourse === activity.metadata.courseId}
+                            className="flex-shrink-0 h-7 text-xs"
+                          >
+                            {addingCourse === activity.metadata.courseId ? (
+                              <Spinner className="h-3 w-3" />
+                            ) : (
+                              <>
+                                <Plus className="h-3 w-3 mr-1" />
+                                Add
+                              </>
+                            )}
+                          </Button>
+                        )
                       )}
                     </div>
                   ) : (

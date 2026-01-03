@@ -10,6 +10,7 @@ export interface ChatMessage {
   type: "text" | "challenge" | "course_share"
   challengeId?: string
   courseId?: string
+  isUsed?: boolean
   read: boolean
   delivered: boolean
   createdAt: Timestamp

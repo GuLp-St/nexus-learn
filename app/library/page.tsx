@@ -15,6 +15,7 @@ import { getUserCourses, CourseWithProgress } from "@/lib/course-utils"
 import { removeCourseFromLibrary } from "@/lib/library-utils"
 import { CompletedCoursesModal } from "@/components/completed-courses-modal"
 import { checkPublishRequirements, PublishRequirements } from "@/lib/publish-utils"
+import { getCompletedCourses } from "@/lib/completion-utils"
 import { Upload, AlertCircle, CheckCircle2, XCircle, Coins, Trophy } from "lucide-react"
 import {
   Dialog,
@@ -330,10 +331,11 @@ export default function LibraryPage() {
     completedCourses: 0,
     totalProgress: 0,
   })
-  const [removeDialog, setRemoveDialog] = useState<{ open: boolean; courseId: string | null; courseTitle: string }>({
+  const [removeDialog, setRemoveDialog] = useState<{ open: boolean; courseId: string | null; courseTitle: string; isPublic?: boolean }>({
     open: false,
     courseId: null,
     courseTitle: "",
+    isPublic: false,
   })
   const [removing, setRemoving] = useState(false)
   const [completedCoursesOpen, setCompletedCoursesOpen] = useState(false)
@@ -352,11 +354,15 @@ export default function LibraryPage() {
       if (!user) return
 
       try {
-        const fetchedCourses = await getUserCourses(user.uid)
+        setLoading(true)
+        const [fetchedCourses, completedRecords] = await Promise.all([
+          getUserCourses(user.uid),
+          getCompletedCourses(user.uid)
+        ])
+        
         setCourses(fetchedCourses)
 
         const active = fetchedCourses.filter((c) => (c.userProgress?.progress || 0) < 100).length
-        const completed = fetchedCourses.filter((c) => (c.userProgress?.progress || 0) >= 100).length
         const totalProgress =
           fetchedCourses.length > 0
             ? fetchedCourses.reduce((sum, c) => sum + (c.userProgress?.progress || 0), 0) / fetchedCourses.length
@@ -364,7 +370,7 @@ export default function LibraryPage() {
 
         setStats({
           activeCourses: active,
-          completedCourses: completed,
+          completedCourses: completedRecords.length,
           totalProgress: Math.round(totalProgress),
         })
       } catch (error) {
@@ -400,6 +406,7 @@ export default function LibraryPage() {
       open: true,
       courseId: course.id,
       courseTitle: course.title,
+      isPublic: course.isPublic || false,
     })
   }
 
@@ -409,12 +416,15 @@ export default function LibraryPage() {
     try {
       setRemoving(true)
       await removeCourseFromLibrary(user.uid, removeDialog.courseId)
-      // Refresh courses
-      const fetchedCourses = await getUserCourses(user.uid)
+      // Refresh courses and completion count
+      const [fetchedCourses, completedRecords] = await Promise.all([
+        getUserCourses(user.uid),
+        getCompletedCourses(user.uid)
+      ])
+      
       setCourses(fetchedCourses)
 
       const active = fetchedCourses.filter((c) => (c.userProgress?.progress || 0) < 100).length
-      const completed = fetchedCourses.filter((c) => (c.userProgress?.progress || 0) >= 100).length
       const totalProgress =
         fetchedCourses.length > 0
           ? fetchedCourses.reduce((sum, c) => sum + (c.userProgress?.progress || 0), 0) / fetchedCourses.length
@@ -422,7 +432,7 @@ export default function LibraryPage() {
 
       setStats({
         activeCourses: active,
-        completedCourses: completed,
+        completedCourses: completedRecords.length,
         totalProgress: Math.round(totalProgress),
       })
 
@@ -564,12 +574,20 @@ export default function LibraryPage() {
       </main>
 
       {/* Remove Course Confirmation Dialog */}
-      <Dialog open={removeDialog.open} onOpenChange={(open) => setRemoveDialog({ open, courseId: null, courseTitle: "" })}>
+      <Dialog open={removeDialog.open} onOpenChange={(open) => setRemoveDialog({ open, courseId: null, courseTitle: "", isPublic: false })}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove Course</DialogTitle>
             <DialogDescription>
-              Are you sure you want to remove <strong>{removeDialog.courseTitle}</strong> from your library? This will delete your progress for this course and cannot be undone.
+              {removeDialog.isPublic ? (
+                <>
+                  Are you sure you want to remove <strong>{removeDialog.courseTitle}</strong> from your library? This will remove it from your active dashboard, but your progress will be saved if you decide to add it back from the public library later.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to remove <strong>{removeDialog.courseTitle}</strong>? Since this course is not published, it will be <strong>permanently deleted</strong> and all progress will be lost.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -35,6 +35,7 @@ export default function CreateCoursePage() {
   const [sortBy, setSortBy] = useState<SortOption>("popularity")
   const [selectedTag, setSelectedTag] = useState<string>("")
   const [addingCourseId, setAddingCourseId] = useState<string | null>(null)
+  const [userCourseIds, setUserCourseIds] = useState<Set<string>>(new Set())
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
   const { setPageContext } = useChatbotContext()
@@ -44,6 +45,21 @@ export default function CreateCoursePage() {
       router.push("/auth")
     }
   }, [user, authLoading, router])
+
+  // Fetch user's library courses
+  useEffect(() => {
+    const fetchUserCourses = async () => {
+      if (!user) return
+      try {
+        const { getUserCourses } = await import("@/lib/course-utils")
+        const courses = await getUserCourses(user.uid)
+        setUserCourseIds(new Set(courses.map(c => c.id)))
+      } catch (error) {
+        console.error("Error fetching user courses:", error)
+      }
+    }
+    fetchUserCourses()
+  }, [user])
 
   // Fetch published courses
   useEffect(() => {
@@ -315,23 +331,29 @@ export default function CreateCoursePage() {
                       <CardHeader className="space-y-2">
                         <div className="flex items-start justify-between gap-2">
                           <CardTitle className="text-lg line-clamp-1">{course.title}</CardTitle>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 shrink-0"
-                            onClick={(e) => {
-                              e.preventDefault()
-                              handleAddToLibrary(course.id)
-                            }}
-                            disabled={addingCourseId === course.id}
-                            title="Add to Library"
-                          >
-                            {addingCourseId === course.id ? (
-                              <Spinner className="h-4 w-4" />
-                            ) : (
-                              <Plus className="h-4 w-4" />
-                            )}
-                          </Button>
+                          {userCourseIds.has(course.id) ? (
+                            <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded shrink-0">
+                              In Library
+                            </span>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                handleAddToLibrary(course.id)
+                              }}
+                              disabled={addingCourseId === course.id}
+                              title="Add to Library"
+                            >
+                              {addingCourseId === course.id ? (
+                                <Spinner className="h-4 w-4" />
+                              ) : (
+                                <Plus className="h-4 w-4" />
+                              )}
+                            </Button>
+                          )}
                         </div>
                         <CardDescription className="line-clamp-2">{course.description}</CardDescription>
                       </CardHeader>

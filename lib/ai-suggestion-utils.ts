@@ -4,65 +4,99 @@ import { db } from "./firebase"
 import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore"
 import { generateCourseSuggestions } from "./gemini"
 
+export type CourseSuggestion = {
+  type: "community" | "ai"
+  course?: PublicCourse
+  title: string
+}
+
 /**
- * Get AI suggested course for user
- * 
- * Step 1: Check user's library
- * Step 2: If library has courses:
- *   - Use Gemini to generate related course name suggestions
- *   - Search Firestore for public courses matching those names
- *   - If found: Return matched course with rating
- *   - If not found: Fallback to popular courses
- * Step 3: If library is empty:
- *   - Show popular courses
- * Step 4: If no public courses exist: Return null (show placeholder)
+ * Get AI suggested courses for user (Always returns 3)
  */
-export async function getAISuggestedCourse(userId: string): Promise<PublicCourse | null> {
+export async function getAISuggestedCourses(userId: string): Promise<CourseSuggestion[]> {
   try {
     // Step 1: Get user's library courses
     const userCourses = await getUserCourses(userId)
+    const userCourseIds = new Set(userCourses.map(c => c.id))
 
-    // Step 4: If no public courses exist at all, return null
-    const allPublicCourses = await getPopularCourses(1)
-    if (allPublicCourses.length === 0) {
-      return null
-    }
-
-    // Step 3: If library is empty, return popular course
+    // Step 4: If library is empty, return top 3 popular courses
     if (userCourses.length === 0) {
-      return allPublicCourses[0] || null
+      const popular = await getPopularCourses(10)
+      const notOwnedPopular = popular.filter(c => !userCourseIds.has(c.id)).slice(0, 3)
+      return notOwnedPopular.map(c => ({
+        type: "community",
+        course: c,
+        title: c.title
+      }))
     }
 
-    // Step 2: Library has courses - use AI suggestions
-    try {
-      // Get top 5 most recent courses from library
-      const recentCourses = userCourses.slice(0, 5).map((c) => c.title)
+    // Step 2: Use top 3 most recent courses
+    const recentCourses = userCourses.slice(0, 3)
+    const suggestions: CourseSuggestion[] = []
 
-      // Generate AI suggestions
-      const suggestions = await generateCourseSuggestions(recentCourses)
-
-      if (suggestions.length === 0) {
-        // Fallback to popular courses
-        return allPublicCourses[0] || null
-      }
-
-      // Search for public courses matching suggestions
-      const matchedCourse = await searchCoursesByTitles(suggestions)
-
-      if (matchedCourse) {
-        return matchedCourse
-      }
-
-      // No match found, fallback to popular courses
-      return allPublicCourses[0] || null
-    } catch (error) {
-      console.error("Error in AI suggestion flow:", error)
-      // Fallback to popular courses on error
-      return allPublicCourses[0] || null
+    // Map slots to recent courses
+    // 3 slots, length could be 1, 2, or 3
+    const slotsPerCourse = [0, 0, 0]
+    for (let i = 0; i < 3; i++) {
+      slotsPerCourse[i % recentCourses.length]++
     }
+
+    for (let i = 0; i < recentCourses.length; i++) {
+      const course = recentCourses[i]
+      const slots = slotsPerCourse[i]
+      
+      // For each slot of this course, try to find community match or generate AI
+      // To avoid duplicates, we'll keep track of what we've added
+      const addedTitles = new Set(suggestions.map(s => s.title.toLowerCase()))
+
+      // Generate AI suggestions for this course specifically
+      const aiTitles = await generateCourseSuggestions([course.title], slots + 2) // Generate extra to find matches
+      
+      let slotsFilledForThisCourse = 0
+      for (const aiTitle of aiTitles) {
+        if (slotsFilledForThisCourse >= slots) break
+        if (addedTitles.has(aiTitle.toLowerCase())) continue
+
+        // Try to find in community library
+        const communityMatch = await searchCoursesByTitles([aiTitle], Array.from(userCourseIds))
+        
+        if (communityMatch && !suggestions.some(s => s.course?.id === communityMatch.id)) {
+          suggestions.push({
+            type: "community",
+            course: communityMatch,
+            title: communityMatch.title
+          })
+          addedTitles.add(communityMatch.title.toLowerCase())
+        } else {
+          suggestions.push({
+            type: "ai",
+            title: aiTitle
+          })
+          addedTitles.add(aiTitle.toLowerCase())
+        }
+        slotsFilledForThisCourse++
+      }
+
+      // Fallback if AI failed to give enough unique suggestions
+      while (slotsFilledForThisCourse < slots) {
+        suggestions.push({
+          type: "ai",
+          title: `Advanced ${course.title}`
+        })
+        slotsFilledForThisCourse++
+      }
+    }
+
+    return suggestions.slice(0, 3)
   } catch (error) {
-    console.error("Error getting AI suggested course:", error)
-    return null
+    console.error("Error getting AI suggested courses:", error)
+    // Absolute fallback: Popular courses
+    const popular = await getPopularCourses(3)
+    return popular.map(c => ({
+      type: "community",
+      course: c,
+      title: c.title
+    }))
   }
 }
 
@@ -70,7 +104,7 @@ export async function getAISuggestedCourse(userId: string): Promise<PublicCourse
  * Search for public courses matching any of the suggested titles
  * Uses case-insensitive partial matching
  */
-async function searchCoursesByTitles(suggestedTitles: string[]): Promise<PublicCourse | null> {
+async function searchCoursesByTitles(suggestedTitles: string[], excludeIds: string[] = []): Promise<PublicCourse | null> {
   try {
     // Try to use index first
     let coursesQuery
@@ -87,10 +121,11 @@ async function searchCoursesByTitles(suggestedTitles: string[]): Promise<PublicC
 
     const snapshot = await getDocs(coursesQuery)
     const courses: PublicCourse[] = []
+    const excludeSet = new Set(excludeIds)
 
     snapshot.forEach((doc) => {
       const data = doc.data()
-      if (data.isPublic) {
+      if (data.isPublic && !excludeSet.has(doc.id)) {
         courses.push({
           id: doc.id,
           ...data,

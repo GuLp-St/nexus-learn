@@ -1,5 +1,5 @@
 import { db } from "./firebase"
-import { collection, doc, getDoc, getDocs, query, where, setDoc, updateDoc, serverTimestamp, Timestamp, limit } from "firebase/firestore"
+import { collection, doc, getDoc, getDocs, query, where, setDoc, updateDoc, serverTimestamp, Timestamp, limit, orderBy } from "firebase/firestore"
 import { CourseData } from "./gemini"
 import { XPAwardResult } from "./xp-utils"
 
@@ -141,19 +141,91 @@ export async function ensureUserProgress(userId: string, courseId: string, isOwn
   
   // Get course to check if user is creator
   const courseDoc = await getDoc(doc(db, "courses", courseId))
-  const courseCreatedBy = courseDoc.data()?.createdBy
+  const courseData = courseDoc.data()
+  const courseCreatedBy = courseData?.createdBy
   
   if (!progressDoc.exists()) {
-    await setDoc(progressRef, {
+    // Check for existing lesson progress to restore progress if course was previously removed
+    let completedLessons: string[] = []
+    let totalLessons = 0
+    let lastAccessedModule: number | undefined
+    let lastAccessedLesson: number | undefined
+    
+    try {
+      // Query userCompletedItems for all lessons in this course
+      const completedQuery = query(
+        collection(db, "userCompletedItems"),
+        where("userId", "==", userId),
+        where("courseId", "==", courseId),
+        where("itemType", "==", "lesson")
+      )
+      const completedSnapshot = await getDocs(completedQuery)
+      
+      const completedSet = new Set<string>()
+      completedSnapshot.forEach((docSnap) => {
+        const data = docSnap.data()
+        if (data.moduleIndex !== undefined && data.moduleIndex !== null && 
+            data.lessonIndex !== undefined && data.lessonIndex !== null) {
+          completedSet.add(`${data.moduleIndex}-${data.lessonIndex}`)
+        }
+      })
+
+      // Also check userLessonProgress for lessons that might not have reached userCompletedItems yet
+      const lessonProgressQuery = query(
+        collection(db, "userLessonProgress"),
+        where("userId", "==", userId),
+        where("courseId", "==", courseId)
+      )
+      const lpSnapshot = await getDocs(lessonProgressQuery)
+      
+      let latestLp: any = null
+      lpSnapshot.forEach((docSnap) => {
+        const data = docSnap.data()
+        if (data.completed) {
+          completedSet.add(`${data.moduleIndex}-${data.lessonIndex}`)
+        }
+        // Track the most recently updated progress for lastAccessed restoration
+        if (!latestLp || (data.updatedAt && latestLp.updatedAt && data.updatedAt.toMillis() > latestLp.updatedAt.toMillis())) {
+          latestLp = data
+        }
+      })
+
+      completedLessons = Array.from(completedSet)
+      
+      if (latestLp) {
+        lastAccessedModule = latestLp.moduleIndex
+        lastAccessedLesson = latestLp.lessonIndex
+      }
+
+      // Calculate total lessons from course data
+      if (courseData && Array.isArray(courseData.modules)) {
+        for (const module of courseData.modules) {
+          if (Array.isArray(module.lessons)) {
+            totalLessons += module.lessons.length
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error restoring progress:", error)
+    }
+
+    const progressPercent = totalLessons > 0 ? Math.min(100, Math.round((completedLessons.length / totalLessons) * 100)) : 0
+
+    const progressData: any = {
       userId,
       courseId,
-      progress: 0,
-      completedLessons: [],
+      progress: progressPercent,
+      completedLessons,
       createdAt: serverTimestamp(),
       lastAccessed: serverTimestamp(),
       isOwnCourse: isOwnCourse || (courseCreatedBy === userId),
       addedFrom: addedFrom || null,
-    })
+    }
+
+    if (lastAccessedModule !== undefined) progressData.lastAccessedModule = lastAccessedModule
+    if (lastAccessedLesson !== undefined) progressData.lastAccessedLesson = lastAccessedLesson
+
+    await setDoc(progressRef, progressData)
   } else {
     // Update last accessed and ensure isOwnCourse is set
     const updates: any = {

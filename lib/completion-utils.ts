@@ -5,6 +5,7 @@ export interface CompletedItem {
   id: string
   userId: string
   courseId: string
+  courseTitle?: string
   moduleIndex?: number | null
   lessonIndex?: number | null
   completedAt: Timestamp
@@ -42,10 +43,15 @@ export async function recordCourseCompletion(userId: string, courseId: string): 
     if (existingDoc.exists()) {
       return // Already recorded
     }
+
+    // Get course title
+    const courseDoc = await getDoc(doc(db, "courses", courseId))
+    const courseTitle = courseDoc.data()?.title || "Unknown Course"
     
     await setDoc(completionRef, {
       userId,
       courseId,
+      courseTitle,
       moduleIndex: null,
       lessonIndex: null,
       completedAt: serverTimestamp(),
@@ -73,10 +79,15 @@ export async function recordModuleCompletion(
     if (existingDoc.exists()) {
       return // Already recorded
     }
+
+    // Get course title
+    const courseDoc = await getDoc(doc(db, "courses", courseId))
+    const courseTitle = courseDoc.data()?.title || "Unknown Course"
     
     await setDoc(completionRef, {
       userId,
       courseId,
+      courseTitle,
       moduleIndex,
       lessonIndex: null,
       completedAt: serverTimestamp(),
@@ -105,10 +116,15 @@ export async function recordLessonCompletion(
     if (existingDoc.exists()) {
       return // Already recorded
     }
+
+    // Get course title
+    const courseDoc = await getDoc(doc(db, "courses", courseId))
+    const courseTitle = courseDoc.data()?.title || "Unknown Course"
     
     await setDoc(completionRef, {
       userId,
       courseId,
+      courseTitle,
       moduleIndex,
       lessonIndex,
       completedAt: serverTimestamp(),
@@ -193,6 +209,7 @@ export async function getCompletedCourses(userId: string): Promise<CompletedItem
         id: docSnap.id,
         userId: data.userId,
         courseId: data.courseId,
+        courseTitle: data.courseTitle,
         moduleIndex: data.moduleIndex,
         lessonIndex: data.lessonIndex,
         completedAt: data.completedAt,

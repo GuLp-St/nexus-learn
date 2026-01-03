@@ -29,9 +29,13 @@ export function CompletedCoursesModal({ open, onOpenChange, userId }: CompletedC
           const items = await getCompletedCourses(userId)
           setCompletedItems(items)
           
-          // Fetch course titles
+          // Fetch course titles for those that don't have one saved
           const titles: Record<string, string> = {}
-          const uniqueCourseIds = [...new Set(items.map(item => item.courseId))]
+          const uniqueCourseIds = [...new Set(
+            items
+              .filter(item => !item.courseTitle)
+              .map(item => item.courseId)
+          )]
           
           await Promise.all(
             uniqueCourseIds.map(async (courseId) => {
@@ -94,7 +98,7 @@ export function CompletedCoursesModal({ open, onOpenChange, userId }: CompletedC
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">
-                      {courseTitles[item.courseId] || "Unknown Course"}
+                      {item.courseTitle || courseTitles[item.courseId] || "Unknown Course"}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Completed on {formatDate(item.completedAt)}
