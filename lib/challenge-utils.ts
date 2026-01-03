@@ -1,6 +1,6 @@
 import { db } from "./firebase"
 import { doc, getDoc, setDoc, updateDoc, query, where, getDocs, collection, serverTimestamp, Timestamp, orderBy, limit, increment } from "firebase/firestore"
-import { awardXP } from "./xp-utils"
+import { awardXP, XPAwardResult } from "./xp-utils"
 import { QuizQuestion } from "./quiz-utils"
 
 export interface Challenge {
@@ -70,6 +70,7 @@ export async function createChallenge(
   lessonIndex: number | null,
   questionIds: string[],
   challengerAttemptId: string,
+  // ...
   challengerScore: number,
   challengerTime: number,
   betAmount: number = 0
@@ -158,7 +159,7 @@ export async function completeChallenge(
   challengedAttemptId: string,
   challengedScore: number,
   challengedTime: number
-): Promise<{ winnerId: string | null; challengerXP: number; challengedXP: number }> {
+): Promise<{ winnerId: string | null; challengerXP: number; challengedXP: number; challengedXPAwardResult?: XPAwardResult }> {
   try {
     const challengeRef = doc(db, "challenges", challengeId)
     const challengeDoc = await getDoc(challengeRef)
@@ -204,6 +205,7 @@ export async function completeChallenge(
     const maxScore = questionIds.length
     let challengerXP = 0
     let challengedXP = 0
+    let challengedXPAwardResult: XPAwardResult | undefined
 
     // Send notifications to both users
     const { createNotification } = await import("./notification-utils")
@@ -253,7 +255,7 @@ export async function completeChallenge(
       })
     } else if (winnerId === challengedId) {
       challengedXP = await calculateChallengeXP(questionIds, challengedScore, maxScore)
-      await awardXP(challengedId, challengedXP, "Quiz Challenge Victory", `Won challenge with score ${challengedScore}/${maxScore}`, { challengeId, score: challengedScore, maxScore })
+      challengedXPAwardResult = await awardXP(challengedId, challengedXP, "Quiz Challenge Victory", `Won challenge with score ${challengedScore}/${maxScore}`, { challengeId, score: challengedScore, maxScore })
       
       // Increment challenge wins for winner
       const winnerRef = doc(db, "users", challengedId)
@@ -275,6 +277,7 @@ export async function completeChallenge(
       winnerId,
       challengerXP,
       challengedXP,
+      challengedXPAwardResult
     }
   } catch (error) {
     console.error("Error completing challenge:", error)
@@ -418,4 +421,3 @@ export async function getChallengeQuestions(
     return []
   }
 }
-

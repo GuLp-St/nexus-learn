@@ -25,9 +25,9 @@ function AnimatedNumber({ startValue, endValue }: { startValue: number, endValue
         const progress = Math.min(elapsed / duration, 1)
         
         // Smooth exponential easing for the shuffle
-        const easeOutExpo = 1 - Math.pow(2, -10 * progress)
+        const easeOutExpo = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress)
         
-        const current = Math.floor(startValue + (endValue - startValue) * easeOutExpo)
+        const current = Math.round(startValue + (endValue - startValue) * easeOutExpo)
         setDisplayValue(current)
 
         if (progress < 1) {

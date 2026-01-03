@@ -101,9 +101,13 @@ const COSMETICS: Cosmetic[] = [
   { id: "wallpaper-holo", category: "wallpaper", rarity: "epic", price: 500, name: "Holo", description: "Pearlescent mix", config: { type: "mesh", colors: ["silver", "pink", "blue"] } },
   
   // Wallpapers - Legendary
-  { id: "wallpaper-matrix", category: "wallpaper", rarity: "legendary", price: 1000, name: "The Matrix", description: "Faint green characters raining", config: { type: "animated", animation: "matrix" } },
-  { id: "wallpaper-starfield", category: "wallpaper", rarity: "legendary", price: 1000, name: "Starfield", description: "Twinkling stars", config: { type: "animated", animation: "starfield" } },
-  { id: "wallpaper-pulse", category: "wallpaper", rarity: "legendary", price: 1000, name: "Pulse", description: "Breathing background", config: { type: "animated", animation: "pulse" } },
+  { id: "wallpaper-ethereal-mesh", category: "wallpaper", rarity: "legendary", price: 1000, name: "Ethereal Mesh", description: "Breathing mesh gradient", config: { type: "animated", animation: "ethereal-mesh" } },
+  
+  // Wallpapers - Unique
+  { id: "wallpaper-matrix", category: "wallpaper", rarity: "unique", price: 2000, name: "The Matrix", description: "Falling Japanese characters", config: { type: "animated", animation: "matrix" } },
+  { id: "wallpaper-nexus-constellation", category: "wallpaper", rarity: "unique", price: 2000, name: "Nexus Constellation", description: "Connected particle network", config: { type: "animated", animation: "nexus-constellation" } },
+  { id: "wallpaper-hyperdrive", category: "wallpaper", rarity: "unique", price: 2000, name: "Hyperdrive", description: "Streaking stars at light speed", config: { type: "animated", animation: "hyperdrive" } },
+  { id: "wallpaper-core-pulse", category: "wallpaper", rarity: "unique", price: 2000, name: "Core Pulse", description: "Pulsing reactor rings", config: { type: "animated", animation: "core-pulse" } },
   
   // Name Colors - Uncommon
   { id: "name-crimson", category: "nameColor", rarity: "uncommon", price: 100, name: "Crimson", description: "Bright red text", config: { type: "solid", light: "rose-600", dark: "rose-400" } },

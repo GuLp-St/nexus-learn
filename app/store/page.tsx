@@ -20,6 +20,7 @@ import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
 import { NameWithColor } from "@/components/name-with-color"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 import { NexonHistoryModal } from "@/components/nexon-history-modal"
+import { WallpaperRenderer } from "@/components/wallpapers/wallpaper-renderer"
 
 export default function StorePage() {
   const { user, nickname, loading: authLoading } = useAuth()
@@ -370,7 +371,13 @@ export default function StorePage() {
                               </div>
                             )}
                             {cosmetic.category === "wallpaper" && (
-                              <div className={`h-full w-full rounded-lg cosmetic-wallpaper-${cosmetic.id.replace("wallpaper-", "")}`} />
+                              <div className="h-full w-full rounded-lg relative overflow-hidden">
+                                {cosmetic.config?.type === "animated" ? (
+                                  <WallpaperRenderer wallpaper={cosmetic.id} className="rounded-lg" />
+                                ) : (
+                                  <div className={`h-full w-full rounded-lg cosmetic-wallpaper-${cosmetic.id.replace("wallpaper-", "")}`} />
+                                )}
+                              </div>
                             )}
                             {cosmetic.category === "nameColor" && (
                               <div className={`text-2xl font-bold ${getNameColorPreviewClass(cosmetic.id)}`}>
@@ -460,10 +467,38 @@ export default function StorePage() {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 border-none bg-transparent">
           {previewCosmetic && (
             <div className={`relative min-h-[500px] w-full flex flex-col items-center justify-center p-8 rounded-xl overflow-hidden shadow-2xl ${
-              previewCosmetic.category === "wallpaper" 
-                ? getWallpaperPreviewClass(previewCosmetic.id) 
-                : (userCosmetics?.wallpaper ? getWallpaperPreviewClass(userCosmetics.wallpaper) : "bg-background")
+              (() => {
+                const isPreviewingWallpaper = previewCosmetic.category === "wallpaper"
+                const wallpaperId = isPreviewingWallpaper ? previewCosmetic.id : userCosmetics?.wallpaper
+                const wallpaper = wallpaperId ? cosmetics.find(c => c.id === wallpaperId) : null
+                const isUnique = wallpaper?.rarity === "unique"
+                const wallpaperClass = wallpaperId ? getWallpaperPreviewClass(wallpaperId) : ""
+                
+                if (isPreviewingWallpaper) {
+                  if (previewCosmetic.config?.type === "animated") {
+                    return isUnique ? `bg-background profile-glass-theme ${wallpaperClass}` : "bg-background"
+                  }
+                  return isUnique ? `profile-glass-theme ${wallpaperClass}` : wallpaperClass
+                } else {
+                  return wallpaperId 
+                    ? (isUnique ? `profile-glass-theme ${wallpaperClass}` : wallpaperClass)
+                    : "bg-background"
+                }
+              })()
             }`}>
+              {/* Render animated wallpaper if previewing one */}
+              {previewCosmetic.category === "wallpaper" && previewCosmetic.config?.type === "animated" && (
+                <WallpaperRenderer wallpaper={previewCosmetic.id} className="absolute inset-0 rounded-xl" />
+              )}
+              {/* Render background wallpaper for non-wallpaper cosmetics */}
+              {previewCosmetic.category !== "wallpaper" && userCosmetics?.wallpaper && (
+                (() => {
+                  const bgWallpaper = cosmetics.find(c => c.id === userCosmetics.wallpaper)
+                  return bgWallpaper?.config?.type === "animated" ? (
+                    <WallpaperRenderer wallpaper={userCosmetics.wallpaper} className="absolute inset-0 rounded-xl" />
+                  ) : null
+                })()
+              )}
               <div className="z-10 w-full max-w-2xl bg-background/40 backdrop-blur-md rounded-2xl p-8 border border-white/10 shadow-xl space-y-8">
                 <div className="text-center space-y-2">
                   <Badge className={`${getRarityColor(previewCosmetic.rarity)} mb-2`}>
@@ -532,7 +567,10 @@ export default function StorePage() {
                   </div>
 
                   <div className="space-y-1">
-                    <h2 className="text-3xl font-bold text-foreground">
+                    <h2 
+                      className="text-3xl font-bold text-foreground"
+                      data-has-name-color={(previewCosmetic.category === "nameColor" ? previewCosmetic.id : userCosmetics?.nameColor) ? "true" : "false"}
+                    >
                       <NameWithColor
                         userId={user?.uid || "preview"}
                         name={nickname || "Learner Name"}

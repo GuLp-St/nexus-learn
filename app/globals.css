@@ -116,6 +116,86 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  @keyframes shockwave {
+    0% {
+      transform: scale(0.5);
+      opacity: 0.8;
+    }
+    100% {
+      transform: scale(2.5);
+      opacity: 0;
+    }
+  }
+
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  @keyframes count-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes scale-up-center {
+    0% {
+      transform: scale(0.5);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes spin-slow {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+}
+
+.animate-shockwave {
+  animation: shockwave 1s cubic-bezier(0.21, 0.5, 0.35, 1) forwards;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-scale-up-center {
+  animation: scale-up-center 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 2s linear infinite;
 }
 
 @layer base {
@@ -137,9 +217,29 @@
   }
 }
 
-/* Ensure Sonner toasts are always on top */
+/* Ensure Sonner toasts are always on top and aligned to the far right */
 [data-sonner-toaster] {
   z-index: 99999 !important;
+}
+
+[data-sonner-toaster][data-x-position="right"] {
+  right: 0 !important;
+  left: auto !important;
+  --viewport-padding: 0px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+}
+
+[data-sonner-toaster] li {
+  margin-right: 0 !important;
+  margin-left: auto !important;
+}
+
+@media (min-width: 640px) {
+  [data-sonner-toaster] li {
+    margin-right: 0 !important;
+  }
 }
 
 .xp-bar-animation {
@@ -581,6 +681,188 @@
 }
 
 /* Wallpapers - Rare Patterns */
+/* Wallpaper Card Overlay - Ensures cards remain visible on custom wallpapers */
+[class*="cosmetic-wallpaper-"] .card-on-wallpaper {
+  background-color: hsl(var(--card) / 0.85) !important;
+  backdrop-filter: blur(16px) !important;
+  border-color: hsl(var(--primary) / 0.2) !important;
+}
+
+[class*="cosmetic-wallpaper-"] .card-on-wallpaper:hover {
+  background-color: hsl(var(--card) / 0.95) !important;
+  border-color: hsl(var(--primary) / 0.4) !important;
+}
+
+/* Profile Specific Glassmorphism - Forced Unique Theme */
+.profile-glass-theme {
+  --profile-card-bg: rgba(255, 255, 255, 0.03);
+  --profile-accent: rgba(255, 255, 255, 0.1);
+  --profile-border: rgba(255, 255, 255, 0.15);
+  --profile-text: rgba(255, 255, 255, 0.95);
+  --profile-text-muted: rgba(255, 255, 255, 0.6);
+  
+  /* Force dark-ish theme for better contrast on all colorful wallpapers */
+  color: var(--profile-text) !important;
+}
+
+/* Sidebar and Mobile Header Glassmorphism */
+.profile-glass-theme aside,
+.profile-glass-theme header.sticky {
+  background: rgba(0, 0, 0, 0.2) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border-color: var(--profile-border) !important;
+}
+
+.profile-glass-theme aside *,
+.profile-glass-theme header.sticky * {
+  border-color: var(--profile-border) !important;
+}
+
+/* Base Card Style */
+.profile-glass-theme .card-on-wallpaper,
+.profile-glass-theme .card,
+.profile-glass-theme [data-slot="card"] {
+  background: var(--profile-card-bg) !important;
+  backdrop-filter: blur(12px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
+  border: 1px solid var(--profile-border) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+  transition: all 0.3s ease !important;
+}
+
+/* Badge Overrides */
+.profile-glass-theme .bg-primary\/5,
+.profile-glass-theme .bg-primary\/10,
+.profile-glass-theme .bg-muted,
+.profile-glass-theme .bg-muted\/30 {
+  background: var(--profile-accent) !important;
+}
+
+.profile-glass-theme .border-border,
+.profile-glass-theme .border-primary\/20 {
+  border-color: var(--profile-border) !important;
+}
+
+.profile-glass-theme .card-on-wallpaper:hover {
+  background: var(--profile-accent) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-2px);
+}
+
+/* Text and Icon Overrides to ensure visibility */
+/* Only apply profile theme color if user doesn't have custom name color */
+.profile-glass-theme .text-foreground:not([class*="cosmetic-name-"]),
+.profile-glass-theme .text-card-foreground:not([class*="cosmetic-name-"]),
+.profile-glass-theme .card-title:not([class*="cosmetic-name-"]),
+.profile-glass-theme h1:not([class*="cosmetic-name-"]),
+.profile-glass-theme h2:not([data-has-name-color="true"]):not([class*="cosmetic-name-"]),
+.profile-glass-theme h4:not([class*="cosmetic-name-"]),
+.profile-glass-theme span:not([class*="cosmetic-name-"]),
+.profile-glass-theme button:not([class*="cosmetic-name-"]) {
+  color: var(--profile-text) !important;
+}
+
+/* Exclude custom name colors from profile theme overrides */
+.profile-glass-theme [class*="cosmetic-name-"],
+.profile-glass-theme h2[data-has-name-color="true"] {
+  color: inherit !important;
+}
+
+.profile-glass-theme h2[data-has-name-color="true"] * {
+  color: inherit !important;
+}
+
+/* Exclude Add Friend button from profile theme overrides */
+.profile-glass-theme .add-friend-button {
+  background-color: var(--profile-accent) !important;
+  border-color: var(--profile-border) !important;
+  color: var(--profile-text) !important;
+}
+
+.profile-glass-theme .add-friend-button:hover {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  opacity: 0.9;
+}
+
+.profile-glass-theme .text-muted-foreground,
+.profile-glass-theme .card-description,
+.profile-glass-theme p {
+  color: var(--profile-text-muted) !important;
+}
+
+.profile-glass-theme svg:not(.text-amber-500):not(.text-orange-500):not(.text-teal-600):not(.text-primary) {
+  color: var(--profile-text) !important;
+  stroke: var(--profile-text);
+}
+
+/* Wallpaper Specific Tinting */
+.cosmetic-wallpaper-matrix.profile-glass-theme {
+  --profile-border: rgba(0, 255, 0, 0.3);
+  --profile-accent: rgba(0, 255, 0, 0.1);
+  --profile-text: #00ff00;
+}
+
+.cosmetic-wallpaper-nexus-constellation.profile-glass-theme,
+.cosmetic-wallpaper-starfield.profile-glass-theme {
+  --profile-border: rgba(255, 255, 255, 0.2);
+  --profile-accent: rgba(255, 255, 255, 0.1);
+  --profile-text: #ffffff;
+}
+
+.cosmetic-wallpaper-aurora.profile-glass-theme {
+  --profile-border: rgba(34, 197, 94, 0.3);
+  --profile-accent: rgba(34, 197, 94, 0.1);
+  --profile-text: #dcfce7;
+}
+
+.cosmetic-wallpaper-nebula.profile-glass-theme {
+  --profile-border: rgba(168, 85, 247, 0.3);
+  --profile-accent: rgba(168, 85, 247, 0.1);
+  --profile-text: #f3e8ff;
+}
+
+.cosmetic-wallpaper-holo.profile-glass-theme {
+  --profile-border: rgba(236, 72, 153, 0.3);
+  --profile-accent: rgba(236, 72, 153, 0.1);
+  --profile-text: #fdf2f8;
+}
+
+.cosmetic-wallpaper-blueprint.profile-glass-theme {
+  --profile-border: rgba(255, 255, 255, 0.3);
+  --profile-text: #ffffff;
+}
+
+.cosmetic-wallpaper-carbon-fiber.profile-glass-theme {
+  --profile-border: rgba(255, 255, 255, 0.1);
+  --profile-text: #f8fafc;
+}
+
+.cosmetic-wallpaper-hexagon-hive.profile-glass-theme {
+  --profile-border: rgba(255, 255, 255, 0.15);
+  --profile-text: #f1f5f9;
+}
+
+.cosmetic-wallpaper-core-pulse.profile-glass-theme,
+.cosmetic-wallpaper-pulse.profile-glass-theme {
+  --profile-border: rgba(34, 211, 238, 0.3);
+  --profile-accent: rgba(34, 211, 238, 0.1);
+  --profile-text: #a5f3fc;
+}
+
+.cosmetic-wallpaper-ethereal-mesh.profile-glass-theme {
+  --profile-border: rgba(139, 92, 246, 0.3);
+  --profile-accent: rgba(139, 92, 246, 0.1);
+  --profile-text: #e9d5ff;
+}
+
+.cosmetic-wallpaper-hyperdrive.profile-glass-theme {
+  --profile-border: rgba(255, 255, 255, 0.3);
+  --profile-accent: rgba(255, 255, 255, 0.1);
+  --profile-text: #ffffff;
+}
+
 .cosmetic-wallpaper-blueprint {
   background-color: rgb(30, 58, 138) !important; /* blue-800 */
   background-image: 
@@ -598,51 +880,39 @@
 .cosmetic-wallpaper-carbon-fiber {
   background: 
     repeating-linear-gradient(
-      0deg,
-      rgba(0, 0, 0, 0.1) 0px,
-      rgba(0, 0, 0, 0.1) 1px,
-      transparent 1px,
-      transparent 2px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      rgba(0, 0, 0, 0.1) 0px,
-      rgba(0, 0, 0, 0.1) 1px,
-      transparent 1px,
-      transparent 2px
+      45deg,
+      rgba(0, 0, 0, 0.2) 0px,
+      rgba(0, 0, 0, 0.2) 10px,
+      rgba(255, 255, 255, 0.05) 10px,
+      rgba(255, 255, 255, 0.05) 20px
     ),
     rgb(15, 23, 42) !important;
+  background-size: 40px 40px;
 }
 .dark .cosmetic-wallpaper-carbon-fiber {
   background: 
     repeating-linear-gradient(
-      0deg,
+      45deg,
       rgba(255, 255, 255, 0.05) 0px,
-      rgba(255, 255, 255, 0.05) 1px,
-      transparent 1px,
-      transparent 2px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.05) 0px,
-      rgba(255, 255, 255, 0.05) 1px,
-      transparent 1px,
-      transparent 2px
+      rgba(255, 255, 255, 0.05) 10px,
+      transparent 10px,
+      transparent 20px
     ),
     rgb(15, 23, 42) !important;
+  background-size: 40px 40px;
 }
 
 .cosmetic-wallpaper-hexagon-hive {
   background-color: rgb(15, 23, 42) !important;
   background-image: 
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: 30px 30px;
-  background-position: 0 0, 15px 15px;
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.1) 4px, transparent 4px);
+  background-size: 60px 60px;
 }
 .dark .cosmetic-wallpaper-hexagon-hive {
   background-color: rgb(15, 23, 42) !important;
   background-image: 
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.1) 4px, transparent 4px);
+  background-size: 60px 60px;
 }
 
 /* Wallpapers - Epic Mesh Gradients */
@@ -689,93 +959,71 @@
     rgb(15, 23, 42) !important;
 }
 
-/* Wallpapers - Legendary Animated */
+/* Wallpapers - Legendary Animated (Canvas-based) */
 .cosmetic-wallpaper-matrix {
   background-color: rgb(0, 0, 0) !important;
-  background-image: 
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0, 255, 0, 0.03) 2px,
-      rgba(0, 255, 0, 0.03) 4px
-    );
-  animation: matrix-rain 20s linear infinite;
   position: relative;
+  overflow: hidden;
 }
 
-.cosmetic-wallpaper-matrix::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: repeating-linear-gradient(
-    90deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 255, 0, 0.05) 2px,
-    rgba(0, 255, 0, 0.05) 4px
-  );
-  animation: matrix-rain 15s linear infinite reverse;
+.cosmetic-wallpaper-nexus-constellation,
+.cosmetic-wallpaper-starfield {
+  background-color: rgb(15, 23, 42) !important;
+  position: relative;
+  overflow: hidden;
 }
 
-@keyframes matrix-rain {
-  0% { background-position: 0 0; }
-  100% { background-position: 0 100vh; }
+.cosmetic-wallpaper-core-pulse,
+.cosmetic-wallpaper-pulse {
+  background-color: rgb(15, 23, 42) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.cosmetic-wallpaper-ethereal-mesh {
+  background-color: rgb(15, 23, 42) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.cosmetic-wallpaper-hyperdrive {
+  background-color: rgb(0, 0, 0) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes breathe {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
 .dark .cosmetic-wallpaper-matrix {
   background-color: rgb(0, 0, 0) !important;
 }
 
-.cosmetic-wallpaper-starfield {
-  background-color: rgb(15, 23, 42) !important;
-  background-image: 
-    radial-gradient(2px 2px at 20% 30%, white, transparent),
-    radial-gradient(2px 2px at 60% 70%, white, transparent),
-    radial-gradient(1px 1px at 50% 50%, white, transparent),
-    radial-gradient(1px 1px at 80% 10%, white, transparent),
-    radial-gradient(2px 2px at 90% 40%, white, transparent),
-    radial-gradient(1px 1px at 33% 60%, white, transparent),
-    radial-gradient(2px 2px at 10% 80%, white, transparent);
-  background-size: 200% 200%;
-  animation: starfield-twinkle 20s ease-in-out infinite;
-}
-
-@keyframes starfield-twinkle {
-  0%, 100% { 
-    background-position: 0% 0%;
-    opacity: 1;
-  }
-  50% { 
-    background-position: 100% 100%;
-    opacity: 0.8;
-  }
-}
-
+.dark .cosmetic-wallpaper-nexus-constellation,
 .dark .cosmetic-wallpaper-starfield {
   background-color: rgb(15, 23, 42) !important;
 }
 
-.cosmetic-wallpaper-pulse {
-  background: linear-gradient(135deg, rgb(15, 23, 42), rgb(30, 41, 59)) !important;
-  animation: pulse-bg 4s ease-in-out infinite;
-}
-
-@keyframes pulse-bg {
-  0%, 100% { 
-    background: linear-gradient(135deg, rgb(15, 23, 42), rgb(30, 41, 59)) !important;
-  }
-  50% { 
-    background: linear-gradient(135deg, rgb(30, 41, 59), rgb(15, 23, 42)) !important;
-  }
-}
-
+.dark .cosmetic-wallpaper-core-pulse,
 .dark .cosmetic-wallpaper-pulse {
-  background: linear-gradient(135deg, rgb(15, 23, 42), rgb(30, 41, 59)) !important;
-  animation: pulse-bg 4s ease-in-out infinite;
+  background-color: rgb(15, 23, 42) !important;
+}
+
+.dark .cosmetic-wallpaper-ethereal-mesh {
+  background-color: rgb(15, 23, 42) !important;
+}
+
+.dark .cosmetic-wallpaper-hyperdrive {
+  background-color: rgb(0, 0, 0) !important;
 }
 
 /* Hide scrollbar utility */

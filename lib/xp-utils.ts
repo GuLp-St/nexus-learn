@@ -39,7 +39,7 @@ export async function awardXP(userId: string, amount: number, source?: string, d
     if (leveledUp && newLevel > 1) {
       const nexonAmount = 50 + (newLevel * 10)
       const { awardNexon } = await import("./nexon-utils")
-      awardNexon(userId, nexonAmount, "Level Up", `Reached level ${newLevel}`, { level: newLevel }).catch((error) => {
+      awardNexon(userId, nexonAmount, "Level Up", `Reached level ${newLevel}`, { level: newLevel, silent: true }).catch((error) => {
         console.error("Error awarding Nexon for level up:", error)
         // Don't throw - Nexon failure shouldn't block XP award
       })
@@ -514,7 +514,7 @@ export async function checkAndAwardDailyLoginXP(userId: string): Promise<XPAward
     if (result.leveledUp && result.newLevel > 1) {
       const nexonAmount = 50 + (result.newLevel * 10)
       const { awardNexon } = await import("./nexon-utils")
-      awardNexon(userId, nexonAmount, "Level Up", `Reached level ${result.newLevel}`, { level: result.newLevel }).catch(console.error)
+      awardNexon(userId, nexonAmount, "Level Up", `Reached level ${result.newLevel}`, { level: result.newLevel, silent: true }).catch(console.error)
 
       const { recordActivity } = await import("./community-pulse-utils")
       recordActivity(userId, "leveled_up", { newLevel: result.newLevel }).catch(console.error)

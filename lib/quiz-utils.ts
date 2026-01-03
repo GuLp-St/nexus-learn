@@ -404,6 +404,14 @@ export async function saveQuizAttempt(
   isRetake?: boolean
 ): Promise<XPAwardResult | null> {
   try {
+    // Fetch current user data before awarding XP to track level up
+    const userRef = doc(db, "users", userId)
+    const userSnap = await getDoc(userRef)
+    const userData = userSnap.data()
+    const initialXP = userData?.xp || 0
+    const { calculateLevel } = await import("./level-utils")
+    const oldLevel = calculateLevel(initialXP)
+
     // First save the basic quiz attempt
     await saveQuizAttemptBasic(attemptId, answers, scores)
 
@@ -480,12 +488,21 @@ export async function saveQuizAttempt(
 
     // If any XP was awarded, return a consolidated result for the UI
     if (totalXPAwarded > 0) {
-      // Note: XP was already added via individual calls, we just need the final state for the UI
-      // We'll call a dummy awardXP(0) to get the latest levels and XP totals
-      return await awardXP(userId, 0, quizType === "course" ? "Course Quiz" : quizType === "module" ? "Module Quiz" : "Lesson Quiz").then(res => ({
-        ...res,
-        amount: totalXPAwarded // Overwrite with the total we calculated
-      }))
+      const newXP = initialXP + totalXPAwarded
+      const newLevel = calculateLevel(newXP)
+      const leveledUp = newLevel > oldLevel
+      const nexonAwarded = leveledUp && newLevel > 1 ? 50 + (newLevel * 10) : undefined
+
+      return {
+        amount: totalXPAwarded,
+        oldXP: initialXP,
+        newXP,
+        oldLevel,
+        newLevel,
+        leveledUp,
+        source: quizType === "course" ? "Course Quiz" : quizType === "module" ? "Module Quiz" : "Lesson Quiz",
+        nexonAwarded
+      }
     }
 
     return null

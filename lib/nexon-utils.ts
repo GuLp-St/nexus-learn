@@ -44,15 +44,17 @@ export async function awardNexon(
 
     // Emit event for Nexon award
     const { eventBus } = await import("./event-bus")
-    eventBus.emit({
-      type: "nexon_awarded",
-      userId,
-      metadata: {
-        amount,
-        source: source || "Nexon Award",
-        description
-      }
-    })
+    if (!metadata?.silent) {
+      eventBus.emit({
+        type: "nexon_awarded",
+        userId,
+        metadata: {
+          amount,
+          source: source || "Nexon Award",
+          description
+        }
+      })
+    }
 
     // Get updated balance
     const updatedDoc = await getDoc(userRef)

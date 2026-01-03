@@ -8,6 +8,9 @@ import { useState } from "react"
 
 interface XPContextType {
   showXPAward: (result: XPAwardResult) => void
+  levelUpModalOpen: boolean
+  levelUpResult: XPAwardResult | null
+  closeLevelUpModal: () => void
 }
 
 const XPContext = createContext<XPContextType | undefined>(undefined)
@@ -27,19 +30,19 @@ export function XPContextProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const closeLevelUpModal = () => {
+    setLevelUpModalOpen(false)
+    setLevelUpResult(null)
+  }
+
   return (
-    <XPContext.Provider value={{ showXPAward }}>
+    <XPContext.Provider value={{ 
+      showXPAward, 
+      levelUpModalOpen, 
+      levelUpResult, 
+      closeLevelUpModal 
+    }}>
       {children}
-      {levelUpResult && (
-        <LevelUpModal
-          open={levelUpModalOpen}
-          onClose={() => {
-            setLevelUpModalOpen(false)
-            setLevelUpResult(null)
-          }}
-          result={levelUpResult}
-        />
-      )}
     </XPContext.Provider>
   )
 }

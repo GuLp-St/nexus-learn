@@ -19,6 +19,7 @@ import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import Link from "next/link"
 import { areFriends, sendFriendRequest } from "@/lib/friends-utils"
+import { WallpaperRenderer } from "@/components/wallpapers/wallpaper-renderer"
 
 export default function UserProfileView() {
   const params = useParams()
@@ -55,6 +56,7 @@ export default function UserProfileView() {
   const [sendingRequest, setSendingRequest] = useState(false)
   const [wallpaper, setWallpaper] = useState<string | null>(null)
   const [avatarFrame, setAvatarFrame] = useState<string | null>(null)
+  const [nameColor, setNameColor] = useState<string | null>(null)
   const { setPageContext } = useChatbotContext()
 
   const getFrameXPClasses = (frameId: string | null) => {
@@ -166,6 +168,7 @@ export default function UserProfileView() {
           const userCosmetics = await getUserCosmetics(userId)
           setWallpaper(userCosmetics.wallpaper || null)
           setAvatarFrame(userCosmetics.avatarFrame || null)
+          setNameColor(userCosmetics.nameColor || null)
         } catch (error) {
           console.error("Error loading cosmetics:", error)
         }
@@ -275,9 +278,11 @@ export default function UserProfileView() {
 
   // Get wallpaper class (strip "wallpaper-" prefix if present)
   const wallpaperClass = wallpaper ? `cosmetic-wallpaper-${wallpaper.replace("wallpaper-", "")}` : ""
+  const profileThemeClass = wallpaper ? "profile-glass-theme" : ""
 
   return (
-    <div className={`flex flex-col min-h-screen bg-background lg:flex-row ${wallpaperClass}`}>
+    <div className={`flex flex-col min-h-screen bg-background lg:flex-row ${wallpaperClass} ${profileThemeClass}`}>
+      <WallpaperRenderer wallpaper={wallpaper} />
       <SidebarNav 
         currentPath="/profile" 
         title={`${displayName}'s Profile`}
@@ -355,7 +360,10 @@ export default function UserProfileView() {
 
               <div>
                 <div className="flex items-center gap-3 justify-center">
-                  <h2 className="text-2xl font-bold text-foreground">
+                  <h2 
+                    className="text-2xl font-bold text-foreground"
+                    data-has-name-color={nameColor ? "true" : "false"}
+                  >
                     <NameWithColor
                       userId={userId}
                       name={displayName}
@@ -379,7 +387,7 @@ export default function UserProfileView() {
                         }
                       }}
                       disabled={sendingRequest}
-                      className="gap-1"
+                      className="gap-1 add-friend-button"
                     >
                       <UserPlus className="h-4 w-4" />
                       {sendingRequest ? "Sending..." : "Add Friend"}
@@ -396,7 +404,7 @@ export default function UserProfileView() {
 
             {/* Stats Row */}
             <div className="grid gap-4 sm:grid-cols-3">
-              <Card>
+              <Card className="card-on-wallpaper">
                 <CardHeader className="pb-3">
                   <CardDescription className="text-sm">Total XP</CardDescription>
                 </CardHeader>
@@ -410,7 +418,7 @@ export default function UserProfileView() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="card-on-wallpaper">
                 <CardHeader className="pb-3">
                   <CardDescription className="text-sm">Courses Completed</CardDescription>
                 </CardHeader>
@@ -424,7 +432,7 @@ export default function UserProfileView() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="card-on-wallpaper">
                 <CardHeader className="pb-3">
                   <CardDescription className="text-sm">Daily Streak</CardDescription>
                 </CardHeader>
@@ -441,7 +449,7 @@ export default function UserProfileView() {
             </div>
 
             {/* Badges Section */}
-            <Card>
+            <Card className="card-on-wallpaper">
               <CardHeader>
                 <CardTitle>Earned Badges</CardTitle>
                 <CardDescription>Unlock badges by completing challenges and achievements</CardDescription>
@@ -483,10 +491,10 @@ export default function UserProfileView() {
             </Card>
 
             {/* Activity This Week */}
-            <Card>
+            <Card className="card-on-wallpaper">
               <CardHeader>
                 <CardTitle>Activity This Week</CardTitle>
-                <CardDescription>Time spent learning each day</CardDescription>
+                <CardDescription>Hours spent learning each day</CardDescription>
               </CardHeader>
               <CardContent>
                 {loadingActivity ? (
@@ -498,21 +506,19 @@ export default function UserProfileView() {
                     <div className="text-muted-foreground">No activity data available</div>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="flex items-end justify-between gap-2 sm:gap-4">
                     {activityData.map((data, index) => (
-                      <div key={index} className="flex items-center gap-4">
-                        <span className="w-12 text-sm text-muted-foreground">{data.day}</span>
-                        <div className="flex-1">
-                          <div className="relative h-8 overflow-hidden rounded-lg bg-muted">
+                      <div key={index} className="flex flex-1 flex-col items-center gap-2">
+                        <div className="relative w-full">
+                          <div className="flex h-40 w-full items-end">
                             <div
-                              className="h-full bg-primary transition-all duration-500"
-                              style={{ width: `${(data.hours / maxHours) * 100}%` }}
+                              className="w-full rounded-t-md bg-primary transition-all hover:bg-primary/80"
+                              style={{ height: `${(data.hours / maxHours) * 100}%`, minHeight: "8px" }}
                             />
-                            <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-foreground">
-                              {data.hours > 0 ? `${data.hours.toFixed(1)}h` : "0h"}
-                            </span>
                           </div>
                         </div>
+                        <span className="text-xs font-medium text-muted-foreground">{data.day}</span>
+                        <span className="text-xs text-muted-foreground">{data.hours > 0 ? `${data.hours.toFixed(1)}h` : "0h"}</span>
                       </div>
                     ))}
                   </div>

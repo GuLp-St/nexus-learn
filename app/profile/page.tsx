@@ -20,6 +20,7 @@ import { CompletedCoursesModal } from "@/components/completed-courses-modal"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 import { NexonHistoryModal } from "@/components/nexon-history-modal"
 import { getUserNexon } from "@/lib/nexon-utils"
+import { WallpaperRenderer } from "@/components/wallpapers/wallpaper-renderer"
 
 export default function UserProfile() {
   const { nickname, user, loading, avatarUrl, refreshProfile } = useAuth()
@@ -50,6 +51,7 @@ export default function UserProfile() {
   const [completedCoursesOpen, setCompletedCoursesOpen] = useState(false)
   const [wallpaper, setWallpaper] = useState<string | null>(null)
   const [avatarFrame, setAvatarFrame] = useState<string | null>(null)
+  const [nameColor, setNameColor] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
 
   const getFrameXPClasses = (frameId: string | null) => {
@@ -145,6 +147,7 @@ export default function UserProfile() {
           const userCosmetics = await getUserCosmetics(user.uid)
           setWallpaper(userCosmetics.wallpaper || null)
           setAvatarFrame(userCosmetics.avatarFrame || null)
+          setNameColor(userCosmetics.nameColor || null)
         } catch (error) {
           console.error("Error loading cosmetics:", error)
         }
@@ -245,6 +248,7 @@ export default function UserProfile() {
         
         setWallpaper(userCosmetics.wallpaper || null)
         setAvatarFrame(userCosmetics.avatarFrame || null)
+        setNameColor(userCosmetics.nameColor || null)
         
         // Force refresh of AvatarWithCosmetics and NameWithColor
         setRefreshKey(prev => prev + 1)
@@ -308,9 +312,11 @@ export default function UserProfile() {
 
   // Get wallpaper class (strip "wallpaper-" prefix if present)
   const wallpaperClass = wallpaper ? `cosmetic-wallpaper-${wallpaper.replace("wallpaper-", "")}` : ""
+  const profileThemeClass = wallpaper ? "profile-glass-theme" : ""
 
   return (
-    <div className={`flex flex-col min-h-screen bg-background lg:flex-row ${wallpaperClass}`}>
+    <div className={`flex flex-col min-h-screen bg-background lg:flex-row ${wallpaperClass} ${profileThemeClass}`}>
+      <WallpaperRenderer wallpaper={wallpaper} />
       <SidebarNav currentPath="/profile" title="My Profile" />
 
       {/* Main Content */}
@@ -368,7 +374,10 @@ export default function UserProfile() {
               </div>
 
               <div className="relative">
-                <h2 className="text-2xl font-bold text-foreground">
+                <h2 
+                  className="text-2xl font-bold text-foreground"
+                  data-has-name-color={nameColor ? "true" : "false"}
+                >
                   <NameWithColor
                     userId={user.uid}
                     name={displayName}
@@ -402,7 +411,7 @@ export default function UserProfile() {
             {/* Stats Row */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Card 
-                className="cursor-pointer hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
+                className="cursor-pointer card-on-wallpaper hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
                 onClick={() => {
                   setSelectedUserId(user?.uid || null)
                   setXpHistoryOpen(true)
@@ -423,7 +432,7 @@ export default function UserProfile() {
               </Card>
 
               <Card 
-                className="cursor-pointer hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
+                className="cursor-pointer card-on-wallpaper hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
                 onClick={() => setNexonHistoryOpen(true)}
               >
                 <CardHeader className="pb-3">
@@ -441,7 +450,7 @@ export default function UserProfile() {
               </Card>
 
               <Card 
-                className="cursor-pointer hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
+                className="cursor-pointer card-on-wallpaper hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
                 onClick={() => setCompletedCoursesOpen(true)}
               >
                 <CardHeader className="pb-3">
@@ -458,7 +467,7 @@ export default function UserProfile() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="card-on-wallpaper">
                 <CardHeader className="pb-3">
                   <CardDescription className="text-sm">Daily Streak</CardDescription>
                 </CardHeader>
@@ -475,7 +484,7 @@ export default function UserProfile() {
             </div>
 
             {/* Badges Section */}
-            <Card>
+            <Card className="card-on-wallpaper">
               <CardHeader>
                 <CardTitle>Earned Badges</CardTitle>
                 <CardDescription>Unlock badges by completing challenges and achievements</CardDescription>
@@ -517,7 +526,7 @@ export default function UserProfile() {
             </Card>
 
             {/* Activity Chart */}
-            <Card>
+            <Card className="card-on-wallpaper">
               <CardHeader>
                 <CardTitle>Activity This Week</CardTitle>
                 <CardDescription>Hours spent learning each day</CardDescription>
@@ -535,7 +544,7 @@ export default function UserProfile() {
                         </div>
                       </div>
                       <span className="text-xs font-medium text-muted-foreground">{data.day}</span>
-                      <span className="text-xs text-muted-foreground">{data.hours}h</span>
+                      <span className="text-xs text-muted-foreground">{data.hours > 0 ? `${data.hours.toFixed(1)}h` : "0h"}</span>
                     </div>
                   ))}
                 </div>

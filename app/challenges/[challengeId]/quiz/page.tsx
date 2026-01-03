@@ -179,17 +179,11 @@ export default function ChallengeQuizPage() {
       const timeTaken = Math.floor((Date.now() - quizStartTime) / 1000) // seconds
 
       // Complete challenge and determine winner
-      const { winnerId, challengedXP } = await completeChallenge(challengeId, attemptId, totalScore, timeTaken)
+      const { winnerId, challengedXPAwardResult } = await completeChallenge(challengeId, attemptId, totalScore, timeTaken)
 
       // Show XP award if user won
-      if (winnerId === user.uid && challengedXP > 0) {
-        // We'll call a dummy awardXP(0) to get the latest levels and XP totals for the UI
-        const { awardXP } = await import("@/lib/xp-utils")
-        const xpResult = await awardXP(user.uid, 0, "Challenge Win").then(res => ({
-          ...res,
-          amount: challengedXP
-        }))
-        showXPAward(xpResult)
+      if (winnerId === user.uid && challengedXPAwardResult) {
+        showXPAward(challengedXPAwardResult)
       }
 
       // Redirect to waiting page to see results
