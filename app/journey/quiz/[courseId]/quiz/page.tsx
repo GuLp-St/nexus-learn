@@ -36,7 +36,7 @@ export default function CourseQuizPage() {
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState<{ [questionId: string]: string | number | boolean }>({})
-  const [scores, setScores] = useState<{ [questionId: string]: { correct: boolean; feedback?: string } }>({})
+  const [scores, setScores] = useState<{ [questionId: string]: { correct: boolean; feedback?: string; marks?: number } }>({})
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -58,10 +58,13 @@ export default function CourseQuizPage() {
   useEffect(() => {
     if (course && user) {
       const totalScore = showResults && Object.keys(scores).length > 0
-        ? Object.values(scores).reduce((sum, s) => sum + (s.correct ? s.marks : 0), 0)
+        ? Object.values(scores).reduce((sum, s) => {
+            if (s.marks !== undefined) return sum + s.marks
+            return sum + (s.correct ? 1 : 0)
+          }, 0)
         : 0
       const maxScore = showResults && questions.length > 0
-        ? questions.reduce((sum, q) => sum + (q.marks || 1), 0)
+        ? questions.reduce((sum, q) => sum + (q.type === "subjective" ? 4 : 1), 0)
         : 0
       const scorePercentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0
 

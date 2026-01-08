@@ -23,7 +23,7 @@ interface UsePageContextOptions {
  */
 export function usePageContext({ title, description, data }: UsePageContextOptions) {
   const { setPageContext } = useChatContext()
-  const prevRef = useRef<{ title: string; description: string; dataString?: string }>()
+  const prevRef = useRef<{ title: string; description: string; dataString?: string } | undefined>(undefined)
 
   useEffect(() => {
     // Serialize data for comparison to avoid infinite loops from object recreation

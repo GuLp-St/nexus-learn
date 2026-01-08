@@ -127,15 +127,15 @@ export default function SocialPage() {
           friendsCount: friends.length,
           friendRequestsCount: friendRequests.length,
           friends: friends.map((friend) => ({
-            friendId: friend.id,
+            friendId: friend.userId,
             nickname: friend.nickname,
             avatarUrl: friend.avatarUrl,
             isOnline: friend.isOnline,
           })),
           friendRequests: friendRequests.map((request) => ({
-            requesterId: request.requesterId,
-            requesterNickname: request.requesterNickname,
-            requesterAvatarUrl: request.requesterAvatarUrl,
+            requesterId: request.userId,
+            requesterNickname: request.nickname,
+            requesterAvatarUrl: request.avatarUrl,
           })),
         },
       })

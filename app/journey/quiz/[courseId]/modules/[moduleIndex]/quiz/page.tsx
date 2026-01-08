@@ -61,10 +61,13 @@ export default function ModuleQuizPage() {
   useEffect(() => {
     if (course && user) {
       const totalScore = showResults && Object.keys(scores).length > 0
-        ? Object.values(scores).reduce((sum, s) => sum + (s.correct ? s.marks : 0), 0)
+        ? Object.values(scores).reduce((sum, s) => {
+            if (s.marks !== undefined) return sum + s.marks
+            return sum + (s.correct ? 1 : 0)
+          }, 0)
         : 0
       const maxScore = showResults && questions.length > 0
-        ? questions.reduce((sum, q) => sum + (q.marks || 1), 0)
+        ? questions.reduce((sum, q) => sum + (q.type === "subjective" ? 4 : 1), 0)
         : 0
       const scorePercentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0
 
@@ -311,19 +314,18 @@ export default function ModuleQuizPage() {
             setQuizStartTime(startTime)
             quizStartTimeRef.current = startTime
           }
+
+          const newAttemptId = await createQuizAttempt(
+            user.uid,
+            courseId,
+            "module",
+            selectedQuestions.map((q) => q.questionId),
+            moduleIndex,
+            null,
+            false // isRetake - always false for new attempts
+          )
+          setAttemptId(newAttemptId)
         }
-
-        const newAttemptId = await createQuizAttempt(
-          user.uid,
-          courseId,
-          "module",
-          selectedQuestions.map(q => q.questionId),
-          moduleIndex,
-          null,
-          false // isRetake - always false for new attempts
-        )
-        setAttemptId(newAttemptId)
-
       } catch (error) {
         console.error("Error loading quiz:", error)
         setError(error instanceof Error ? error.message : "Failed to load quiz.")

@@ -658,7 +658,7 @@ export default function LessonPage() {
   return (
     <div className="flex flex-col min-h-screen bg-background lg:flex-row">
       <SidebarNav 
-        title={lesson?.title}
+        title={lessonForRender?.title}
         leftAction={
           <Link href={`/courses/${courseId}`}>
             <Button variant="ghost" size="icon">
@@ -680,7 +680,7 @@ export default function LessonPage() {
               </Link>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
-                <span>{lesson?.duration}</span>
+                <span>{lessonForRender?.duration}</span>
               </div>
             </div>
           </div>
@@ -688,9 +688,9 @@ export default function LessonPage() {
 
         <div className="mx-auto max-w-4xl px-4 py-8 lg:px-8">
           <div className="mb-6">
-            <h1 className="text-2xl font-bold text-foreground mb-2">{lesson?.title}</h1>
+            <h1 className="text-2xl font-bold text-foreground mb-2">{lessonForRender?.title}</h1>
             <p className="text-sm text-muted-foreground">
-              Module {moduleIndex + 1}: {module?.title ? module.title.replace(/^Module\s+\d+:\s*/i, "").trim() : ""}
+              Module {moduleIndex + 1}: {moduleForRender?.title ? moduleForRender.title.replace(/^Module\s+\d+:\s*/i, "").trim() : ""}
             </p>
           </div>
 

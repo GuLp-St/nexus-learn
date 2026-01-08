@@ -123,7 +123,7 @@ interface ModuleLevelCardProps {
   isActive: boolean
   previousModulePassed: boolean
   currentLessonIndex?: number
-  incompleteAttempt: QuizAttempt | null
+  incompleteAttempt: (QuizAttempt & { courseTitle?: string }) | null
   onRefresh?: () => void
 }
 
@@ -263,7 +263,7 @@ function ModuleLevelCard({
     if (!user || claiming) return
     try {
       setClaiming(tier)
-      const xpMultiplier = course.difficulty === "advanced" ? 1.5 : course.difficulty === "intermediate" ? 1.25 : 1.0
+      const xpMultiplier = course.difficulty === "expert" ? 1.5 : course.difficulty === "intermediate" ? 1.25 : 1.0
       const result = await claimReward(user.uid, course.id, "moduleQuiz", moduleIndex.toString(), tier, xpMultiplier)
       if (result.xpAwarded) {
         showXPAward(result.xpAwarded)
@@ -683,7 +683,7 @@ function ModuleLevelCard({
                     const tierThreshold = tier === ">50%" ? 50 : tier === ">70%" ? 70 : tier === ">90%" ? 90 : 100
                     const xpAmount = tier === ">50%" ? 10 : tier === ">70%" ? 20 : tier === ">90%" ? 30 : 50
                     const nexonAmount = tier === "100%" ? 25 : 0
-                    const xpMultiplier = course.difficulty === "advanced" ? 1.5 : course.difficulty === "intermediate" ? 1.25 : 1.0
+                    const xpMultiplier = course.difficulty === "expert" ? 1.5 : course.difficulty === "intermediate" ? 1.25 : 1.0
                     const finalXP = Math.round(xpAmount * xpMultiplier)
                     const finalNexon = Math.round(nexonAmount * xpMultiplier)
                     const currentScore = bestScore || 0
@@ -994,7 +994,7 @@ interface FinalExamCardProps {
   quizAttempts: QuizAttempt[]
   isLocked: boolean
   allModulesPassed: boolean
-  incompleteAttempt: QuizAttempt | null
+  incompleteAttempt: (QuizAttempt & { courseTitle?: string }) | null
   onRefresh?: () => void
 }
 
@@ -1103,7 +1103,7 @@ function FinalExamCard({ course, quizAttempts, isLocked, allModulesPassed, incom
     if (!user || claiming) return
     try {
       setClaiming(tier)
-      const xpMultiplier = course.difficulty === "advanced" ? 1.5 : course.difficulty === "intermediate" ? 1.25 : 1.0
+      const xpMultiplier = course.difficulty === "expert" ? 1.5 : course.difficulty === "intermediate" ? 1.25 : 1.0
       const result = await claimReward(user.uid, course.id, "finalQuiz", "final", tier, xpMultiplier)
       if (result.xpAwarded) {
         showXPAward(result.xpAwarded)
@@ -1228,7 +1228,7 @@ function FinalExamCard({ course, quizAttempts, isLocked, allModulesPassed, incom
                     const tierThreshold = tier === ">50%" ? 50 : tier === ">70%" ? 70 : tier === ">90%" ? 90 : 100
                     const xpAmount = tier === ">50%" ? 20 : tier === ">70%" ? 40 : tier === ">90%" ? 60 : 100
                     const nexonAmount = tier === "100%" ? 50 : 0
-                    const xpMultiplier = course.difficulty === "advanced" ? 1.5 : course.difficulty === "intermediate" ? 1.25 : 1.0
+                    const xpMultiplier = course.difficulty === "expert" ? 1.5 : course.difficulty === "intermediate" ? 1.25 : 1.0
                     const finalXP = Math.round(xpAmount * xpMultiplier)
                     const finalNexon = Math.round(nexonAmount * xpMultiplier)
                     const currentScore = bestScore || 0

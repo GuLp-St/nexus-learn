@@ -24,7 +24,7 @@ export default function ChallengeQuizPage() {
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState<{ [questionId: string]: string | number | boolean }>({})
-  const [scores, setScores] = useState<{ [questionId: string]: { correct: boolean; feedback?: string } }>({})
+  const [scores, setScores] = useState<{ [questionId: string]: { correct: boolean; feedback?: string; marks?: number } }>({})
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showResults, setShowResults] = useState(false)
@@ -517,7 +517,7 @@ export default function ChallengeQuizPage() {
                     Previous
                   </Button>
                   {currentQuestionIndex === totalQuestions - 1 ? (
-                    <Button onClick={handleSubmit} disabled={submitting}>
+                    <Button onClick={() => handleSubmit(false)} disabled={submitting}>
                       {submitting ? "Submitting..." : "Submit Challenge"}
                     </Button>
                   ) : (
