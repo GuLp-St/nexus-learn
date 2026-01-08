@@ -6,15 +6,18 @@ import { Search } from "lucide-react"
 import Link from "next/link"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
-import { useChatbotContext } from "@/components/chatbot-context-provider"
+import { useChatContext } from "@/context/ChatContext"
 import { DailyQuestCard } from "@/components/daily-quest-card"
 import { AISuggestedCourseCard } from "@/components/ai-suggested-course-card"
 import { CommunityPulseCard } from "@/components/community-pulse-card"
+import { subscribeToCommunityActivities } from "@/lib/community-pulse-utils"
 
 export default function LearningDashboard() {
   const { user, loading } = useAuth()
-  const { setPageContext } = useChatbotContext()
+  const { setPageContext } = useChatContext()
   const router = useRouter()
+  const [dailyQuests, setDailyQuests] = useState<any>(null)
+  const [communityActivities, setCommunityActivities] = useState<any[]>([])
 
   useEffect(() => {
     if (!loading && !user) {
@@ -22,18 +25,67 @@ export default function LearningDashboard() {
     }
   }, [user, loading, router])
 
-  // Set chatbot context for dashboard page
+  // Load daily quests
   useEffect(() => {
-    setPageContext({
-      type: "generic",
-      pageName: "Dashboard",
-      description: "The user's learning dashboard with daily quests, AI-suggested courses, and community pulse. The user can track their progress, discover new courses, and see community activity.",
+    if (user) {
+      const loadQuests = async () => {
+        try {
+          const { getUserDailyQuests } = await import("@/lib/daily-quest-utils")
+          const quests = await getUserDailyQuests(user.uid)
+          setDailyQuests(quests)
+        } catch (error) {
+          console.error("Error loading daily quests:", error)
+        }
+      }
+      loadQuests()
+    }
+  }, [user])
+
+  // Load community activities
+  useEffect(() => {
+    if (!user) return
+
+    const unsubscribe = subscribeToCommunityActivities(5, (activities) => {
+      setCommunityActivities(activities)
     })
 
     return () => {
-      setPageContext(null)
+      unsubscribe()
     }
-  }, [setPageContext])
+  }, [user])
+
+  // Set chatbot context for dashboard page with real-time data
+  useEffect(() => {
+    if (!loading && user) {
+      setPageContext({
+        title: "Dashboard",
+        description: "The user's learning dashboard with daily quests, AI-suggested courses, and community pulse. The user can track their progress, discover new courses, and see community activity.",
+        data: {
+          userId: user.uid,
+          pageType: "dashboard",
+          dailyQuests: dailyQuests?.quests?.map((quest: any) => ({
+            id: quest.id,
+            type: quest.type,
+            title: quest.title,
+            description: quest.description,
+            target: quest.target,
+            progress: quest.progress,
+            completed: quest.completed,
+            claimed: quest.claimed,
+            xpReward: quest.xpReward,
+            nexonReward: quest.nexonReward,
+          })) || [],
+          communityActivities: communityActivities.map(activity => ({
+            type: activity.activityType,
+            userNickname: activity.userNickname,
+            userAvatarUrl: activity.userAvatarUrl,
+            metadata: activity.metadata,
+            relativeTime: activity.relativeTime,
+          })),
+        },
+      })
+    }
+  }, [loading, user, dailyQuests, communityActivities, setPageContext])
 
   // Show loading state while checking auth
   if (loading) {

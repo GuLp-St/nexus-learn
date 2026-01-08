@@ -43,8 +43,8 @@ export async function submitCourseRating(
   await updateCourseRating(courseId)
 
   // Emit quest event for course rating
-  const { trackQuestProgress } = await import("./event-bus")
-  trackQuestProgress({
+  const { emitQuestEvent } = await import("./event-bus")
+  emitQuestEvent({
     type: "quest.course_rated",
     userId,
     metadata: { courseId, rating },

@@ -1,20 +1,21 @@
 "use client"
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Award, Flame, Star, Target, Clock, BookOpen, ArrowLeft, UserPlus } from "lucide-react"
+import { Award, Star, Target, BookOpen, ArrowLeft, UserPlus, Send } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
-import { useChatbotContext } from "@/components/chatbot-context-provider"
+import { useChatContext } from "@/context/ChatContext"
 import { getUserXP } from "@/lib/leaderboard-utils"
-import { getUserCourses } from "@/lib/course-utils"
+import { getUserCourses, getUserPublishedCoursesCount } from "@/lib/course-utils"
 import { getLevelProgress } from "@/lib/level-utils"
 import { getUserBadges, getBadgeDisplayInfo } from "@/lib/badge-utils"
 import { getUserActivityThisWeek } from "@/lib/activity-tracker"
 import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
 import { NameWithColor } from "@/components/name-with-color"
 import { getUserCosmetics } from "@/lib/cosmetics-utils"
+import { PublishedCoursesModal } from "@/components/published-courses-modal"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import Link from "next/link"
@@ -33,7 +34,7 @@ export default function UserProfileView() {
     avatarUrl?: string | null
   } | null>(null)
   const [xp, setXP] = useState<number>(0)
-  const [dailyStreak, setDailyStreak] = useState<number>(0)
+  const [publishedCourses, setPublishedCourses] = useState<number>(0)
   const [coursesCompleted, setCoursesCompleted] = useState<number>(0)
   const [loadingStats, setLoadingStats] = useState(true)
   const [levelProgress, setLevelProgress] = useState<{
@@ -57,7 +58,8 @@ export default function UserProfileView() {
   const [wallpaper, setWallpaper] = useState<string | null>(null)
   const [avatarFrame, setAvatarFrame] = useState<string | null>(null)
   const [nameColor, setNameColor] = useState<string | null>(null)
-  const { setPageContext } = useChatbotContext()
+  const [publishedCoursesOpen, setPublishedCoursesOpen] = useState(false)
+  const { setPageContext } = useChatContext()
 
   const getFrameXPClasses = (frameId: string | null) => {
     if (!frameId) return "text-primary"
@@ -142,11 +144,14 @@ export default function UserProfileView() {
           avatarUrl: userData.avatarUrl || null,
         })
 
-        // Fetch XP
-        const xpData = await getUserXP(userId)
+        // Fetch XP and Published Courses
+        const [xpData, publishedCount] = await Promise.all([
+          getUserXP(userId),
+          getUserPublishedCoursesCount(userId)
+        ])
+        
         if (xpData) {
           setXP(xpData.xp)
-          setDailyStreak(xpData.dailyLoginStreak || 0)
 
           // Calculate level progress
           const progress = getLevelProgress(xpData.xp)
@@ -157,6 +162,8 @@ export default function UserProfileView() {
             xpNeededForNext: progress.xpNeededForNext,
           })
         }
+
+        setPublishedCourses(publishedCount)
 
         // Fetch courses and count completed
         const courses = await getUserCourses(userId)
@@ -220,12 +227,7 @@ export default function UserProfileView() {
           setIsFriend(friendsStatus)
         }
 
-        // Set chatbot context
-        setPageContext({
-          type: "generic",
-          pageName: `Profile: ${userData.nickname || "User"}`,
-          description: `Viewing profile page for ${userData.nickname || "the user"}. Shows learning statistics, badges, and achievements.`,
-        })
+        // Context will be set in useEffect below
       } catch (error) {
         console.error("Error fetching profile:", error)
         setNotFound(true)
@@ -236,7 +238,31 @@ export default function UserProfileView() {
     }
 
     fetchProfile()
-  }, [userId, setPageContext])
+  }, [userId])
+
+  // Set chatbot context with real-time profile data
+  useEffect(() => {
+    if (!loadingStats && !loadingActivity && profileUser) {
+      setPageContext({
+        title: `Profile: ${profileUser.nickname || "User"}`,
+        description: `Viewing profile page for ${profileUser.nickname || "the user"}. Shows learning statistics, badges, and achievements.`,
+        data: {
+          userId,
+          nickname: profileUser.nickname,
+          avatarUrl: profileUser.avatarUrl,
+          xp,
+          publishedCourses,
+          levelProgress,
+          coursesCompleted,
+          badges,
+          activityData,
+          wallpaper,
+          avatarFrame,
+          nameColor,
+        },
+      })
+    }
+  }, [loadingStats, loadingActivity, profileUser, userId, xp, publishedCourses, levelProgress, coursesCompleted, badges, activityData, wallpaper, avatarFrame, nameColor, setPageContext])
 
   // Redirect to own profile if viewing own profile
   useEffect(() => {
@@ -432,18 +458,22 @@ export default function UserProfileView() {
                 </CardContent>
               </Card>
 
-              <Card className="card-on-wallpaper">
+              <Card 
+                className="cursor-pointer card-on-wallpaper hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
+                onClick={() => setPublishedCoursesOpen(true)}
+              >
                 <CardHeader className="pb-3">
-                  <CardDescription className="text-sm">Daily Streak</CardDescription>
+                  <CardDescription className="text-sm">Published Courses</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-bold text-foreground">
-                      {loadingStats ? "..." : dailyStreak}
+                      {loadingStats ? "..." : publishedCourses}
                     </span>
-                    <span className="text-sm text-muted-foreground">Days</span>
-                    <Flame className="h-5 w-5 fill-orange-500 text-orange-500" />
+                    <span className="text-sm text-muted-foreground">Courses</span>
+                    <Send className="h-5 w-5 text-indigo-500 group-hover:scale-110 transition-transform" />
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1">Click to view history</p>
                 </CardContent>
               </Card>
             </div>
@@ -528,6 +558,12 @@ export default function UserProfileView() {
           </div>
         </div>
       </main>
+
+      <PublishedCoursesModal
+        open={publishedCoursesOpen}
+        onOpenChange={setPublishedCoursesOpen}
+        userId={userId}
+      />
     </div>
   )
 }

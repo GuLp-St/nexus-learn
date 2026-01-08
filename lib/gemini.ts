@@ -1,5 +1,11 @@
-import { GoogleGenerativeAI } from "@google/generative-ai"
-import { PageContext, formatContextForAI } from "./chatbot-context"
+import { GoogleGenerativeAI, Tool, SchemaType } from "@google/generative-ai"
+
+interface PageContext {
+  title: string
+  description: string
+  data?: any
+  type?: string
+}
 
 const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
 
@@ -16,9 +22,15 @@ export interface CourseModule {
   duration: string
   lessons: {
     title: string
-    content: string
+    content?: string
     duration: string
   }[]
+  accumulatedContext?: Array<{
+    id: string
+    text: string
+    sourceLessonId: string
+    sourceLessonTitle: string
+  }>
 }
 
 export interface CourseData {
@@ -26,8 +38,27 @@ export interface CourseData {
   description: string
   modules: CourseModule[]
   estimatedDuration: string
-  difficulty: string
+  difficulty: "beginner" | "intermediate" | "expert"
+  xpMultiplier: number
   tags?: string[]
+}
+
+export interface DifficultyOption {
+  level: "beginner" | "intermediate" | "expert"
+  title: string
+  modules: number
+  lessonsPerModule: number[]
+  xpMultiplier: number
+}
+
+export interface TopicDifficultyAnalysis {
+  hasVariableDifficulty: boolean
+  options?: DifficultyOption[]
+  title?: string
+  difficulty?: "beginner" | "intermediate" | "expert"
+  modules?: number
+  lessonsPerModule?: number[]
+  xpMultiplier?: number
 }
 
 export interface LessonSlide {
@@ -40,7 +71,256 @@ export interface LessonContent {
   slides: LessonSlide[]
 }
 
-export async function generateCourseContent(topic: string): Promise<CourseData> {
+export interface TextBlock {
+  type: "text"
+  content: string
+}
+
+export interface SwipeInteraction {
+  type: "swipe"
+  question: string
+  options: Array<{ label: string; isCorrect: boolean }>
+  explanation: string
+}
+
+export interface ReorderInteraction {
+  type: "reorder"
+  question: string
+  items: Array<{ id: string; text: string }>
+  correctOrder: string[]
+}
+
+export interface FillBlankInteraction {
+  type: "fill_blank"
+  content: string
+  options: string[]
+  correctAnswer: string
+}
+
+export interface BugHunterInteraction {
+  type: "bug_hunter"
+  question: string
+  lines: Array<{ id: number; text: string }>
+  correctLineId: number
+  explanation: string
+}
+
+export interface MatchingInteraction {
+  type: "matching"
+  pairs: Array<{ left: string; right: string }>
+}
+
+export interface ChatSimInteraction {
+  type: "chat_sim"
+  scenario: string
+  messages: Array<{
+    sender: "bot" | "user_options"
+    text?: string
+    options?: Array<{ text: string; isCorrect: boolean; feedback: string }>
+  }>
+}
+
+export type InteractionBlock = SwipeInteraction | ReorderInteraction | FillBlankInteraction | BugHunterInteraction | MatchingInteraction | ChatSimInteraction
+
+export type LessonStreamBlock = TextBlock | InteractionBlock
+
+export interface LessonStream {
+  blocks: LessonStreamBlock[]
+  facts: Array<{ id: string; text: string }>
+}
+
+/**
+ * Analyze if a topic has variable difficulty and suggest course options
+ */
+export async function analyzeTopicDifficulty(topic: string): Promise<TopicDifficultyAnalysis> {
+  if (!genAI) {
+    throw new Error("Gemini API key is not configured")
+  }
+
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+
+  const prompt = `Analyze the topic "${topic}" and determine if it can be split into different difficulty levels (beginner, intermediate, expert).
+
+If the topic is complex enough to have variable difficulty, return:
+{
+  "hasVariableDifficulty": true,
+  "options": [
+    {
+      "level": "beginner",
+      "title": "Course title for beginner level",
+      "modules": 3,
+      "lessonsPerModule": [2, 3, 2],
+      "xpMultiplier": 1.0
+    },
+    {
+      "level": "intermediate",
+      "title": "Course title for intermediate level",
+      "modules": 4,
+      "lessonsPerModule": [3, 4, 3, 4],
+      "xpMultiplier": 1.5
+    },
+    {
+      "level": "expert",
+      "title": "Course title for expert level",
+      "modules": 5,
+      "lessonsPerModule": [4, 6, 5, 6, 5],
+      "xpMultiplier": 2.0
+    }
+  ]
+}
+
+If the topic is simple or doesn't have variable difficulty (e.g., "how to walk", trivial topics), return:
+{
+  "hasVariableDifficulty": false,
+  "title": "Single course title",
+  "difficulty": "beginner",
+  "modules": 3,
+  "lessonsPerModule": [2, 3, 2],
+  "xpMultiplier": 1.0
+}
+
+Requirements:
+- Beginner: 3 modules, 2-3 lessons per module, 1.0x multiplier
+- Intermediate: 4 modules, 3-4 lessons per module, 1.5x multiplier
+- Expert: 5 modules, 4-6 lessons per module, 2.0x multiplier
+- If no variable difficulty, determine appropriate difficulty level and structure
+- Return ONLY valid JSON without markdown formatting`
+
+  try {
+    const result = await model.generateContent(prompt)
+    const response = await result.response
+    const text = response.text()
+
+    // Clean the response
+    let jsonText = text.trim()
+    
+    // Extract JSON between { and } or [ and ] for robustness
+    const firstBrace = jsonText.indexOf('{')
+    const lastBrace = jsonText.lastIndexOf('}')
+    const firstBracket = jsonText.indexOf('[')
+    const lastBracket = jsonText.lastIndexOf(']')
+
+    if (firstBrace !== -1 && lastBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+      jsonText = jsonText.substring(firstBrace, lastBrace + 1)
+    } else if (firstBracket !== -1 && lastBracket !== -1) {
+      jsonText = jsonText.substring(firstBracket, lastBracket + 1)
+    } else if (jsonText.startsWith("```json")) {
+      jsonText = jsonText.replace(/^```json\n?/, "").replace(/\n?```$/, "")
+    } else if (jsonText.startsWith("```")) {
+      jsonText = jsonText.replace(/^```\n?/, "").replace(/\n?```$/, "")
+    }
+
+    const analysis = JSON.parse(jsonText) as TopicDifficultyAnalysis
+    return analysis
+  } catch (error) {
+    console.error("Error analyzing topic difficulty:", error)
+    throw new Error("Failed to analyze topic difficulty. Please try again.")
+  }
+}
+
+/**
+ * Generate course skeleton (module and lesson titles only, no content)
+ */
+export async function generateCourseSkeleton(
+  topic: string,
+  difficulty: "beginner" | "intermediate" | "expert",
+  moduleCount: number,
+  lessonCounts: number[]
+): Promise<CourseData> {
+  if (!genAI) {
+    throw new Error("Gemini API key is not configured")
+  }
+
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+
+  const xpMultiplier = difficulty === "beginner" ? 1.0 : difficulty === "intermediate" ? 1.5 : 2.0
+
+  const prompt = `Generate a course skeleton for "${topic}" at ${difficulty} level.
+
+Course Structure:
+- ${moduleCount} modules
+- Lesson counts per module: ${lessonCounts.join(", ")}
+
+Return ONLY valid JSON without markdown formatting, following this exact structure:
+
+{
+  "title": "Course Title",
+  "description": "Brief course description",
+  "estimatedDuration": "X hours",
+  "difficulty": "${difficulty}",
+  "xpMultiplier": ${xpMultiplier},
+  "tags": ["tag1", "tag2", "tag3", "tag4"],
+  "modules": [
+    {
+      "title": "Module Title",
+      "description": "Module description",
+      "content": "Module overview content",
+      "duration": "X hours",
+      "lessons": [
+        {
+          "title": "Lesson Title",
+          "duration": "X minutes"
+        }
+      ]
+    }
+  ]
+}
+
+Requirements:
+- Generate ONLY module titles and lesson titles (NO lesson content)
+- Generate 3-5 relevant tags
+- Tags should be lowercase, single words or short phrases
+- Make sure titles are educational and well-structured
+- Return only the JSON object.`
+
+  try {
+    const result = await model.generateContent(prompt)
+    const response = await result.response
+    const text = response.text()
+
+    // Clean the response
+    let jsonText = text.trim()
+    
+    // Extract JSON between { and } or [ and ] for robustness
+    const firstBrace = jsonText.indexOf('{')
+    const lastBrace = jsonText.lastIndexOf('}')
+    const firstBracket = jsonText.indexOf('[')
+    const lastBracket = jsonText.lastIndexOf(']')
+
+    if (firstBrace !== -1 && lastBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+      jsonText = jsonText.substring(firstBrace, lastBrace + 1)
+    } else if (firstBracket !== -1 && lastBracket !== -1) {
+      jsonText = jsonText.substring(firstBracket, lastBracket + 1)
+    } else if (jsonText.startsWith("```json")) {
+      jsonText = jsonText.replace(/^```json\n?/, "").replace(/\n?```$/, "")
+    } else if (jsonText.startsWith("```")) {
+      jsonText = jsonText.replace(/^```\n?/, "").replace(/\n?```$/, "")
+    }
+
+    const courseData = JSON.parse(jsonText) as CourseData
+    // Ensure xpMultiplier is set correctly
+    courseData.xpMultiplier = xpMultiplier
+    courseData.difficulty = difficulty
+    // Ensure lessons don't have content (skeleton only)
+    courseData.modules.forEach(module => {
+      module.lessons.forEach(lesson => {
+        delete (lesson as any).content
+      })
+    })
+    return courseData
+  } catch (error) {
+    console.error("Error generating course skeleton:", error)
+    throw new Error("Failed to generate course skeleton. Please try again.")
+  }
+}
+
+export async function generateCourseContent(topic: string, difficulty?: "beginner" | "intermediate" | "expert", moduleCount?: number, lessonCounts?: number[]): Promise<CourseData> {
+  // If difficulty and structure provided, use skeleton generation
+  if (difficulty && moduleCount && lessonCounts) {
+    return generateCourseSkeleton(topic, difficulty, moduleCount, lessonCounts)
+  }
+
+  // Legacy fallback for backward compatibility
   if (!genAI) {
     throw new Error("Gemini API key is not configured")
   }
@@ -53,7 +333,8 @@ export async function generateCourseContent(topic: string): Promise<CourseData> 
   "title": "Course Title",
   "description": "Brief course description",
   "estimatedDuration": "X hours",
-  "difficulty": "Beginner/Intermediate/Advanced",
+  "difficulty": "beginner",
+  "xpMultiplier": 1.0,
   "tags": ["tag1", "tag2", "tag3", "tag4"],
   "modules": [
     {
@@ -93,10 +374,159 @@ Requirements:
     }
 
     const courseData = JSON.parse(jsonText) as CourseData
+    // Ensure required fields are set
+    if (!courseData.xpMultiplier) {
+      courseData.xpMultiplier = 1.0
+    }
+    if (!courseData.difficulty || !["beginner", "intermediate", "expert"].includes(courseData.difficulty)) {
+      courseData.difficulty = "beginner"
+    }
     return courseData
   } catch (error) {
     console.error("Error generating course content:", error)
     throw new Error("Failed to generate course content. Please try again.")
+  }
+}
+
+/**
+ * Generate lesson stream with interactive blocks and facts
+ */
+export async function generateLessonStream(
+  lessonTitle: string,
+  courseTitle: string,
+  moduleTitle: string
+): Promise<LessonStream> {
+  if (!genAI) {
+    throw new Error("Gemini API key is not configured")
+  }
+
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+
+  const prompt = `Generate a lesson stream for "${lessonTitle}" as part of the course "${courseTitle}", module "${moduleTitle}".
+
+Return ONLY valid JSON without markdown formatting, following this exact structure:
+
+{
+  "blocks": [
+    {
+      "type": "text",
+      "content": "Explanatory text content (markdown supported)"
+    },
+    {
+      "type": "swipe",
+      "question": "True or False question",
+      "options": [
+        { "label": "True", "isCorrect": true },
+        { "label": "False", "isCorrect": false }
+      ],
+      "explanation": "Explanation of the correct answer"
+    },
+    {
+      "type": "reorder",
+      "question": "Arrange the steps in correct order:",
+      "items": [
+        { "id": "1", "text": "Step 1" },
+        { "id": "2", "text": "Step 2" }
+      ],
+      "correctOrder": ["1", "2"]
+    },
+    {
+      "type": "fill_blank",
+      "content": "To define a variable that CANNOT be reassigned, use [BLANK].",
+      "options": ["var", "let", "const"],
+      "correctAnswer": "const"
+    },
+    {
+      "type": "bug_hunter",
+      "question": "Which line causes an error?",
+      "lines": [
+        { "id": 1, "text": "line 1 code" },
+        { "id": 2, "text": "line 2 code" }
+      ],
+      "correctLineId": 2,
+      "explanation": "Explanation of the bug"
+    },
+    {
+      "type": "matching",
+      "pairs": [
+        { "left": "Term A", "right": "Definition A" },
+        { "left": "Term B", "right": "Definition B" }
+      ]
+    },
+    {
+      "type": "chat_sim",
+      "scenario": "Scenario description",
+      "messages": [
+        { "sender": "bot", "text": "Bot message" },
+        {
+          "sender": "user_options",
+          "options": [
+            { "text": "Option 1", "isCorrect": true, "feedback": "Good!" },
+            { "text": "Option 2", "isCorrect": false, "feedback": "Try again" }
+          ]
+        }
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "fact_1", "text": "Indisputable fact 1" },
+    { "id": "fact_2", "text": "Indisputable fact 2" }
+  ]
+}
+
+Requirements:
+- Start with a substantial TextBlock that introduces the core concepts and provides the necessary context/answers for the first interaction block. Do NOT just provide a generic introduction; provide actual educational content.
+- Follow with an InteractionBlock that tests the specific concept explained in the immediately preceding text block.
+- Every TextBlock MUST provide the specific information needed to solve the interaction that follows it.
+- Repeat this pattern 3-4 times (text → interaction → text → interaction...)
+- IMPORTANT: Randomize the order of interaction types - do NOT follow the example order. Mix them up so different interaction types appear at different positions in each lesson.
+- Generate exactly 7 indisputable facts in the "facts" array
+- Use all 6 interaction types appropriately: swipe, reorder, fill_blank, bug_hunter, matching, chat_sim
+- Each interaction MUST test the concept from the immediately preceding text block
+- Make content educational, engaging, and suitable for learning
+- Return only the JSON object.`
+
+  try {
+    // Add timeout handling (60 seconds)
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Generation timeout - checking Firestore...")), 60000)
+    })
+
+    const generationPromise = (async () => {
+      const result = await model.generateContent(prompt)
+      const response = await result.response
+      const text = response.text()
+
+      // Clean the response
+      let jsonText = text.trim()
+      
+      // Extract JSON between { and } or [ and ] for robustness
+      const firstBrace = jsonText.indexOf('{')
+      const lastBrace = jsonText.lastIndexOf('}')
+      const firstBracket = jsonText.indexOf('[')
+      const lastBracket = jsonText.lastIndexOf(']')
+
+      if (firstBrace !== -1 && lastBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+        jsonText = jsonText.substring(firstBrace, lastBrace + 1)
+      } else if (firstBracket !== -1 && lastBracket !== -1) {
+        jsonText = jsonText.substring(firstBracket, lastBracket + 1)
+      } else if (jsonText.startsWith("```json")) {
+        jsonText = jsonText.replace(/^```json\n?/, "").replace(/\n?```$/, "")
+      } else if (jsonText.startsWith("```")) {
+        jsonText = jsonText.replace(/^```\n?/, "").replace(/\n?```$/, "")
+      }
+
+      const lessonStream = JSON.parse(jsonText) as LessonStream
+      return lessonStream
+    })()
+
+    // Race between generation and timeout
+    return await Promise.race([generationPromise, timeoutPromise])
+  } catch (error: any) {
+    // If timeout occurred, the error message will indicate it
+    // The UI layer will handle Firestore double-check
+    console.error("Error generating lesson stream:", error)
+    throw error
   }
 }
 
@@ -146,7 +576,18 @@ Return only the JSON object.`
 
     // Clean the response - remove markdown code blocks if present
     let jsonText = text.trim()
-    if (jsonText.startsWith("```json")) {
+    
+    // Extract JSON between { and } or [ and ] for robustness
+    const firstBrace = jsonText.indexOf('{')
+    const lastBrace = jsonText.lastIndexOf('}')
+    const firstBracket = jsonText.indexOf('[')
+    const lastBracket = jsonText.lastIndexOf(']')
+
+    if (firstBrace !== -1 && lastBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+      jsonText = jsonText.substring(firstBrace, lastBrace + 1)
+    } else if (firstBracket !== -1 && lastBracket !== -1) {
+      jsonText = jsonText.substring(firstBracket, lastBracket + 1)
+    } else if (jsonText.startsWith("```json")) {
       jsonText = jsonText.replace(/^```json\n?/, "").replace(/\n?```$/, "")
     } else if (jsonText.startsWith("```")) {
       jsonText = jsonText.replace(/^```\n?/, "").replace(/\n?```$/, "")
@@ -184,21 +625,112 @@ export interface ChatMessage {
 export async function generateChatResponse(
   userMessage: string,
   pageContext: PageContext | null,
-  conversationHistory?: ChatMessage[]
+  conversationHistory: ChatMessage[] = [],
+  currentUserId?: string
 ): Promise<string> {
   if (!genAI) {
     throw new Error("Gemini API key is not configured")
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  // Use gemini-1.5-flash for faster responses and tool support
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.5-flash-lite",
+    tools: [
+      {
+        functionDeclarations: [
+          {
+            name: "getUserQuizHistory",
+            description: "Get user's past quiz attempts and results",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                userId: { type: SchemaType.STRING, description: "The ID of the user" },
+              },
+              required: ["userId"],
+            },
+          },
+          {
+            name: "getUserJourneyProgress",
+            description: "Get all courses in the user's journey with their progress",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                userId: { type: SchemaType.STRING, description: "The ID of the user" },
+              },
+              required: ["userId"],
+            },
+          },
+          {
+            name: "getDailyQuests",
+            description: "Get the current daily quests for the user",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                userId: { type: SchemaType.STRING, description: "The ID of the user" },
+              },
+              required: ["userId"],
+            },
+          },
+          {
+            name: "getUserXPHistory",
+            description: "Get the XP earning history for the user",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                userId: { type: SchemaType.STRING, description: "The ID of the user" },
+              },
+              required: ["userId"],
+            },
+          },
+          {
+            name: "getUserNexonHistory",
+            description: "Get the Nexon transaction history for the user",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                userId: { type: SchemaType.STRING, description: "The ID of the user" },
+              },
+              required: ["userId"],
+            },
+          },
+          {
+            name: "searchCommunityCourses",
+            description: "Search for public courses in the community library",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                query: { type: SchemaType.STRING, description: "Search query or keywords" },
+              },
+              required: ["query"],
+            },
+          },
+          {
+            name: "getQuizCorrectAnswer",
+            description: "Get the correct answer for a quiz question to provide a hint (only during quiz)",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                questionId: { type: SchemaType.STRING, description: "The ID of the question" },
+              },
+              required: ["questionId"],
+            },
+          },
+        ],
+      },
+    ],
+  })
 
-  // Format the context information
-  const contextText = formatContextForAI(pageContext)
+  // Build system context string
+  const systemContextString = pageContext
+    ? `[SYSTEM CONTEXT]
+Current Page: ${pageContext.title}
+Page Description: ${pageContext.description}${pageContext.data ? `\nPage Data: ${JSON.stringify(pageContext.data, null, 2)}` : ""}${currentUserId ? `\nCurrent User ID: ${currentUserId}` : ""}`
+    : `[SYSTEM CONTEXT]
+Current Page: Unknown (Context not set)
+Page Description: The page context has not been set. Ask the user where they are or what they're looking at to provide better assistance.${currentUserId ? `\nCurrent User ID: ${currentUserId}` : ""}`
 
   // Build system prompt
-  const systemPrompt = `You are Nexus AI Tutor, a helpful and friendly AI assistant for a learning platform. You help students understand course content, answer questions, explain concepts, and provide educational support.
-
-${contextText}
+  const systemPrompt = `You are Nexus, a helpful and friendly AI assistant for NexusLearn. You help students understand course content, answer questions, explain concepts, and provide educational support.
 
 Instructions:
 - Be clear, concise, and educational
@@ -208,31 +740,95 @@ Instructions:
 - If the student asks about quiz questions they got wrong, explain why the correct answer is correct and help them understand the concept
 - If the student asks to summarize content, provide a clear and structured summary
 - Stay focused on the current context when relevant
-- If the context doesn't provide enough information to answer, let the student know and provide general help
+- If the context doesn't provide enough information to answer, use the provided tools to fetch user data if applicable
+- IMPORTANT: When a user asks for help/hint during a quiz, use getQuizCorrectAnswer to find the answer but DO NOT give it directly. Provide a HINT that guides them.
+- You can access the user's data (quiz history, journey progress, quests, etc.) using your tools.
+- Never show raw JSON data to the user. Format it nicely.
 
 Respond naturally and conversationally.`
 
-  // Build the full prompt with conversation history
-  let fullPrompt = systemPrompt
+  // Start chat with history
+  const chat = model.startChat({
+    history: conversationHistory.map(msg => ({
+      role: msg.role === "user" ? "user" : "model",
+      parts: [{ text: msg.content }],
+    })),
+  })
 
-  // Add conversation history if provided (for context in the conversation)
-  if (conversationHistory && conversationHistory.length > 0) {
-    const historyText = conversationHistory
-      .slice(-10) // Keep last 10 messages for context (to avoid token limits)
-      .map((msg) => `${msg.role === "user" ? "Student" : "AI"}: ${msg.content}`)
-      .join("\n\n")
-    fullPrompt += `\n\nPrevious conversation:\n${historyText}\n\n`
-  }
-
-  // Add the current user message
-  fullPrompt += `\nStudent: ${userMessage}\n\nAI:`
+  // Build the first message with context and user message
+  const initialPrompt = `${systemPrompt}\n\n${systemContextString}\n\n[USER QUESTION]\n${userMessage}`
 
   try {
-    const result = await model.generateContent(fullPrompt)
-    const response = await result.response
-    const text = response.text()
+    let result = await chat.sendMessage(initialPrompt)
+    let response = result.response
+    
+    // Handle function calls if any
+    const calls = response.functionCalls()
+    if (calls && calls.length > 0) {
+      const toolResults: any[] = []
+      
+      for (const call of calls) {
+        const { name, args } = call
+        console.log(`[Chatbot] Tool call: ${name}`, args)
+        
+        let toolData: any = null
+        try {
+const { 
+            getUserQuizHistory, 
+            getUserJourneyProgress, 
+            getDailyQuests, 
+            getUserXPHistory, 
+            getUserNexonHistory, 
+            searchCommunityCourses,
+            getQuizCorrectAnswer 
+          } = await import("./chatbot-tools")
 
-    return text.trim()
+          if (!currentUserId) throw new Error("User ID is required for tool calls")
+
+          const typedArgs = args as any
+
+          switch (name) {
+            case "getUserQuizHistory":
+              toolData = await getUserQuizHistory(typedArgs.userId as string, currentUserId)
+              break
+            case "getUserJourneyProgress":
+              toolData = await getUserJourneyProgress(typedArgs.userId as string, currentUserId)
+              break
+            case "getDailyQuests":
+              toolData = await getDailyQuests(typedArgs.userId as string, currentUserId)
+              break
+            case "getUserXPHistory":
+              toolData = await getUserXPHistory(typedArgs.userId as string, currentUserId)
+              break
+            case "getUserNexonHistory":
+              toolData = await getUserNexonHistory(typedArgs.userId as string, currentUserId)
+              break
+            case "searchCommunityCourses":
+              toolData = await searchCommunityCourses(typedArgs.query as string)
+              break
+            case "getQuizCorrectAnswer":
+              toolData = await getQuizCorrectAnswer(typedArgs.questionId as string)
+              break
+          }
+        } catch (toolErr) {
+          console.error(`Error executing tool ${name}:`, toolErr)
+          toolData = { error: toolErr instanceof Error ? toolErr.message : "Tool execution failed" }
+        }
+        
+        toolResults.push({
+          functionResponse: {
+            name,
+            response: { content: toolData },
+          },
+        })
+      }
+      
+      // Send tool results back to model
+      result = await chat.sendMessage(toolResults)
+      response = result.response
+    }
+
+    return response.text().trim()
   } catch (error) {
     console.error("Error generating chat response:", error)
     throw new Error("Failed to generate response. Please try again.")
@@ -275,7 +871,18 @@ Make the suggestions:
 
     // Clean the response - remove markdown code blocks if present
     let jsonText = text.trim()
-    if (jsonText.startsWith("```json")) {
+    
+    // Extract JSON between { and } or [ and ] for robustness
+    const firstBrace = jsonText.indexOf('{')
+    const lastBrace = jsonText.lastIndexOf('}')
+    const firstBracket = jsonText.indexOf('[')
+    const lastBracket = jsonText.lastIndexOf(']')
+
+    if (firstBrace !== -1 && lastBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+      jsonText = jsonText.substring(firstBrace, lastBrace + 1)
+    } else if (firstBracket !== -1 && lastBracket !== -1) {
+      jsonText = jsonText.substring(firstBracket, lastBracket + 1)
+    } else if (jsonText.startsWith("```json")) {
       jsonText = jsonText.replace(/^```json\n?/, "").replace(/\n?```$/, "")
     } else if (jsonText.startsWith("```")) {
       jsonText = jsonText.replace(/^```\n?/, "").replace(/\n?```$/, "")

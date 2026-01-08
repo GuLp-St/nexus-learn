@@ -14,6 +14,12 @@ export interface QuizQuestion {
   options?: string[]
   correctAnswer?: string | number | boolean
   suggestedAnswer?: string
+  rubric?: {
+    keywords: string[]
+    maxMarks: number
+  }
+  sourceFactId?: string // For objective questions - links to fact in accumulatedContext
+  sourceFactIds?: string[] // For subjective questions - links to multiple facts
   createdAt?: Timestamp
 }
 
@@ -31,6 +37,7 @@ export interface QuizAttempt {
   maxScore: number
   completedAt?: Timestamp | null
   isRetake: boolean
+  isChallenge?: boolean // Flag for challenge quizzes to separate them from journey
   createdAt?: Timestamp
   currentQuestionIndex?: number // For resume functionality
 }
@@ -51,7 +58,8 @@ export async function getUserQuizStats(userId: string): Promise<{
   try {
     const attemptsQuery = query(
       collection(db, "quizAttempts"),
-      where("userId", "==", userId)
+      where("userId", "==", userId),
+      where("isChallenge", "==", false) // Only journey quizzes
     )
     
     const snapshot = await getDocs(attemptsQuery)
@@ -133,8 +141,8 @@ export async function getPerfectQuizHistory(userId: string): Promise<(QuizAttemp
     
     // Sort by completion date
     return perfectAttempts.sort((a, b) => {
-      const aTime = a.completedAt?.toMillis() || 0
-      const bTime = b.completedAt?.toMillis() || 0
+      const aTime = typeof a.completedAt?.toMillis === 'function' ? a.completedAt.toMillis() : (a.completedAt instanceof Date ? a.completedAt.getTime() : 0)
+      const bTime = typeof b.completedAt?.toMillis === 'function' ? b.completedAt.toMillis() : (b.completedAt instanceof Date ? b.completedAt.getTime() : 0)
       return bTime - aTime
     })
   } catch (error) {
@@ -213,15 +221,26 @@ export async function fetchQuizQuestions(
 export async function saveQuizQuestions(questions: QuizQuestion[]): Promise<void> {
   try {
     const promises = questions.map((question) => {
+      // Firestore does not allow undefined field values.
+      // Clean the question object so that any `undefined` fields are removed
+      // (optional fields should simply be absent rather than undefined).
+      const cleanedQuestion = Object.entries(question).reduce((acc, [key, value]) => {
+        if (value !== undefined) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (acc as any)[key] = value
+        }
+        return acc
+      }, {} as QuizQuestion)
+
       const docId = getQuestionDocId(
-        question.courseId,
-        question.moduleIndex ?? null,
-        question.lessonIndex ?? null,
-        question.questionId
+        cleanedQuestion.courseId,
+        cleanedQuestion.moduleIndex ?? null,
+        cleanedQuestion.lessonIndex ?? null,
+        cleanedQuestion.questionId
       )
       const docRef = doc(db, "quizQuestions", docId)
       return setDoc(docRef, {
-        ...question,
+        ...cleanedQuestion,
         createdAt: serverTimestamp(),
       }, { merge: true })
     })
@@ -298,9 +317,35 @@ export async function createQuizAttempt(
   questionIds: string[],
   moduleIndex?: number | null,
   lessonIndex?: number | null,
-  isRetake: boolean = false
+  isRetake: boolean = false,
+  isChallenge: boolean = false // Optional flag
 ): Promise<string> {
   try {
+    // Clean up any existing incomplete attempts for this specific quiz before creating a new one
+    // This prevents "zombie" attempts from blocking other quizzes or showing "Resume" incorrectly
+    const existingIncompleteQuery = query(
+      collection(db, "quizAttempts"),
+      where("userId", "==", userId),
+      where("courseId", "==", courseId),
+      where("quizType", "==", quizType),
+      where("completedAt", "==", null)
+    )
+    const existingIncompleteSnapshot = await getDocs(existingIncompleteQuery)
+    for (const docSnap of existingIncompleteSnapshot.docs) {
+      const data = docSnap.data()
+      // Match module/lesson index if applicable
+      const modMatch = moduleIndex === undefined || moduleIndex === null ? data.moduleIndex === null : Number(data.moduleIndex) === moduleIndex
+      const lesMatch = lessonIndex === undefined || lessonIndex === null ? data.lessonIndex === null : Number(data.lessonIndex) === lessonIndex
+      
+      if (modMatch && lesMatch) {
+        await updateDoc(docSnap.ref, {
+          completedAt: serverTimestamp(),
+          abandoned: true,
+          abandonedReason: "superseded_by_new_attempt"
+        })
+      }
+    }
+
     const attemptId = `${userId}-${courseId}-${quizType}-${moduleIndex ?? "null"}-${lessonIndex ?? "null"}-${Date.now()}`
     const attemptRef = doc(db, "quizAttempts", attemptId)
     
@@ -316,6 +361,7 @@ export async function createQuizAttempt(
       totalScore: 0,
       maxScore: questionIds.length,
       isRetake,
+      isChallenge, // Save challenge flag
       createdAt: serverTimestamp(),
       completedAt: null,
     })
@@ -382,6 +428,37 @@ export async function saveQuizAttemptBasic(
       maxScore,
       completedAt: serverTimestamp(),
     })
+
+    // Clean up any other incomplete attempts for this same quiz
+    // This handles the "double start" scenario where one was completed and others were left hanging
+    const attemptSnap = await getDoc(attemptRef)
+    if (attemptSnap.exists()) {
+      const data = attemptSnap.data()
+      const { userId, courseId, quizType, moduleIndex, lessonIndex } = data
+      const siblingsQuery = query(
+        collection(db, "quizAttempts"),
+        where("userId", "==", userId),
+        where("courseId", "==", courseId),
+        where("quizType", "==", quizType),
+        where("completedAt", "==", null)
+      )
+      const siblingsSnapshot = await getDocs(siblingsQuery)
+      for (const siblingDoc of siblingsSnapshot.docs) {
+        if (siblingDoc.id !== attemptId) {
+          const sData = siblingDoc.data()
+          const modMatch = moduleIndex === null ? sData.moduleIndex === null : sData.moduleIndex === moduleIndex
+          const lesMatch = lessonIndex === null ? sData.lessonIndex === null : sData.lessonIndex === lessonIndex
+          
+          if (modMatch && lesMatch) {
+            await updateDoc(siblingDoc.ref, {
+              completedAt: serverTimestamp(),
+              abandoned: true,
+              abandonedReason: "sibling_completed"
+            })
+          }
+        }
+      }
+    }
   } catch (error) {
     console.error("Error saving quiz attempt basic:", error)
     throw new Error("Failed to save quiz attempt")
@@ -472,8 +549,8 @@ export async function saveQuizAttempt(
     }
 
     // Emit quest event for quiz completion
-    const { trackQuestProgress } = await import("./event-bus")
-    trackQuestProgress({
+    const { emitQuestEvent } = await import("./event-bus")
+    emitQuestEvent({
       type: "quest.quiz_completed",
       userId,
       metadata: {
@@ -562,6 +639,7 @@ export async function getQuizAttemptHistory(
     
     snapshot.forEach((doc) => {
       attempts.push({
+        id: doc.id,
         ...doc.data(),
         completedAt: doc.data().completedAt,
       } as QuizAttempt)
@@ -607,6 +685,7 @@ export async function getQuizAttemptHistory(
         
         snapshot.forEach((doc) => {
           attempts.push({
+            id: doc.id,
             ...doc.data(),
             completedAt: doc.data().completedAt,
           } as QuizAttempt)
@@ -614,8 +693,8 @@ export async function getQuizAttemptHistory(
         
         // Sort client-side
         attempts.sort((a, b) => {
-          const aTime = a.completedAt?.toMillis() || 0
-          const bTime = b.completedAt?.toMillis() || 0
+          const aTime = typeof a.completedAt?.toMillis === 'function' ? a.completedAt.toMillis() : (a.completedAt instanceof Date ? a.completedAt.getTime() : 0)
+          const bTime = typeof b.completedAt?.toMillis === 'function' ? b.completedAt.toMillis() : (b.completedAt instanceof Date ? b.completedAt.getTime() : 0)
           return bTime - aTime
         })
         
@@ -646,7 +725,143 @@ export async function getMostRecentQuizAttempt(
 }
 
 /**
+ * Get cooldown information for a quiz
+ * Returns remaining cooldown time in milliseconds, or 0 if no cooldown
+ */
+export function getQuizCooldownRemaining(
+  lastAttempt: QuizAttempt | null,
+  quizType: "module" | "course"
+): number {
+  if (!lastAttempt || !lastAttempt.completedAt || (lastAttempt as any).bypassCooldown) {
+    return 0 // No cooldown if never completed or if bypass purchased
+  }
+
+  const cooldownDuration = quizType === "module" 
+    ? 30 * 60 * 1000 // 30 minutes
+    : 60 * 60 * 1000 // 1 hour
+
+  const completedTime = lastAttempt.completedAt.toMillis()
+  const now = Date.now()
+  const elapsed = now - completedTime
+  const remaining = cooldownDuration - elapsed
+
+  return remaining > 0 ? remaining : 0
+}
+
+/**
+ * Check if quiz is on cooldown
+ */
+export function isQuizOnCooldown(
+  lastAttempt: QuizAttempt | null,
+  quizType: "module" | "course"
+): boolean {
+  return getQuizCooldownRemaining(lastAttempt, quizType) > 0
+}
+
+/**
+ * Format cooldown time as MM:SS
+ */
+export function formatCooldownTime(remainingMs: number): string {
+  if (remainingMs <= 0) return "00:00"
+  
+  const totalSeconds = Math.floor(remainingMs / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+}
+
+/**
+ * Get the single active quiz for a user (if any)
+ * Returns the most recent incomplete quiz attempt, or null if none exists
+ */
+export async function getActiveQuiz(userId: string): Promise<(QuizAttempt & { courseTitle?: string }) | null> {
+  try {
+    const attemptsQuery = query(
+      collection(db, "quizAttempts"),
+      where("userId", "==", userId),
+      where("completedAt", "==", null),
+      where("isChallenge", "==", false),
+      orderBy("createdAt", "desc"),
+      limit(1)
+    )
+    
+    const snapshot = await getDocs(attemptsQuery)
+    if (!snapshot.empty) {
+      const docSnap = snapshot.docs[0]
+      const attempt = docSnap.data() as QuizAttempt
+      
+      // Auto-abandon very old attempts (> 4 hours) to prevent zombies
+      const now = Date.now()
+      const fourHoursAgo = now - (4 * 60 * 60 * 1000)
+      const createdAt = attempt.createdAt?.toMillis() || 0
+      
+      if (createdAt > 0 && createdAt < fourHoursAgo) {
+        await updateDoc(docSnap.ref, {
+          completedAt: serverTimestamp(),
+          abandoned: true,
+          abandonedReason: "auto_abandoned_stale",
+          totalScore: 0,
+          maxScore: attempt.maxScore || 1
+        })
+        return null
+      }
+
+      if (!attempt.completedAt) {
+        // Fetch course title for better UX
+        const courseRef = doc(db, "courses", attempt.courseId)
+        const courseSnap = await getDoc(courseRef)
+        const courseData = courseSnap.data()
+        
+        return {
+          id: docSnap.id,
+          ...attempt,
+          courseTitle: courseData?.title || "Unknown Course",
+          currentQuestionIndex: attempt.currentQuestionIndex || 0,
+        } as QuizAttempt & { courseTitle?: string }
+      }
+    }
+    
+    return null
+  } catch (error: any) {
+    // Fallback for index building or other errors
+    try {
+      const fallbackQuery = query(
+        collection(db, "quizAttempts"),
+        where("userId", "==", userId),
+        limit(20)
+      )
+      const snapshot = await getDocs(fallbackQuery)
+      const attempts = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as QuizAttempt))
+        .filter(a => (a.completedAt === null || a.completedAt === undefined) && !a.isChallenge)
+        .sort((a, b) => {
+          const aTime = typeof a.createdAt?.toMillis === 'function' ? a.createdAt.toMillis() : (a.createdAt instanceof Date ? a.createdAt.getTime() : 0)
+          const bTime = typeof b.createdAt?.toMillis === 'function' ? b.createdAt.toMillis() : (b.createdAt instanceof Date ? b.createdAt.getTime() : 0)
+          return bTime - aTime
+        })
+        
+      if (attempts.length > 0) {
+        const attempt = attempts[0]
+        const courseRef = doc(db, "courses", attempt.courseId)
+        const courseSnap = await getDoc(courseRef)
+        return {
+          ...attempt,
+          courseTitle: courseSnap.data()?.title || "Unknown Course",
+          currentQuestionIndex: attempt.currentQuestionIndex || 0,
+        } as QuizAttempt & { courseTitle?: string }
+      }
+      return null
+    } catch (fallbackError) {
+      console.error("Error in fallback active quiz check:", fallbackError)
+      return null
+    }
+  }
+}
+
+/**
  * Get any incomplete quiz attempt for a user (across all courses and types)
+ * @deprecated Use getActiveQuiz instead for simpler single-quiz logic
  */
 export async function getAnyIncompleteQuizAttempt(userId: string): Promise<(QuizAttempt & { courseTitle?: string }) | null> {
   try {
@@ -660,10 +875,25 @@ export async function getAnyIncompleteQuizAttempt(userId: string): Promise<(Quiz
     
     const snapshot = await getDocs(attemptsQuery)
     if (!snapshot.empty) {
+      const now = Date.now()
+      const fourHoursAgo = now - (4 * 60 * 60 * 1000)
+
       // Find the first one that truly doesn't have a completedAt value
       for (const docSnap of snapshot.docs) {
         const attempt = docSnap.data() as QuizAttempt
-        if (!attempt.completedAt) {
+        
+        // Auto-abandon very old attempts (e.g. > 4 hours) to prevent zombies
+        const createdAt = attempt.createdAt?.toMillis() || 0
+        if (createdAt > 0 && createdAt < fourHoursAgo && !attempt.completedAt) {
+          await updateDoc(docSnap.ref, {
+            completedAt: serverTimestamp(),
+            abandoned: true,
+            abandonedReason: "auto_abandoned_stale"
+          })
+          continue
+        }
+
+        if (!attempt.completedAt && !attempt.isChallenge) {
           // Fetch course title for better UX
           const courseRef = doc(db, "courses", attempt.courseId)
           const courseSnap = await getDoc(courseRef)
@@ -691,10 +921,10 @@ export async function getAnyIncompleteQuizAttempt(userId: string): Promise<(Quiz
       const snapshot = await getDocs(fallbackQuery)
       const attempts = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() } as QuizAttempt))
-        .filter(a => a.completedAt === null || a.completedAt === undefined)
+        .filter(a => (a.completedAt === null || a.completedAt === undefined) && !a.isChallenge)
         .sort((a, b) => {
-          const aTime = a.createdAt?.toMillis() || 0
-          const bTime = b.createdAt?.toMillis() || 0
+          const aTime = typeof a.createdAt?.toMillis === 'function' ? a.createdAt.toMillis() : (a.createdAt instanceof Date ? a.createdAt.getTime() : 0)
+          const bTime = typeof b.createdAt?.toMillis === 'function' ? b.createdAt.toMillis() : (b.createdAt instanceof Date ? b.createdAt.getTime() : 0)
           return bTime - aTime
         })
         
@@ -717,14 +947,23 @@ export async function getAnyIncompleteQuizAttempt(userId: string): Promise<(Quiz
 
 /**
  * Abandon an incomplete quiz attempt (mark it as "cancelled" by setting a special flag or just completing it)
+ * Marks quiz as 0% score and triggers cooldown
  */
 export async function abandonQuizAttempt(attemptId: string): Promise<void> {
   try {
     const attemptRef = doc(db, "quizAttempts", attemptId)
+    const attemptSnap = await getDoc(attemptRef)
+    if (!attemptSnap.exists()) {
+      throw new Error("Quiz attempt not found")
+    }
+    const attemptData = attemptSnap.data()
+    
+    // Mark as completed with 0% score - this triggers cooldown
     await updateDoc(attemptRef, {
       completedAt: serverTimestamp(),
       abandoned: true,
       totalScore: 0,
+      maxScore: attemptData.maxScore || 1, // Ensure maxScore exists for cooldown calculation
     })
   } catch (error) {
     console.error("Error abandoning quiz:", error)
@@ -836,8 +1075,8 @@ export async function getIncompleteQuizAttempt(
         } as QuizAttempt))
         
         attempts.sort((a, b) => {
-          const aTime = a.createdAt?.toMillis() || 0
-          const bTime = b.createdAt?.toMillis() || 0
+          const aTime = typeof a.createdAt?.toMillis === 'function' ? a.createdAt.toMillis() : (a.createdAt instanceof Date ? a.createdAt.getTime() : 0)
+          const bTime = typeof b.createdAt?.toMillis === 'function' ? b.createdAt.toMillis() : (b.createdAt instanceof Date ? b.createdAt.getTime() : 0)
           return bTime - aTime
         })
         
@@ -926,8 +1165,8 @@ export async function getQuizAttempts(
       } as QuizAttempt)
     })
     
-    // Filter to only completed attempts
-    return attempts.filter(attempt => attempt.completedAt)
+    // Filter to only completed and non-challenge attempts
+    return attempts.filter(attempt => attempt.completedAt && !attempt.isChallenge)
   } catch (error: any) {
     // Fallback if index doesn't exist
     if (error.code === "failed-precondition") {
@@ -951,11 +1190,11 @@ export async function getQuizAttempts(
           } as QuizAttempt)
         })
         
-        // Filter to only completed attempts and sort by date
-        const completed = attempts.filter(attempt => attempt.completedAt)
+        // Filter to only completed and non-challenge attempts and sort by date
+        const completed = attempts.filter(attempt => attempt.completedAt && !attempt.isChallenge)
         completed.sort((a, b) => {
-          const aTime = a.completedAt?.toMillis() || 0
-          const bTime = b.completedAt?.toMillis() || 0
+          const aTime = typeof a.completedAt?.toMillis === 'function' ? a.completedAt.toMillis() : (a.completedAt instanceof Date ? a.completedAt.getTime() : 0)
+          const bTime = typeof b.completedAt?.toMillis === 'function' ? b.completedAt.toMillis() : (b.completedAt instanceof Date ? b.completedAt.getTime() : 0)
           return bTime - aTime
         })
         

@@ -27,9 +27,17 @@ export interface UserCourseProgress {
   lastAccessed?: Timestamp
   lastAccessedModule?: number
   lastAccessedLesson?: number
+  lastAccessedBlockIndex?: number
   createdAt?: Timestamp
   addedFrom?: string
   isOwnCourse?: boolean
+  claimedRewards?: {
+    [key: string]: string[] // e.g., "lesson_0-0": ["first_completion"], "module_0": ["first_completion"], "moduleQuiz_0": [">50%", ">70%", ">90%", "100%"]
+  }
+  moduleQuizScores?: {
+    [moduleIndex: string]: number // Highest score per module
+  }
+  finalQuizScore?: number // Highest final quiz score
 }
 
 export interface CourseWithProgress extends PublicCourse {
@@ -118,8 +126,8 @@ export async function createOrGetCourse(
   await ensureUserProgress(userId, courseRef.id, true)
   
   // Emit quest event for course creation
-  const { trackQuestProgress } = await import("./event-bus")
-  trackQuestProgress({
+  const { emitQuestEvent } = await import("./event-bus")
+  emitQuestEvent({
     type: "quest.course_added",
     userId,
     metadata: {
@@ -145,59 +153,76 @@ export async function ensureUserProgress(userId: string, courseId: string, isOwn
   const courseCreatedBy = courseData?.createdBy
   
   if (!progressDoc.exists()) {
-    // Check for existing lesson progress to restore progress if course was previously removed
+    // If addedFrom is set and equals courseId, this is a fresh add from community library - reset progress
+    // Otherwise, try to restore progress if course was previously removed
+    const isFreshCommunityAdd = addedFrom === courseId && !isOwnCourse
+    
     let completedLessons: string[] = []
     let totalLessons = 0
     let lastAccessedModule: number | undefined
     let lastAccessedLesson: number | undefined
     
-    try {
-      // Query userCompletedItems for all lessons in this course
-      const completedQuery = query(
-        collection(db, "userCompletedItems"),
-        where("userId", "==", userId),
-        where("courseId", "==", courseId),
-        where("itemType", "==", "lesson")
-      )
-      const completedSnapshot = await getDocs(completedQuery)
-      
-      const completedSet = new Set<string>()
-      completedSnapshot.forEach((docSnap) => {
-        const data = docSnap.data()
-        if (data.moduleIndex !== undefined && data.moduleIndex !== null && 
-            data.lessonIndex !== undefined && data.lessonIndex !== null) {
-          completedSet.add(`${data.moduleIndex}-${data.lessonIndex}`)
-        }
-      })
+    if (!isFreshCommunityAdd) {
+      // Only restore progress if not a fresh community add
+      try {
+        // Query userCompletedItems for all lessons in this course
+        const completedQuery = query(
+          collection(db, "userCompletedItems"),
+          where("userId", "==", userId),
+          where("courseId", "==", courseId),
+          where("itemType", "==", "lesson")
+        )
+        const completedSnapshot = await getDocs(completedQuery)
+        
+        const completedSet = new Set<string>()
+        completedSnapshot.forEach((docSnap) => {
+          const data = docSnap.data()
+          if (data.moduleIndex !== undefined && data.moduleIndex !== null && 
+              data.lessonIndex !== undefined && data.lessonIndex !== null) {
+            completedSet.add(`${data.moduleIndex}-${data.lessonIndex}`)
+          }
+        })
 
-      // Also check userLessonProgress for lessons that might not have reached userCompletedItems yet
-      const lessonProgressQuery = query(
-        collection(db, "userLessonProgress"),
-        where("userId", "==", userId),
-        where("courseId", "==", courseId)
-      )
-      const lpSnapshot = await getDocs(lessonProgressQuery)
-      
-      let latestLp: any = null
-      lpSnapshot.forEach((docSnap) => {
-        const data = docSnap.data()
-        if (data.completed) {
-          completedSet.add(`${data.moduleIndex}-${data.lessonIndex}`)
-        }
-        // Track the most recently updated progress for lastAccessed restoration
-        if (!latestLp || (data.updatedAt && latestLp.updatedAt && data.updatedAt.toMillis() > latestLp.updatedAt.toMillis())) {
-          latestLp = data
-        }
-      })
+        // Also check userLessonProgress for lessons that might not have reached userCompletedItems yet
+        const lessonProgressQuery = query(
+          collection(db, "userLessonProgress"),
+          where("userId", "==", userId),
+          where("courseId", "==", courseId)
+        )
+        const lpSnapshot = await getDocs(lessonProgressQuery)
+        
+        let latestLp: any = null
+        lpSnapshot.forEach((docSnap) => {
+          const data = docSnap.data()
+          if (data.completed) {
+            completedSet.add(`${data.moduleIndex}-${data.lessonIndex}`)
+          }
+          // Track the most recently updated progress for lastAccessed restoration
+          if (!latestLp || (data.updatedAt && latestLp.updatedAt && data.updatedAt.toMillis() > latestLp.updatedAt.toMillis())) {
+            latestLp = data
+          }
+        })
 
-      completedLessons = Array.from(completedSet)
-      
-      if (latestLp) {
-        lastAccessedModule = latestLp.moduleIndex
-        lastAccessedLesson = latestLp.lessonIndex
+        completedLessons = Array.from(completedSet)
+        
+        if (latestLp) {
+          lastAccessedModule = latestLp.moduleIndex
+          lastAccessedLesson = latestLp.lessonIndex
+        }
+
+        // Calculate total lessons from course data
+        if (courseData && Array.isArray(courseData.modules)) {
+          for (const module of courseData.modules) {
+            if (Array.isArray(module.lessons)) {
+              totalLessons += module.lessons.length
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error restoring progress:", error)
       }
-
-      // Calculate total lessons from course data
+    } else {
+      // For fresh community adds, calculate total lessons but start with 0 progress
       if (courseData && Array.isArray(courseData.modules)) {
         for (const module of courseData.modules) {
           if (Array.isArray(module.lessons)) {
@@ -205,8 +230,6 @@ export async function ensureUserProgress(userId: string, courseId: string, isOwn
           }
         }
       }
-    } catch (error) {
-      console.error("Error restoring progress:", error)
     }
 
     const progressPercent = totalLessons > 0 ? Math.min(100, Math.round((completedLessons.length / totalLessons) * 100)) : 0
@@ -304,6 +327,72 @@ export async function getUserCourses(userId: string): Promise<CourseWithProgress
 }
 
 /**
+ * Get the count of courses published by a user
+ */
+export async function getUserPublishedCoursesCount(userId: string): Promise<number> {
+  try {
+    const coursesQuery = query(
+      collection(db, "courses"),
+      where("createdBy", "==", userId),
+      where("isPublic", "==", true)
+    )
+    const snapshot = await getDocs(coursesQuery)
+    return snapshot.size
+  } catch (error) {
+    console.error("Error fetching published courses count:", error)
+    return 0
+  }
+}
+
+/**
+ * Get the courses published by a user
+ */
+export async function getUserPublishedCourses(userId: string): Promise<PublicCourse[]> {
+  try {
+    const coursesQuery = query(
+      collection(db, "courses"),
+      where("createdBy", "==", userId),
+      where("isPublic", "==", true),
+      orderBy("publishedAt", "desc")
+    )
+    const snapshot = await getDocs(coursesQuery)
+    return snapshot.docs.map(docSnap => ({
+      id: docSnap.id,
+      ...docSnap.data()
+    } as PublicCourse))
+  } catch (error: any) {
+    // Fallback if index is not ready
+    if (error.code === "failed-precondition") {
+      try {
+        const fallbackQuery = query(
+          collection(db, "courses"),
+          where("createdBy", "==", userId),
+          where("isPublic", "==", true)
+        )
+        const snapshot = await getDocs(fallbackQuery)
+        const courses = snapshot.docs.map(docSnap => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        } as PublicCourse))
+        
+        // Sort manually
+        courses.sort((a, b) => {
+          const aTime = a.publishedAt?.toMillis() || 0
+          const bTime = b.publishedAt?.toMillis() || 0
+          return bTime - aTime
+        })
+        return courses
+      } catch (fallbackError) {
+        console.error("Error fetching published courses (fallback):", fallbackError)
+        return []
+      }
+    }
+    console.error("Error fetching published courses:", error)
+    return []
+  }
+}
+
+/**
  * Update user progress for a course
  */
 export async function updateUserProgress(
@@ -390,7 +479,7 @@ export async function getCourseWithProgress(
 }
 
 /**
- * Get lesson slide progress for a specific lesson
+ * Get lesson slide progress for a specific lesson (legacy support)
  */
 export async function getLessonSlideProgress(
   userId: string,
@@ -429,6 +518,54 @@ export async function getLessonSlideProgress(
       currentSlide: 0,
       completed: false,
       progress: 0,
+    }
+  }
+}
+
+/**
+ * Get lesson stream progress for a specific lesson (new system)
+ */
+export async function getLessonStreamProgress(
+  userId: string,
+  courseId: string,
+  moduleIndex: number,
+  lessonIndex: number,
+  totalBlocks: number
+): Promise<{ currentBlockIndex: number; completed: boolean; progress: number; completedInteractions?: { [index: number]: any } }> {
+  try {
+    const progressLessonId = `${moduleIndex}-${lessonIndex}`
+    const streamProgressRef = doc(db, "userLessonProgress", `${userId}-${courseId}-${progressLessonId}`)
+    const streamProgressDoc = await getDoc(streamProgressRef)
+    
+    if (streamProgressDoc.exists()) {
+      const data = streamProgressDoc.data()
+      const completed = data.completed || false
+      const completedInteractions = data.completedInteractions || {}
+      // Always return the saved currentBlockIndex, even if completed (allows revisiting)
+      const currentBlockIndex = data.currentBlockIndex !== undefined ? data.currentBlockIndex : (completed ? totalBlocks - 1 : 0)
+      const progress = totalBlocks > 0 ? Math.min((currentBlockIndex / totalBlocks) * 100, 100) : 0
+      
+      return {
+        currentBlockIndex,
+        completed,
+        progress: Math.round(progress),
+        completedInteractions,
+      }
+    }
+    
+    return {
+      currentBlockIndex: 0,
+      completed: false,
+      progress: 0,
+      completedInteractions: {},
+    }
+  } catch (error) {
+    console.error("Error fetching lesson stream progress:", error)
+    return {
+      currentBlockIndex: 0,
+      completed: false,
+      progress: 0,
+      completedInteractions: {},
     }
   }
 }

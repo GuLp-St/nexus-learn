@@ -2,7 +2,7 @@ import { db } from "./firebase"
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, runTransaction, increment } from "firebase/firestore"
 import { calculateLevel } from "./level-utils"
 import { isSameUTCDay, getUTCDateString, getUTCDateStringFromTimestamp } from "./date-utils"
-import { trackQuestProgress } from "./event-bus"
+import { emitQuestEvent } from "./event-bus"
 
 export interface XPAwardResult {
   amount: number
@@ -68,7 +68,7 @@ export async function awardXP(userId: string, amount: number, source?: string, d
       })
 
       // Emit quest event for XP earned
-      trackQuestProgress({
+      emitQuestEvent({
         type: "quest.xp_earned",
         userId,
         metadata: { xpAmount: amount, ...metadata },
@@ -143,12 +143,70 @@ export async function hasAwardedModuleXP(
 }
 
 /**
- * Award module completion XP (+50 XP, one-time per module)
+ * Check if lesson completion XP has already been awarded
+ */
+export async function hasAwardedLessonXP(
+  userId: string,
+  courseId: string,
+  moduleIndex: number,
+  lessonIndex: number
+): Promise<boolean> {
+  try {
+    const docId = `${userId}-lesson-completion-${courseId}-${moduleIndex}-${lessonIndex}`
+    const xpHistoryRef = doc(db, "userXPHistory", docId)
+    const xpHistoryDoc = await getDoc(xpHistoryRef)
+    return xpHistoryDoc.exists()
+  } catch (error) {
+    console.error("Error checking lesson XP history:", error)
+    return false
+  }
+}
+
+/**
+ * Award lesson completion XP (+25 XP base, multiplied by course difficulty, one-time per lesson)
+ */
+export async function awardLessonCompletionXP(
+  userId: string,
+  courseId: string,
+  moduleIndex: number,
+  lessonIndex: number,
+  xpMultiplier: number = 1.0
+): Promise<XPAwardResult | null> {
+  try {
+    // Check if already awarded
+    const alreadyAwarded = await hasAwardedLessonXP(userId, courseId, moduleIndex, lessonIndex)
+    if (alreadyAwarded) {
+      return null // Already awarded, skip
+    }
+
+    const BASE_XP_AMOUNT = 25
+    const XP_AMOUNT = Math.round(BASE_XP_AMOUNT * xpMultiplier)
+    const result = await awardXP(userId, XP_AMOUNT, "Lesson Completion", `Completed lesson ${lessonIndex + 1} in module ${moduleIndex + 1}`, { courseId, moduleIndex, lessonIndex, xpMultiplier })
+
+    // Emit quest event
+    emitQuestEvent({
+      type: "quest.lesson_completed",
+      userId,
+      metadata: { courseId, moduleIndex, lessonIndex },
+    }).catch((error) => {
+      console.error("Error emitting lesson completed event:", error)
+    })
+
+    return result
+  } catch (error) {
+    console.error("Error awarding lesson completion XP:", error)
+    return null
+  }
+}
+
+/**
+ * Award module completion XP (+50 XP base, multiplied by course difficulty, one-time per module)
  */
 export async function awardModuleCompletionXP(
   userId: string,
   courseId: string,
-  moduleIndex: number
+  moduleIndex: number,
+  xpMultiplier: number = 1.0
 ): Promise<XPAwardResult | null> {
   try {
     // Check if already awarded
@@ -157,11 +215,12 @@ export async function awardModuleCompletionXP(
       return null // Already awarded, skip
     }
 
-    const XP_AMOUNT = 50
-    const result = await awardXP(userId, XP_AMOUNT, "Module Completion", `Completed module ${moduleIndex + 1}`, { courseId, moduleIndex })
+    const BASE_XP_AMOUNT = 50
+    const XP_AMOUNT = Math.round(BASE_XP_AMOUNT * xpMultiplier)
+    const result = await awardXP(userId, XP_AMOUNT, "Module Completion", `Completed module ${moduleIndex + 1}`, { courseId, moduleIndex, xpMultiplier })
 
     // Emit quest event
-    trackQuestProgress({
+    emitQuestEvent({
       type: "quest.module_completed",
       userId,
       metadata: { courseId, moduleIndex },
@@ -299,8 +358,8 @@ export async function awardQuizQuestionXP(
     })
 
     // Emit quest event for XP earned
-    const { trackQuestProgress } = await import("./event-bus")
-    trackQuestProgress({
+    const { emitQuestEvent } = await import("./event-bus")
+    emitQuestEvent({
       type: "quest.xp_earned",
       userId,
       metadata: { xpAmount: XP_AMOUNT, source: "Quiz Question" },
@@ -415,8 +474,8 @@ export async function awardPerfectQuizBonus(
     }
 
     // Emit quest event for XP earned
-    const { trackQuestProgress } = await import("./event-bus")
-    trackQuestProgress({
+    const { emitQuestEvent } = await import("./event-bus")
+    emitQuestEvent({
       type: "quest.xp_earned",
       userId,
       metadata: { xpAmount: XP_AMOUNT, source: "Perfect Quiz Bonus" },
@@ -503,8 +562,8 @@ export async function checkAndAwardDailyLoginXP(userId: string): Promise<XPAward
     await recordXPHistory(userId, result.amount, "Daily Login", "Logged in today", { isReward: true }).catch(console.error)
 
     // Emit quest event (outside transaction)
-    const { trackQuestProgress } = await import("./event-bus")
-    await trackQuestProgress({
+    const { emitQuestEvent } = await import("./event-bus")
+    await emitQuestEvent({
       type: "quest.xp_earned",
       userId,
       metadata: { xpAmount: result.amount, isReward: true, source: "Daily Login" },

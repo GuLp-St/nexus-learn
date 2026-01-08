@@ -8,7 +8,7 @@ import { calculateLevel } from "./level-utils"
 
 const PUBLISH_NEXON_COST = 500
 const MIN_LEVEL = 5
-const MIN_QUIZ_SCORE = 80 // Minimum quiz score percentage to publish
+const MIN_QUIZ_SCORE = 70 // Minimum quiz score percentage to publish
 
 export interface PublishRequirements {
   courseCompleted: boolean
@@ -47,7 +47,7 @@ export async function checkPublishRequirements(
   // Check course completion (100%)
   const courseCompleted = (courseWithProgress.userProgress?.progress || 0) >= 100
 
-  // Check quiz score (>80%)
+  // Check quiz score (>70%)
   let quizPassed = false
   let quizScore: number | undefined = undefined
 

@@ -49,12 +49,12 @@ export function AISuggestedCourseCard() {
       if (suggestion.type === "community" && suggestion.course) {
         // Just add to library
         await copyCourseToUserLibrary(user.uid, suggestion.course.id)
-        router.push(`/courses/${suggestion.course.id}`)
+        router.push(`/journey/${suggestion.course.id}`)
       } else {
         // AI suggested name - generate full content first
         const courseData = await generateCourseContent(suggestion.title)
         const newCourseId = await createOrGetCourse(courseData, user.uid)
-        router.push(`/courses/${newCourseId}`)
+        router.push(`/journey/${newCourseId}`)
       }
     } catch (error) {
       console.error("Error processing suggestion:", error)
@@ -135,6 +135,17 @@ export function AISuggestedCourseCard() {
                     }`}>
                       {suggestion.type === "community" ? "Community" : "AI Suggested"}
                     </span>
+                    {suggestion.course?.difficulty && (
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize ${
+                        suggestion.course.difficulty === "beginner"
+                          ? "bg-green-500/10 text-green-600"
+                          : suggestion.course.difficulty === "intermediate"
+                          ? "bg-yellow-500/10 text-yellow-600"
+                          : "bg-red-500/10 text-red-600"
+                      }`}>
+                        {suggestion.course.difficulty}
+                      </span>
+                    )}
                     {suggestion.course?.averageRating && (
                       <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
                         <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />

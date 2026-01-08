@@ -56,7 +56,7 @@ export function CommunityPulseCard() {
     try {
       setAddingCourse(courseId)
       await copyCourseToUserLibrary(user.uid, courseId)
-      router.push(`/courses/${courseId}`)
+      router.push(`/journey/${courseId}`)
     } catch (error) {
       console.error("Error adding course to library:", error)
     } finally {

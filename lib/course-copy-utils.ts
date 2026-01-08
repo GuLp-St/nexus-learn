@@ -38,8 +38,8 @@ export async function copyCourseToUserLibrary(userId: string, courseId: string):
   await ensureUserProgress(userId, courseId, false, courseId)
 
   // Emit quest event for course added
-  const { trackQuestProgress } = await import("./event-bus")
-  trackQuestProgress({
+  const { emitQuestEvent } = await import("./event-bus")
+  emitQuestEvent({
     type: "quest.course_added",
     userId,
     metadata: { courseId },

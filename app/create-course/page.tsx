@@ -10,8 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
-import { useChatbotContext } from "@/components/chatbot-context-provider"
-import { generateCourseContent } from "@/lib/gemini"
+import { useChatContext } from "@/context/ChatContext"
+import { generateCourseContent, analyzeTopicDifficulty, generateCourseSkeleton, TopicDifficultyAnalysis, DifficultyOption } from "@/lib/gemini"
 import { db } from "@/lib/firebase"
 import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore"
 import { createOrGetCourse, PublicCourse } from "@/lib/course-utils"
@@ -26,6 +26,7 @@ interface PublishedCourse extends PublicCourse {
 export default function CreateCoursePage() {
   const [courseInput, setCourseInput] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState("")
   const [courses, setCourses] = useState<PublishedCourse[]>([])
   const [filteredCourses, setFilteredCourses] = useState<PublishedCourse[]>([])
@@ -36,9 +37,11 @@ export default function CreateCoursePage() {
   const [selectedTag, setSelectedTag] = useState<string>("")
   const [addingCourseId, setAddingCourseId] = useState<string | null>(null)
   const [userCourseIds, setUserCourseIds] = useState<Set<string>>(new Set())
+  const [difficultyAnalysis, setDifficultyAnalysis] = useState<TopicDifficultyAnalysis | null>(null)
+  const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyOption | null>(null)
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
-  const { setPageContext } = useChatbotContext()
+  const { setPageContext } = useChatContext()
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -178,12 +181,35 @@ export default function CreateCoursePage() {
     setAddingCourseId(courseId)
     try {
       await copyCourseToUserLibrary(user.uid, courseId)
-      router.push(`/courses/${courseId}`)
+      router.push(`/journey/${courseId}`)
     } catch (error: any) {
       console.error("Error adding course to library:", error)
       alert(error.message || "Failed to add course to library")
     } finally {
       setAddingCourseId(null)
+    }
+  }
+
+  const handleAnalyze = async () => {
+    if (!courseInput.trim()) return
+    if (!user) {
+      router.push("/auth")
+      return
+    }
+
+    setIsAnalyzing(true)
+    setError("")
+    setDifficultyAnalysis(null)
+    setSelectedDifficulty(null)
+
+    try {
+      const analysis = await analyzeTopicDifficulty(courseInput.trim())
+      setDifficultyAnalysis(analysis)
+    } catch (err: any) {
+      console.error("Error analyzing topic:", err)
+      setError(err.message || "Failed to analyze topic. Please try again.")
+    } finally {
+      setIsAnalyzing(false)
     }
   }
 
@@ -198,9 +224,31 @@ export default function CreateCoursePage() {
     setError("")
 
     try {
-      const courseData = await generateCourseContent(courseInput.trim())
+      let courseData
+      
+      if (difficultyAnalysis && selectedDifficulty) {
+        // Generate skeleton with selected difficulty
+        courseData = await generateCourseSkeleton(
+          courseInput.trim(),
+          selectedDifficulty.level,
+          selectedDifficulty.modules,
+          selectedDifficulty.lessonsPerModule
+        )
+      } else if (difficultyAnalysis && !difficultyAnalysis.hasVariableDifficulty) {
+        // Single difficulty option
+        courseData = await generateCourseSkeleton(
+          courseInput.trim(),
+          difficultyAnalysis.difficulty || "beginner",
+          difficultyAnalysis.modules || 3,
+          difficultyAnalysis.lessonsPerModule || [2, 3, 2]
+        )
+      } else {
+        // Fallback to legacy generation
+        courseData = await generateCourseContent(courseInput.trim())
+      }
+
       const courseId = await createOrGetCourse(courseData, user.uid)
-      router.push(`/courses/${courseId}`)
+      router.push(`/journey/${courseId}`)
     } catch (err: any) {
       console.error("Error generating course:", err)
       setError(err.message || "Failed to generate course. Please try again.")
@@ -208,18 +256,29 @@ export default function CreateCoursePage() {
     }
   }
 
-  // Set chatbot context
+  // Set chatbot context with real-time course creation data
   useEffect(() => {
-    setPageContext({
-      type: "generic",
-      pageName: "Create Course",
-      description: `Course creation page showing ${courses.length} published courses. Users can browse, search, and add courses to their library, or generate new courses.`,
-    })
-
-    return () => {
-      setPageContext(null)
+    if (!authLoading && user) {
+      setPageContext({
+        title: "Create Course",
+        description: `Course creation page showing ${courses.length} published courses. Users can browse, search, and add courses to their library, or generate new courses.`,
+        data: {
+          coursesCount: courses.length,
+          // All published courses
+          publishedCourses: courses.map((course) => ({
+            courseId: course.id,
+            title: course.title,
+            description: course.description,
+            difficulty: course.difficulty,
+            estimatedDuration: course.estimatedDuration,
+            averageRating: course.averageRating,
+            ratingCount: course.ratingCount,
+            tags: course.tags || [],
+          })),
+        },
+      })
     }
-  }, [setPageContext, courses.length])
+  }, [courses, authLoading, user, setPageContext])
 
   if (authLoading) {
     return (
@@ -416,23 +475,47 @@ export default function CreateCoursePage() {
                 )}
                 <div className="flex gap-2">
                   <Input
-                    placeholder="e.g., Astrophysics 101, Python for Beginners"
+                    placeholder="e.g., Biology, Python Programming"
                     value={courseInput}
                     onChange={(e) => {
                       setCourseInput(e.target.value)
                       setError("")
+                      setDifficultyAnalysis(null)
+                      setSelectedDifficulty(null)
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") {
+                      if (e.key === "Enter" && !difficultyAnalysis) {
+                        handleAnalyze()
+                      } else if (e.key === "Enter" && selectedDifficulty) {
                         handleGenerate()
                       }
                     }}
-                    disabled={isGenerating}
+                    disabled={isGenerating || isAnalyzing}
                     className="flex-1"
                   />
+                  {!difficultyAnalysis ? (
+                    <Button
+                      onClick={handleAnalyze}
+                      disabled={!courseInput.trim() || isAnalyzing}
+                      size="lg"
+                      className="gap-2"
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <Spinner className="h-4 w-4" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4" />
+                          Analyze Topic
+                        </>
+                      )}
+                    </Button>
+                  ) : (
                   <Button
                     onClick={handleGenerate}
-                    disabled={!courseInput.trim() || isGenerating}
+                      disabled={!selectedDifficulty || isGenerating}
                     size="lg"
                     className="gap-2"
                   >
@@ -444,11 +527,97 @@ export default function CreateCoursePage() {
                     ) : (
                       <>
                         <Sparkles className="h-4 w-4" />
-                        Generate
+                          Generate Course
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+
+                {/* Difficulty Selection */}
+                {difficultyAnalysis && (
+                  <div className="space-y-4 pt-4 border-t">
+                    {difficultyAnalysis.hasVariableDifficulty && difficultyAnalysis.options ? (
+                      <>
+                        <p className="text-sm font-medium">Select difficulty level:</p>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          {difficultyAnalysis.options.map((option, index) => (
+                            <Card
+                              key={index}
+                              className={`cursor-pointer transition-all ${
+                                selectedDifficulty?.level === option.level
+                                  ? "border-primary bg-primary/5 shadow-md"
+                                  : "hover:border-primary/50"
+                              }`}
+                              onClick={() => setSelectedDifficulty(option)}
+                            >
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-lg capitalize">{option.level}</CardTitle>
+                                <CardDescription className="line-clamp-2">{option.title}</CardDescription>
+                              </CardHeader>
+                              <CardContent className="space-y-2 text-sm">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-muted-foreground">Modules:</span>
+                                  <span className="font-medium">{option.modules}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-muted-foreground">Lessons:</span>
+                                  <span className="font-medium">{option.lessonsPerModule.reduce((a, b) => a + b, 0)}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-muted-foreground">XP Multiplier:</span>
+                                  <span className="font-medium">{option.xpMultiplier}x</span>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium">Course Details:</p>
+                        <Card className="border-primary/50 bg-primary/5">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-lg capitalize">{difficultyAnalysis.difficulty || "beginner"}</CardTitle>
+                            <CardDescription>{difficultyAnalysis.title || courseInput}</CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-2 text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">Modules:</span>
+                              <span className="font-medium">{difficultyAnalysis.modules || 3}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">Lessons:</span>
+                              <span className="font-medium">{(difficultyAnalysis.lessonsPerModule || []).reduce((a, b) => a + b, 0)}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">XP Multiplier:</span>
+                              <span className="font-medium">{difficultyAnalysis.xpMultiplier || 1.0}x</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Button
+                          onClick={() => {
+                            if (difficultyAnalysis.difficulty && difficultyAnalysis.modules && difficultyAnalysis.lessonsPerModule) {
+                              setSelectedDifficulty({
+                                level: difficultyAnalysis.difficulty,
+                                title: difficultyAnalysis.title || courseInput,
+                                modules: difficultyAnalysis.modules,
+                                lessonsPerModule: difficultyAnalysis.lessonsPerModule,
+                                xpMultiplier: difficultyAnalysis.xpMultiplier || 1.0
+                              })
+                              handleGenerate()
+                            }
+                          }}
+                          className="w-full"
+                          size="lg"
+                        >
+                          Generate Course
+                        </Button>
                       </>
                     )}
-                  </Button>
                 </div>
+                )}
               </CardContent>
             </Card>
           </div>

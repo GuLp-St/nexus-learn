@@ -1,22 +1,24 @@
 "use client"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Award, Flame, Star, Target, Clock, BookOpen, Settings } from "lucide-react"
+import { Award, Star, Target, BookOpen, Settings, Send } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
-import { useChatbotContext } from "@/components/chatbot-context-provider"
+import { useChatContext } from "@/context/ChatContext"
 import { getUserXP } from "@/lib/leaderboard-utils"
-import { getUserCourses } from "@/lib/course-utils"
+import { getUserCourses, getUserPublishedCoursesCount } from "@/lib/course-utils"
 import { getLevelProgress } from "@/lib/level-utils"
 import { ProfileSettingsModal } from "@/components/profile-settings-modal"
 import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
 import { NameWithColor } from "@/components/name-with-color"
 import { getUserCosmetics } from "@/lib/cosmetics-utils"
 import { getUserBadges, getBadgeDisplayInfo, checkAndUpdateBadges } from "@/lib/badge-utils"
+import { trackQuestProgress } from "@/lib/daily-quest-utils"
 import { XPHistoryModal } from "@/components/xp-history-modal"
 import { CompletedCoursesModal } from "@/components/completed-courses-modal"
+import { PublishedCoursesModal } from "@/components/published-courses-modal"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 import { NexonHistoryModal } from "@/components/nexon-history-modal"
 import { getUserNexon } from "@/lib/nexon-utils"
@@ -26,7 +28,7 @@ export default function UserProfile() {
   const { nickname, user, loading, avatarUrl, refreshProfile } = useAuth()
   const [xp, setXP] = useState<number>(0)
   const [nexon, setNexon] = useState<number>(0)
-  const [dailyStreak, setDailyStreak] = useState<number>(0)
+  const [publishedCourses, setPublishedCourses] = useState<number>(0)
   const [coursesCompleted, setCoursesCompleted] = useState<number>(0)
   const [loadingStats, setLoadingStats] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -47,6 +49,7 @@ export default function UserProfile() {
   const [loadingActivity, setLoadingActivity] = useState(true)
   const [xpHistoryOpen, setXpHistoryOpen] = useState(false)
   const [nexonHistoryOpen, setNexonHistoryOpen] = useState(false)
+  const [publishedCoursesOpen, setPublishedCoursesOpen] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [completedCoursesOpen, setCompletedCoursesOpen] = useState(false)
   const [wallpaper, setWallpaper] = useState<string | null>(null)
@@ -105,6 +108,10 @@ export default function UserProfile() {
   }
 
   useEffect(() => {
+    if (user) {
+      trackQuestProgress(user.uid, "check_stats")
+    }
+
     const fetchStats = async () => {
       if (!user) {
         setLoadingStats(false)
@@ -113,16 +120,21 @@ export default function UserProfile() {
 
       try {
         // Fetch XP and Nexon
-        const [xpData, nexonBalance] = await Promise.all([
+        const [xpData, nexonBalance, publishedCount] = await Promise.all([
           getUserXP(user.uid),
-          getUserNexon(user.uid)
+          getUserNexon(user.uid),
+          getUserPublishedCoursesCount(user.uid)
         ])
         
         if (xpData) {
           setXP(xpData.xp)
-          setDailyStreak(xpData.dailyLoginStreak || 0)
-          
-          // Calculate level progress
+        }
+
+        setNexon(nexonBalance)
+        setPublishedCourses(publishedCount)
+
+        // Calculate level progress
+        if (xpData) {
           const progress = getLevelProgress(xpData.xp)
           setLevelProgress({
             currentLevel: progress.currentLevel,
@@ -131,8 +143,6 @@ export default function UserProfile() {
             xpNeededForNext: progress.xpNeededForNext,
           })
         }
-
-        setNexon(nexonBalance)
 
         // Fetch courses and count completed
         const courses = await getUserCourses(user.uid)
@@ -258,7 +268,7 @@ export default function UserProfile() {
     }
   }
   const router = useRouter()
-  const { setPageContext } = useChatbotContext()
+  const { setPageContext } = useChatContext()
 
   useEffect(() => {
     if (!loading && !user) {
@@ -266,20 +276,27 @@ export default function UserProfile() {
     }
   }, [user, loading, router])
 
-  // Set chatbot context for profile page
+  // Set chatbot context with real-time profile data
   useEffect(() => {
-    if (user) {
+    if (!loading && user) {
       setPageContext({
-        type: "generic",
-        pageName: "Profile",
+        title: "Profile",
         description: `User profile page for ${nickname || "the user"}. Shows learning statistics, badges, and achievements. The user has earned badges like Quiz Master, Early Bird, and Bookworm. The user can ask about their profile, achievements, badges, or learning statistics.`,
+        data: {
+          userId: user.uid,
+          nickname,
+          avatarUrl,
+          xp,
+          publishedCourses,
+          levelProgress,
+          badges,
+          wallpaper,
+          avatarFrame,
+          nameColor,
+        },
       })
-
-      return () => {
-        setPageContext(null)
-      }
     }
-  }, [user, nickname, setPageContext])
+  }, [user, loading, nickname, avatarUrl, xp, publishedCourses, levelProgress, badges, wallpaper, avatarFrame, nameColor, setPageContext])
 
   if (loading) {
     return (
@@ -467,18 +484,22 @@ export default function UserProfile() {
                 </CardContent>
               </Card>
 
-              <Card className="card-on-wallpaper">
+              <Card 
+                className="cursor-pointer card-on-wallpaper hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
+                onClick={() => setPublishedCoursesOpen(true)}
+              >
                 <CardHeader className="pb-3">
-                  <CardDescription className="text-sm">Daily Streak</CardDescription>
+                  <CardDescription className="text-sm">Published Courses</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-bold text-foreground">
-                      {loadingStats ? "..." : dailyStreak}
+                      {loadingStats ? "..." : publishedCourses}
                     </span>
-                    <span className="text-sm text-muted-foreground">Days</span>
-                    <Flame className="h-5 w-5 fill-orange-500 text-orange-500" />
+                    <span className="text-sm text-muted-foreground">Courses</span>
+                    <Send className="h-5 w-5 text-indigo-500 group-hover:scale-110 transition-transform" />
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1">Click to view history</p>
                 </CardContent>
               </Card>
             </div>
@@ -572,6 +593,13 @@ export default function UserProfile() {
         <NexonHistoryModal
           open={nexonHistoryOpen}
           onOpenChange={setNexonHistoryOpen}
+          userId={user.uid}
+        />
+      )}
+      {user && (
+        <PublishedCoursesModal
+          open={publishedCoursesOpen}
+          onOpenChange={setPublishedCoursesOpen}
           userId={user.uid}
         />
       )}

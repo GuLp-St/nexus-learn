@@ -1,12 +1,16 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { MessageSquare, Send, X, Loader2 } from "lucide-react"
+import { MessageSquare, Send, X, Loader2, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { useChatbotPageContext } from "@/components/chatbot-context-provider"
+import { useChatContext } from "@/context/ChatContext"
+import { useAuth } from "@/components/auth-provider"
 import { generateChatResponse, ChatMessage } from "@/lib/gemini"
+import { trackQuestProgress } from "@/lib/daily-quest-utils"
+import { MarkdownRenderer } from "@/components/markdown-renderer"
+import { usePathname } from "next/navigation"
 
 const CHATBOT_POSITION_KEY = "nexus-chatbot-position"
 
@@ -20,9 +24,12 @@ export function ChatbotOverlay() {
   const [isDragging, setIsDragging] = useState(false)
   const [hasMoved, setHasMoved] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const [suggestedChips, setSuggestedChips] = useState<string[]>([])
   const buttonRef = useRef<HTMLButtonElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const pageContext = useChatbotPageContext()
+  const { pageContext } = useChatContext()
+  const { user } = useAuth()
+  const pathname = usePathname()
   const animationFrameRef = useRef<number | null>(null)
   const tempPositionRef = useRef<{ x: number; y: number } | null>(null)
 
@@ -149,11 +156,43 @@ export function ChatbotOverlay() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  const sendMessage = async () => {
-    if (!message.trim() || isLoading) return
+  // Set hardcoded context-aware chips based on pathname
+  useEffect(() => {
+    if (!isOpen) {
+      setSuggestedChips([])
+      return
+    }
 
-    const userMessageText = message.trim()
+    // Determine chips based on pathname
+    let chips: string[] = []
+    
+    if (pathname === "/journey") {
+      // Dashboard
+      chips = ["Daily Quests", "My Stats"]
+    } else if (pathname.startsWith("/journey/") && pathname.match(/^\/journey\/[^/]+$/)) {
+      // Course page
+      chips = ["Summarize Course", "What's Next?"]
+    } else if (pathname.includes("/modules/") && pathname.includes("/lessons/")) {
+      // Lesson page
+      chips = ["Summarize", "Explain"]
+    } else if (pathname.includes("/quiz/")) {
+      // Quiz page
+      chips = ["Hint", "Rule Check"]
+    } else {
+      // Default/Other
+      chips = ["Tell me more", "Help me understand"]
+    }
+    
+    setSuggestedChips(chips)
+  }, [isOpen, pathname])
+
+  const sendMessage = async (text?: string) => {
+    const messageToSubmit = text || message
+    if (!messageToSubmit.trim() || isLoading) return
+
+    const userMessageText = messageToSubmit.trim()
     setMessage("")
+    // Don't clear chips - they should persist
     setError(null)
 
     // Add user message to chat
@@ -162,8 +201,21 @@ export function ChatbotOverlay() {
     setIsLoading(true)
 
     try {
+      // Log context for debugging
+      console.log('[Chatbot] Sending message with context:', {
+        hasContext: !!pageContext,
+        title: pageContext?.title || 'No context',
+        description: pageContext?.description || 'No description',
+        pathname: window.location.pathname
+      })
+      
       // Get AI response
-      const response = await generateChatResponse(userMessageText, pageContext, messages)
+      const response = await generateChatResponse(userMessageText, pageContext, messages, user?.uid)
+      
+      // Track quest progress if it was a hint request
+      if (user && response.toLowerCase().includes("hint:")) {
+        trackQuestProgress(user.uid, "chat_hint")
+      }
       
       // Add AI response to chat
       const aiMessage: ChatMessage = { role: "assistant", content: response }
@@ -207,30 +259,30 @@ export function ChatbotOverlay() {
             setIsOpen(true)
           }
         }}
-        className={`fixed h-14 w-14 rounded-full shadow-lg bg-teal-600 hover:bg-teal-700 z-40 ${
+        className={`fixed h-14 w-14 rounded-full shadow-lg bg-transparent hover:bg-accent/50 z-40 p-0 overflow-hidden ${
           isOpen ? "opacity-0 pointer-events-none" : "opacity-100"
         } ${isDragging ? "cursor-grabbing transition-none" : "cursor-grab transition-all"}`}
         style={buttonStyle}
         aria-label="Open AI Chatbot"
       >
-        <MessageSquare className="h-6 w-6" />
+        <img src="/icon.svg" alt="Nexus" className="h-12 w-12 pointer-events-none" />
       </Button>
 
       {/* Chat Overlay - Slides up from bottom */}
       <div
-        className={`fixed inset-x-0 bottom-0 bg-background shadow-2xl rounded-t-3xl z-50 transition-transform duration-300 ease-out ${
+        className={`fixed inset-x-0 bottom-0 bg-background/80 backdrop-blur-md shadow-2xl rounded-t-3xl z-50 transition-transform duration-300 ease-out flex flex-col ${
           isOpen ? "translate-y-0" : "translate-y-full"
         }`}
         style={{ height: "calc(100vh - 60px)", maxHeight: "600px" }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border bg-gradient-to-r from-teal-50 to-background dark:from-teal-950/20 dark:to-background">
+        <div className="flex items-center justify-between p-4 border-b border-border bg-gradient-to-r from-teal-50 to-background dark:from-teal-950/20 dark:to-background shrink-0">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-teal-600 flex items-center justify-center">
-              <MessageSquare className="h-5 w-5 text-white" />
+            <div className="h-10 w-10 rounded-full bg-transparent flex items-center justify-center p-1 overflow-hidden">
+              <img src="/icon.svg" alt="Nexus" className="h-full w-full object-contain" />
             </div>
             <div>
-              <h2 className="font-semibold text-lg text-foreground">Nexus AI Tutor</h2>
+              <h2 className="font-semibold text-lg text-foreground">Nexus</h2>
               <p className="text-xs text-muted-foreground">Always here to help</p>
             </div>
           </div>
@@ -246,19 +298,15 @@ export function ChatbotOverlay() {
         </div>
 
         {/* Chat History */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ height: "calc(100% - 140px)" }}>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
           {messages.length === 0 && (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex flex-col items-center justify-center h-full space-y-6">
               <div className="text-center space-y-2">
-                <p className="text-muted-foreground text-sm">Start a conversation with Nexus AI Tutor</p>
-                <p className="text-muted-foreground text-xs">
+                <p className="text-muted-foreground text-sm font-medium">Nexus is here to help</p>
+                <p className="text-muted-foreground text-xs px-8">
                   {pageContext
-                    ? pageContext.type === "lesson"
-                      ? "Ask questions about the current slide or request a summary"
-                      : pageContext.type === "quiz-result"
-                      ? "Ask about quiz questions or get explanations for wrong answers"
-                      : "I'm here to help!"
-                    : "I'm here to help!"}
+                    ? pageContext.description
+                    : "Ask me anything about your learning journey!"}
                 </p>
               </div>
             </div>
@@ -281,11 +329,13 @@ export function ChatbotOverlay() {
                   </>
                 ) : (
                   <>
-                    <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarFallback className="bg-teal-600 text-white text-xs">AI</AvatarFallback>
-                    </Avatar>
+                    <div className="h-8 w-8 rounded-full bg-transparent flex items-center justify-center p-0.5 overflow-hidden shrink-0">
+                      <img src="/icon.svg" alt="Nexus" className="h-full w-full object-contain" />
+                    </div>
                     <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3">
-                      <p className="text-sm text-foreground whitespace-pre-wrap">{msg.content}</p>
+                      <div className="text-sm text-foreground">
+                        <MarkdownRenderer content={msg.content} className="text-sm" />
+                      </div>
                     </div>
                   </>
                 )}
@@ -296,9 +346,9 @@ export function ChatbotOverlay() {
           {isLoading && (
             <div className="flex justify-start">
               <div className="flex items-start gap-2 max-w-[80%]">
-                <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarFallback className="bg-teal-600 text-white text-xs">AI</AvatarFallback>
-                </Avatar>
+                <div className="h-8 w-8 rounded-full bg-transparent flex items-center justify-center p-0.5 overflow-hidden shrink-0">
+                  <img src="/icon.svg" alt="Nexus" className="h-full w-full object-contain" />
+                </div>
                 <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </div>
@@ -317,8 +367,31 @@ export function ChatbotOverlay() {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Chips Area - Sticky above input */}
+        {suggestedChips.length > 0 && (
+          <div className="border-t border-border px-4 pt-3 pb-2 bg-background shrink-0">
+            <div className="flex flex-wrap gap-2">
+              {suggestedChips.map((chip, i) => (
+                <Button
+                  key={i}
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full text-xs bg-background/50 hover:bg-teal-50 dark:hover:bg-teal-950/30 border-teal-100 dark:border-teal-900/50 transition-all hover:scale-105"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    sendMessage(chip)
+                  }}
+                >
+                  <Sparkles className="h-3 w-3 mr-1.5 text-teal-500" />
+                  {chip}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Input Area */}
-        <div className="border-t border-border p-4 bg-background">
+        <div className="border-t border-border p-4 bg-background shrink-0">
           <div className="flex items-center gap-2">
             <Input
               type="text"
@@ -333,7 +406,7 @@ export function ChatbotOverlay() {
               size="icon"
               className="h-10 w-10 rounded-full bg-teal-600 hover:bg-teal-700 shrink-0"
               disabled={!message.trim() || isLoading}
-              onClick={sendMessage}
+              onClick={() => sendMessage()}
             >
               {isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />

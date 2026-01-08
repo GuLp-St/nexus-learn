@@ -6,12 +6,23 @@
  */
 
 export type QuestEventType =
+  | "quest.lesson_completed"
   | "quest.module_completed"
   | "quest.quiz_completed"
   | "quest.course_rated"
   | "quest.xp_earned"
   | "quest.course_added"
   | "nexon_awarded"
+  | "quest.interaction_streak"
+  | "quest.review_quiz"
+  | "quest.send_challenge"
+  | "quest.win_challenge"
+  | "quest.visit_leaderboard"
+  | "quest.chat_hint"
+  | "quest.generate_course"
+  | "quest.add_library"
+  | "quest.visit_shop"
+  | "quest.check_stats"
 
 export interface QuestEventMetadata {
   courseId?: string
@@ -117,10 +128,9 @@ class EventBus {
 export const eventBus = new EventBus()
 
 /**
- * Convenience wrapper function for tracking quest progress
- * This is the recommended way to emit quest events
+ * Convenience wrapper function for emitting quest events
  */
-export function trackQuestProgress(event: QuestEvent): Promise<void> {
+export function emitQuestEvent(event: QuestEvent): Promise<void> {
   return eventBus.emit(event)
 }
 

@@ -2,10 +2,10 @@ import { db } from "./firebase"
 import { collection, doc, getDoc, getDocs, query, where, setDoc, serverTimestamp } from "firebase/firestore"
 import { awardXP } from "./xp-utils"
 
-const ROYALTY_XP_AMOUNT = 15 // XP awarded to publisher when someone adds their course
+const ROYALTY_NEXON_AMOUNT = 5 // Nexon awarded to publisher when someone adds their course
 
 /**
- * Award royalty XP to a course publisher when someone adds their course
+ * Award royalty Nexon to a course publisher when someone adds their course
  */
 export async function awardCourseAdditionRoyalty(
   publisherId: string,
@@ -35,12 +35,9 @@ export async function awardCourseAdditionRoyalty(
       return // No royalty for self-adds
     }
 
-    // Award XP to publisher
-    await awardXP(publisherId, ROYALTY_XP_AMOUNT, "Course Addition Royalty", `User added your course`, { courseId, addedBy: userId })
-
-    // Award Nexon to publisher (15 per addition)
+    // Award Nexon to publisher (+5 per addition)
     const { awardNexon } = await import("./nexon-utils")
-    await awardNexon(publisherId, 15, "Course Addition Royalty", `User added your course`, { courseId, addedBy: userId }).catch((error) => {
+    await awardNexon(publisherId, ROYALTY_NEXON_AMOUNT, "Course Addition Royalty", `User added your course`, { courseId, addedBy: userId }).catch((error) => {
       console.error("Error awarding Nexon for royalty:", error)
       // Don't throw - Nexon failure shouldn't block royalty
     })

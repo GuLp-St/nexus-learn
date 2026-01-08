@@ -5,7 +5,7 @@ import { Medal, Trophy, UserPlus } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import SidebarNav from "@/components/sidebar-nav"
-import { useChatbotContext } from "@/components/chatbot-context-provider"
+import { useChatContext } from "@/context/ChatContext"
 import { useAuth } from "@/components/auth-provider"
 import { getLeaderboardWithUser, getFriendsLeaderboard, LeaderboardUser } from "@/lib/leaderboard-utils"
 import { areFriends, sendFriendRequest } from "@/lib/friends-utils"
@@ -14,6 +14,7 @@ import { XPHistoryModal } from "@/components/xp-history-modal"
 import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
 import { NameWithColor } from "@/components/name-with-color"
 import { getLevelProgress } from "@/lib/level-utils"
+import { trackQuestProgress } from "@/lib/daily-quest-utils"
 import Link from "next/link"
 
 export default function LeaderboardPage() {
@@ -26,8 +27,8 @@ export default function LeaderboardPage() {
   const [sendingRequests, setSendingRequests] = useState<Set<string>>(new Set())
   const [xpHistoryOpen, setXpHistoryOpen] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
-  const { setPageContext } = useChatbotContext()
   const { user } = useAuth()
+  const { setPageContext } = useChatContext()
 
   const getFrameXPClasses = (frameId: string | null | undefined) => {
     if (!frameId) return "text-primary"
@@ -84,6 +85,10 @@ export default function LeaderboardPage() {
 
   // Fetch leaderboard data and friends
   useEffect(() => {
+    if (user) {
+      trackQuestProgress(user.uid, "visit_leaderboard")
+    }
+
     const fetchLeaderboard = async () => {
       if (!user) {
         setLoading(false)
@@ -178,26 +183,28 @@ export default function LeaderboardPage() {
     }
   }
 
-  // Set chatbot context for leaderboard page
+  // Set chatbot context with real-time leaderboard data
   useEffect(() => {
-    if (userRank !== null && userXP > 0) {
+    if (user) {
       setPageContext({
-        type: "generic",
-        pageName: "Leaderboard",
-        description: `Global leaderboard showing rankings. The user is currently ranked ${userRank}${userRank === 1 ? "st" : userRank === 2 ? "nd" : userRank === 3 ? "rd" : "th"} with ${userXP.toLocaleString()} XP. They can view global rankings or friends-only rankings. The user can ask about rankings, how to improve their position, or learning strategies.`,
-      })
-    } else {
-      setPageContext({
-        type: "generic",
-        pageName: "Leaderboard",
-        description: "Global leaderboard showing rankings. The user can view global rankings or friends-only rankings. The user can ask about rankings, how to improve their position, or learning strategies.",
+        title: "Leaderboard",
+        description: userRank !== null && userXP > 0
+          ? `Global leaderboard showing rankings. The user is currently ranked ${userRank}${userRank === 1 ? "st" : userRank === 2 ? "nd" : userRank === 3 ? "rd" : "th"} with ${userXP.toLocaleString()} XP. They can view global rankings or friends-only rankings. The user can ask about rankings, how to improve their position, or learning strategies.`
+          : "Global leaderboard showing rankings. The user can view global rankings or friends-only rankings. The user can ask about rankings, how to improve their position, or learning strategies.",
+        data: {
+          userRank,
+          userXP,
+          viewMode: viewMode,
+          topUsers: leaderboardUsers.slice(0, 10).map((user, index) => ({
+            rank: index + 1,
+            userId: user.userId,
+            nickname: user.nickname,
+            xp: user.xp,
+          })),
+        },
       })
     }
-
-    return () => {
-      setPageContext(null)
-    }
-  }, [setPageContext, userRank, userXP])
+  }, [user, userRank, userXP, viewMode, leaderboardUsers, setPageContext])
 
   const getRankIcon = (rank: number) => {
     if (rank === 1) return <Medal className="h-6 w-6 text-yellow-500" />

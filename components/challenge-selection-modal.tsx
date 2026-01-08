@@ -11,7 +11,9 @@ import { useAuth } from "@/components/auth-provider"
 import { getUserCourses, CourseWithProgress } from "@/lib/course-utils"
 import { useRouter } from "next/navigation"
 import { Spinner } from "@/components/ui/spinner"
-import { canAccessCourseQuiz, canAccessModuleQuiz, canAccessLessonQuiz } from "@/lib/quiz-access-utils"
+import { canAccessCourseQuiz, canAccessModuleQuiz } from "@/lib/quiz-access-utils"
+import { createChallenge } from "@/lib/challenge-utils"
+import { sendMessage } from "@/lib/chat-utils"
 import { getUserNexon } from "@/lib/nexon-utils"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 
@@ -35,10 +37,10 @@ export function ChallengeSelectionModal({
   const [courses, setCourses] = useState<CourseWithProgress[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedCourseId, setSelectedCourseId] = useState<string>("")
-  const [selectedQuizType, setSelectedQuizType] = useState<"course" | "module" | "lesson">("course")
+  const [selectedQuizType, setSelectedQuizType] = useState<"course" | "module">("course")
   const [selectedModuleIndex, setSelectedModuleIndex] = useState<number | null>(null)
-  const [selectedLessonIndex, setSelectedLessonIndex] = useState<number | null>(null)
   const [betAmount, setBetAmount] = useState<number>(0)
+  const [expirationHours, setExpirationHours] = useState<string>("48") // Default 48 hours (2 days)
   const [nexon, setNexon] = useState<number>(0)
   const [submitting, setSubmitting] = useState(false)
 
@@ -76,27 +78,33 @@ export function ChallengeSelectionModal({
 
     setSubmitting(true)
     try {
-      // Navigate to quiz page with challenge parameters
-      const quizType = selectedQuizType
-      let quizUrl = ""
+      // Create challenge immediately
+      const challengeId = await createChallenge(
+        user.uid,
+        friendId,
+        selectedCourseId,
+        selectedQuizType,
+        selectedModuleIndex,
+        betAmount,
+        parseInt(expirationHours)
+      )
 
-      if (quizType === "course") {
-        quizUrl = `/quizzes/${selectedCourseId}/quiz?challenge=${friendId}&bet=${betAmount}`
-      } else if (quizType === "module" && selectedModuleIndex !== null) {
-        quizUrl = `/quizzes/${selectedCourseId}/modules/${selectedModuleIndex}/quiz?challenge=${friendId}&bet=${betAmount}`
-      } else if (quizType === "lesson" && selectedModuleIndex !== null && selectedLessonIndex !== null) {
-        quizUrl = `/quizzes/${selectedCourseId}/modules/${selectedModuleIndex}/lessons/${selectedLessonIndex}/quiz?challenge=${friendId}&bet=${betAmount}`
-      } else {
-        alert("Please select all required options")
-        setSubmitting(false)
-        return
-      }
+      // Send challenge message
+      await sendMessage(user.uid, friendId, `Challenge: ${selectedQuizType === "course" ? "Final Quiz" : "Module Quiz"}`, "challenge", challengeId)
+
+      // Emit challenge sent event
+      const { emitQuestEvent } = require("@/lib/event-bus")
+      emitQuestEvent({
+        type: "quest.send_challenge",
+        userId: user.uid,
+        metadata: { challengeId, friendId, betAmount }
+      })
 
       onOpenChange(false)
-      router.push(quizUrl)
-    } catch (error) {
-      console.error("Error starting challenge:", error)
-      alert("Failed to start challenge")
+      router.push(`/friends`)
+    } catch (error: any) {
+      console.error("Error creating challenge:", error)
+      alert(error.message || "Failed to create challenge")
       setSubmitting(false)
     }
   }
@@ -125,7 +133,6 @@ export function ChallengeSelectionModal({
                 // Reset quiz type and selections when course changes
                 setSelectedQuizType("course")
                 setSelectedModuleIndex(null)
-                setSelectedLessonIndex(null)
               }}>
                 <SelectTrigger id="course">
                   <SelectValue placeholder="Select a course" />
@@ -134,10 +141,7 @@ export function ChallengeSelectionModal({
                   {courses.filter((course) => {
                     // Only show courses that have at least one available quiz
                     return canAccessCourseQuiz(course) || 
-                           course.modules.some((_, idx) => canAccessModuleQuiz(course, idx)) ||
-                           course.modules.some((module, moduleIdx) => 
-                             module.lessons.some((_, lessonIdx) => canAccessLessonQuiz(course, moduleIdx, lessonIdx))
-                           )
+                           course.modules.some((_, idx) => canAccessModuleQuiz(course, idx))
                   }).map((course) => (
                     <SelectItem key={course.id} value={course.id}>
                       {course.title}
@@ -151,9 +155,8 @@ export function ChallengeSelectionModal({
             <div className="space-y-2">
               <Label>Quiz Type</Label>
               <RadioGroup value={selectedQuizType} onValueChange={(value) => {
-                setSelectedQuizType(value as "course" | "module" | "lesson")
+                setSelectedQuizType(value as "course" | "module")
                 setSelectedModuleIndex(null)
-                setSelectedLessonIndex(null)
               }}>
                 {selectedCourse && (
                   <>
@@ -191,45 +194,19 @@ export function ChallengeSelectionModal({
                         )}
                       </Label>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem 
-                        value="lesson" 
-                        id="lesson-type"
-                        disabled={!selectedCourse.modules.some((module, moduleIdx) => 
-                          module.lessons.some((_, lessonIdx) => canAccessLessonQuiz(selectedCourse, moduleIdx, lessonIdx))
-                        )}
-                      />
-                      <Label 
-                        htmlFor="lesson-type" 
-                        className={`cursor-pointer ${!selectedCourse.modules.some((module, moduleIdx) => 
-                          module.lessons.some((_, lessonIdx) => canAccessLessonQuiz(selectedCourse, moduleIdx, lessonIdx))
-                        ) ? "opacity-50 cursor-not-allowed" : ""}`}
-                        title={!selectedCourse.modules.some((module, moduleIdx) => 
-                          module.lessons.some((_, lessonIdx) => canAccessLessonQuiz(selectedCourse, moduleIdx, lessonIdx))
-                        ) ? "Complete lessons to unlock lesson quizzes" : ""}
-                      >
-                        Lesson Quiz
-                        {!selectedCourse.modules.some((module, moduleIdx) => 
-                          module.lessons.some((_, lessonIdx) => canAccessLessonQuiz(selectedCourse, moduleIdx, lessonIdx))
-                        ) && (
-                          <span className="ml-2 text-xs text-muted-foreground">(Locked)</span>
-                        )}
-                      </Label>
-                    </div>
                   </>
                 )}
               </RadioGroup>
             </div>
 
-            {/* Module Selection (if module or lesson quiz) */}
-            {selectedQuizType !== "course" && selectedCourse && (
+            {/* Module Selection (if module quiz) */}
+            {selectedQuizType === "module" && selectedCourse && (
               <div className="space-y-2">
                 <Label htmlFor="module">Module</Label>
                 <Select
                   value={selectedModuleIndex?.toString() || ""}
                   onValueChange={(value) => {
                     setSelectedModuleIndex(parseInt(value))
-                    setSelectedLessonIndex(null)
                   }}
                 >
                   <SelectTrigger id="module">
@@ -248,39 +225,6 @@ export function ChallengeSelectionModal({
                             className={!isAccessible ? "opacity-50" : ""}
                           >
                             {module.title.replace(/^Module\s+\d+:\s*/i, "").trim() || module.title}
-                            {!isAccessible && " (Locked)"}
-                          </SelectItem>
-                        )
-                      })}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Lesson Selection (if lesson quiz) */}
-            {selectedQuizType === "lesson" && selectedCourse && selectedModuleIndex !== null && (
-              <div className="space-y-2">
-                <Label htmlFor="lesson">Lesson</Label>
-                <Select
-                  value={selectedLessonIndex?.toString() || ""}
-                  onValueChange={(value) => setSelectedLessonIndex(parseInt(value))}
-                >
-                  <SelectTrigger id="lesson">
-                    <SelectValue placeholder="Select a lesson" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectedCourse.modules[selectedModuleIndex]?.lessons
-                      .map((lesson, index) => ({ lesson, index }))
-                      .map(({ lesson, index }) => {
-                        const isAccessible = canAccessLessonQuiz(selectedCourse, selectedModuleIndex, index)
-                        return (
-                          <SelectItem 
-                            key={index} 
-                            value={index.toString()}
-                            disabled={!isAccessible}
-                            className={!isAccessible ? "opacity-50" : ""}
-                          >
-                            {lesson.title}
                             {!isAccessible && " (Locked)"}
                           </SelectItem>
                         )
@@ -316,6 +260,29 @@ export function ChallengeSelectionModal({
               </p>
             </div>
 
+            {/* Expiration Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="expiration">Invitation Expiration</Label>
+              <Select value={expirationHours} onValueChange={setExpirationHours}>
+                <SelectTrigger id="expiration">
+                  <SelectValue placeholder="Select duration" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 Hour</SelectItem>
+                  <SelectItem value="3">3 Hours</SelectItem>
+                  <SelectItem value="6">6 Hours</SelectItem>
+                  <SelectItem value="12">12 Hours</SelectItem>
+                  <SelectItem value="24">24 Hours (1 Day)</SelectItem>
+                  <SelectItem value="48">48 Hours (2 Days)</SelectItem>
+                  <SelectItem value="72">72 Hours (3 Days)</SelectItem>
+                  <SelectItem value="168">168 Hours (7 Days)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Challenge expires if not completed within this time.
+              </p>
+            </div>
+
             {/* Submit Button */}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -328,8 +295,7 @@ export function ChallengeSelectionModal({
                   !selectedCourseId ||
                   betAmount > nexon ||
                   (selectedQuizType === "course" && selectedCourse && !canAccessCourseQuiz(selectedCourse)) ||
-                  (selectedQuizType === "module" && (selectedModuleIndex === null || (selectedCourse && selectedModuleIndex !== null && !canAccessModuleQuiz(selectedCourse, selectedModuleIndex)))) ||
-                  (selectedQuizType === "lesson" && (selectedModuleIndex === null || selectedLessonIndex === null || (selectedCourse && selectedModuleIndex !== null && selectedLessonIndex !== null && !canAccessLessonQuiz(selectedCourse, selectedModuleIndex, selectedLessonIndex))))
+                  (selectedQuizType === "module" && (selectedModuleIndex === null || (selectedCourse && selectedModuleIndex !== null && !canAccessModuleQuiz(selectedCourse, selectedModuleIndex))))
                 }
               >
                 {submitting ? "Starting..." : "Start Challenge"}

@@ -9,7 +9,7 @@ import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
 import { NameWithColor } from "@/components/name-with-color"
 import { Badge } from "@/components/ui/badge"
 import { SidebarNav } from "@/components/sidebar-nav"
-import { useChatbotContext } from "@/components/chatbot-context-provider"
+import { useChatContext } from "@/context/ChatContext"
 import { useAuth } from "@/components/auth-provider"
 import { getFriends, getFriendRequests, acceptFriendRequest, rejectFriendRequest, searchUsers, removeFriend, FriendInfo, FriendRequestInfo } from "@/lib/friends-utils"
 import { FriendChatModal } from "@/components/friend-chat-modal"
@@ -29,7 +29,7 @@ import {
 
 export default function SocialPage() {
   const { user } = useAuth()
-  const { setPageContext } = useChatbotContext()
+  const { setPageContext } = useChatContext()
   
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState<"friends" | "requests" | "search">("friends")
@@ -117,18 +117,30 @@ export default function SocialPage() {
     return () => clearTimeout(timeoutId)
   }, [searchQuery, user])
 
-  // Set chatbot context
+  // Set chatbot context with real-time social data
   useEffect(() => {
-    setPageContext({
-      type: "generic",
-      pageName: "Social",
-      description: `Social page showing ${friends.length} friends and ${friendRequests.length} pending friend requests. The user can connect with friends, send challenges, and see what their friends are learning. The user can ask about friends, challenges, or social features.`,
-    })
-
-    return () => {
-      setPageContext(null)
+    if (user) {
+      setPageContext({
+        title: "Social",
+        description: `Social page showing ${friends.length} friends and ${friendRequests.length} pending friend requests. The user can connect with friends, send challenges, and see what their friends are learning. The user can ask about friends, challenges, or social features.`,
+        data: {
+          friendsCount: friends.length,
+          friendRequestsCount: friendRequests.length,
+          friends: friends.map((friend) => ({
+            friendId: friend.id,
+            nickname: friend.nickname,
+            avatarUrl: friend.avatarUrl,
+            isOnline: friend.isOnline,
+          })),
+          friendRequests: friendRequests.map((request) => ({
+            requesterId: request.requesterId,
+            requesterNickname: request.requesterNickname,
+            requesterAvatarUrl: request.requesterAvatarUrl,
+          })),
+        },
+      })
     }
-  }, [setPageContext, friends.length, friendRequests.length])
+  }, [user, friends, friendRequests, setPageContext])
 
   const handleAcceptRequest = async (requesterId: string) => {
     if (!user) return

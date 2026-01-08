@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { LayoutDashboard, FileQuestion, Trophy, Menu, X, Library, User, Users, Moon, Sun, ShoppingBag, LogOut } from "lucide-react"
+import { LayoutDashboard, FileQuestion, Trophy, Menu, X, Library, User, Users, Moon, Sun, ShoppingBag, LogOut, Map } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useTheme } from "@/components/theme-provider"
@@ -24,7 +24,7 @@ interface SidebarNavProps {
   leftAction?: React.ReactNode
 }
 
-export function SidebarNav({ currentPath, title = "LearnHub", leftAction }: SidebarNavProps) {
+export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: SidebarNavProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -46,8 +46,7 @@ export function SidebarNav({ currentPath, title = "LearnHub", leftAction }: Side
 
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/" },
-    { icon: Library, label: "Library", href: "/library" },
-    { icon: FileQuestion, label: "Quizzes", href: "/quizzes" },
+    { icon: Map, label: "Journey", href: "/journey" },
     { icon: Trophy, label: "Leaderboard", href: "/leaderboard" },
     { icon: Users, label: "Social", href: "/friends", badge: totalSocialNotifications > 0 ? totalSocialNotifications : undefined },
     { icon: ShoppingBag, label: "Store", href: "/store" },
@@ -99,10 +98,10 @@ export function SidebarNav({ currentPath, title = "LearnHub", leftAction }: Side
       >
         <div className="flex h-full flex-col">
           {/* Logo/Header */}
-          <div className="flex h-16 items-center justify-between border-b border-border px-6">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold text-foreground">LearnHub</h1>
-              <div className="hidden lg:flex items-center gap-1">
+          <div className="flex h-16 items-center justify-center border-b border-border px-4 relative">
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-[1.1rem] font-bold tracking-tighter text-foreground whitespace-nowrap">NexusLearn</h1>
+              <div className="hidden lg:flex items-center gap-0">
                 <NotificationBell align="left" />
                 <Link href="/profile">
                   <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -114,7 +113,7 @@ export function SidebarNav({ currentPath, title = "LearnHub", leftAction }: Side
                 </Button>
               </div>
             </div>
-            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
+            <Button variant="ghost" size="icon" className="lg:hidden absolute right-4" onClick={() => setSidebarOpen(false)}>
               <X className="h-5 w-5" />
             </Button>
           </div>

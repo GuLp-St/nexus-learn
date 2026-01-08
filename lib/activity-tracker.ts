@@ -104,7 +104,9 @@ export async function stopActivityTracking(): Promise<void> {
  * Save current activity session to Firestore
  */
 async function saveActivitySession(): Promise<void> {
-  if (!currentSession) return
+  if (!currentSession || currentSession.startTime === null || currentSession.startTime === undefined) {
+    return
+  }
 
   try {
     const now = Date.now()

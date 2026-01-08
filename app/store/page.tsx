@@ -10,10 +10,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
-import { useChatbotContext } from "@/components/chatbot-context-provider"
+import { useChatContext } from "@/context/ChatContext"
 import { getUserNexon } from "@/lib/nexon-utils"
 import { getAllCosmetics, getCosmeticsByCategory, purchaseCosmetic, equipCosmetic, getUserCosmetics, Cosmetic, CosmeticCategory, getCosmeticPreviewUrl } from "@/lib/cosmetics-utils"
 import { Spinner } from "@/components/ui/spinner"
+import { trackQuestProgress } from "@/lib/daily-quest-utils"
 import { toast } from "sonner"
 import Link from "next/link"
 import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
@@ -24,8 +25,8 @@ import { WallpaperRenderer } from "@/components/wallpapers/wallpaper-renderer"
 
 export default function StorePage() {
   const { user, nickname, loading: authLoading } = useAuth()
+  const { setPageContext } = useChatContext()
   const router = useRouter()
-  const { setPageContext } = useChatbotContext()
   const [nexon, setNexon] = useState<number>(0)
   const [cosmetics, setCosmetics] = useState<Cosmetic[]>([])
   const [userCosmetics, setUserCosmetics] = useState<any>(null)
@@ -59,17 +60,32 @@ export default function StorePage() {
       return
     }
 
+    trackQuestProgress(user.uid, "visit_shop")
     loadData()
-    setPageContext({
-      type: "generic",
-      pageName: "Store",
-      description: "Browse and purchase cosmetics including avatars, frames, wallpapers, and name colors using Nexon currency.",
-    })
+  }, [user, authLoading, router])
 
-    return () => {
-      setPageContext(null)
+  // Set chatbot context with real-time store data
+  useEffect(() => {
+    if (!authLoading && user) {
+      setPageContext({
+        title: "Store",
+        description: "Browse and purchase cosmetics including avatars, frames, wallpapers, and name colors using Nexon currency.",
+        data: {
+          nexon,
+          selectedCategory,
+          cosmetics: cosmetics.filter(c => c.category === selectedCategory).map((cosmetic) => ({
+            id: cosmetic.id,
+            name: cosmetic.name,
+            description: cosmetic.description,
+            price: cosmetic.price,
+            category: cosmetic.category,
+            isOwned: userCosmetics?.[cosmetic.category]?.includes(cosmetic.id) || false,
+          })),
+          userCosmetics,
+        },
+      })
     }
-  }, [user, authLoading, router, setPageContext])
+  }, [user, authLoading, nexon, selectedCategory, cosmetics, userCosmetics, setPageContext])
 
   const loadData = async () => {
     if (!user) return

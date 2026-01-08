@@ -9,16 +9,17 @@ import { NameWithColor } from "@/components/name-with-color"
 import { sendMessage, subscribeToChatMessages, markMessagesAsRead, setTypingStatus, subscribeToTypingStatus, ChatMessage } from "@/lib/chat-utils"
 import { useAuth } from "@/components/auth-provider"
 import { format } from "date-fns"
-import { Send, Check, CheckCheck, Zap, Trophy, Play, Share2, BookOpen, Plus, Clock } from "lucide-react"
+import { Zap, Trophy, Play, Share2, BookOpen, Plus, Clock, X, Check, Trash2, AlertCircle, Send, CheckCheck } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { ChallengeSelectionModal } from "./challenge-selection-modal"
 import { CourseShareModal } from "./course-share-modal"
-import { getChallenge, Challenge } from "@/lib/challenge-utils"
+import { getChallenge, Challenge, subscribeToChallenge, acceptChallenge, rejectChallenge, cancelChallenge } from "@/lib/challenge-utils"
 import { getCourseWithProgress, CourseWithProgress } from "@/lib/course-utils"
 import { copyCourseToUserLibrary } from "@/lib/course-copy-utils"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { NexonIcon } from "./ui/nexon-icon"
+import { toast } from "sonner"
 
 interface FriendChatModalProps {
   open: boolean
@@ -314,49 +315,153 @@ function ChallengeMessageCard({
   const router = useRouter()
   const [challenge, setChallenge] = useState<Challenge | null>(null)
   const [loading, setLoading] = useState(true)
-  const [learningFirst, setLearningFirst] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [timeLeft, setTimeLeft] = useState<string>("")
 
+  // Subscribe to challenge updates
   useEffect(() => {
-    const fetchChallenge = async () => {
-      const data = await getChallenge(challengeId)
+    const unsubscribe = subscribeToChallenge(challengeId, (data) => {
       setChallenge(data)
       setLoading(false)
-    }
-    fetchChallenge()
+    })
+    return () => unsubscribe()
   }, [challengeId])
 
-  const handleLearnFirst = async () => {
-    if (!user || !challenge) return
+  // Timer effect
+  useEffect(() => {
+    if (!challenge) return
 
-    setLearningFirst(true)
+    const updateTimer = () => {
+      const now = new Date().getTime()
+      let targetTime: number | undefined
+
+      if (challenge.status === "pending") {
+        targetTime = challenge.expiresAt?.toMillis()
+      } else if (challenge.status === "accepted") {
+        targetTime = challenge.completionDeadline?.toMillis()
+      }
+
+      if (!targetTime) {
+        setTimeLeft("")
+        return
+      }
+
+      const diff = targetTime - now
+      if (diff <= 0) {
+        setTimeLeft("Expired")
+        return
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+
+      if (days > 0) {
+        setTimeLeft(`${days}d ${hours}h`)
+      } else if (hours > 0) {
+        setTimeLeft(`${hours}h ${minutes}m`)
+      } else {
+        setTimeLeft(`${minutes}m ${seconds}s`)
+      }
+    }
+
+    updateTimer()
+    const interval = setInterval(updateTimer, 1000)
+    return () => clearInterval(interval)
+  }, [challenge])
+
+  const handleAccept = async () => {
+    if (!user || actionLoading) return
+    setActionLoading(true)
+    try {
+      await acceptChallenge(challengeId, user.uid)
+      toast.success("Challenge accepted!")
+    } catch (error: any) {
+      toast.error(error.message || "Failed to accept challenge")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDecline = async () => {
+    if (!user || actionLoading) return
+    setActionLoading(true)
+    try {
+      await rejectChallenge(challengeId)
+      toast.success("Challenge declined")
+    } catch (error: any) {
+      toast.error("Failed to decline challenge")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleCancel = async () => {
+    if (!user || actionLoading) return
+    setActionLoading(true)
+    try {
+      await cancelChallenge(challengeId, user.uid)
+      toast.success("Challenge cancelled")
+    } catch (error: any) {
+      toast.error("Failed to cancel challenge")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleLearnFirst = async () => {
+    if (!user || !challenge || actionLoading) return
+    setActionLoading(true)
     try {
       const newCourseId = await copyCourseToUserLibrary(user.uid, challenge.courseId)
-      router.push(`/courses/${newCourseId}`)
+      router.push(`/journey/${newCourseId}`)
     } catch (error) {
-      console.error("Error copying course:", error)
-      alert("Failed to add course to library. Please try again.")
-      setLearningFirst(false)
+      toast.error("Failed to add course to library")
+    } finally {
+      setActionLoading(false)
     }
   }
 
   if (loading) return <div className="p-4 bg-muted rounded-lg animate-pulse w-48 h-24" />
   if (!challenge) return null
 
+  const isChallenger = user?.uid === challenge.challengerId
+  const isChallenged = user?.uid === challenge.challengedId
   const isCompleted = challenge.status === "completed"
-  const isPending = challenge.status === "pending" || challenge.status === "accepted"
+  const isExpired = challenge.status === "expired"
+  const isRejected = challenge.status === "rejected"
+  
+  // Progress status
+  const challengerPlayed = challenge.hasChallengerPlayed
+  const challengedPlayed = challenge.challengedScore !== null
 
   return (
-    <Card className={`overflow-hidden border-2 ${isOwnMessage ? "border-primary/20 bg-primary/5" : "border-orange-500/20 bg-orange-500/5"}`}>
+    <Card className={`overflow-hidden border-2 w-full max-w-[280px] ${
+      isCompleted ? "border-green-500/20 bg-green-500/5" :
+      isExpired || isRejected ? "border-muted bg-muted/5 opacity-70" :
+      isOwnMessage ? "border-primary/20 bg-primary/5" : "border-orange-500/20 bg-orange-500/5"
+    }`}>
       <CardContent className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Zap className={`h-4 w-4 ${isOwnMessage ? "text-primary" : "text-orange-500"}`} />
-          <span className="font-bold text-sm">QUIZ CHALLENGE</span>
+        {/* Header & Timer */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Zap className={`h-4 w-4 ${isOwnMessage ? "text-primary" : "text-orange-500"}`} />
+            <span className="font-bold text-xs uppercase tracking-wider">Quiz Challenge</span>
+          </div>
+          {timeLeft && !isCompleted && !isExpired && !isRejected && (
+            <div className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+              <Clock className="h-3 w-3" />
+              <span>{timeLeft}</span>
+            </div>
+          )}
         </div>
         
+        {/* Challenge Info */}
         <div className="space-y-1">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground capitalize">
-              {challenge.quizType} Quiz
+            <p className="text-[10px] text-muted-foreground font-medium uppercase">
+              {challenge.quizType === "course" ? "Final Exam" : `Module ${Number(challenge.moduleIndex) + 1} Quiz`}
             </p>
             {challenge.betAmount > 0 && (
               <div className="flex items-center gap-1 bg-primary/10 px-1.5 py-0.5 rounded text-[10px] font-bold text-primary">
@@ -366,52 +471,130 @@ function ChallengeMessageCard({
             )}
           </div>
           <p className="text-sm font-semibold truncate">
-            {isOwnMessage ? `You challenged ${friendNickname}` : `${friendNickname} challenged you`}
+            {isChallenger ? `You challenged ${friendNickname}` : `${friendNickname} challenged you`}
           </p>
         </div>
 
-        {isPending ? (
-          isOwnMessage ? (
-            <Link href={`/challenges/${challengeId}/waiting`}>
-              <Button size="sm" variant="outline" className="w-full text-xs">
-                View Status
-              </Button>
-            </Link>
-          ) : (
+        {/* Dynamic Status / Actions */}
+        <div className="space-y-2">
+          {challenge.status === "pending" && (
+            <>
+              {isChallenger ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground bg-muted/30 p-2 rounded italic">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Waiting for {friendNickname} to accept...</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Link href={`/challenges/${challengeId}/quiz`} className="flex-1">
+                      <Button size="sm" className="w-full text-xs gap-2" disabled={challengerPlayed}>
+                        <Play className="h-3 w-3" />
+                        {challengerPlayed ? "Score Locked" : "Take Quiz"}
+                      </Button>
+                    </Link>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={handleCancel} disabled={actionLoading}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button size="sm" className="flex-1 text-xs gap-2 bg-orange-500 hover:bg-orange-600" onClick={handleAccept} disabled={actionLoading}>
+                    <Check className="h-3 w-3" />
+                    Accept
+                  </Button>
+                  <Button size="sm" variant="outline" className="flex-1 text-xs gap-2" onClick={handleDecline} disabled={actionLoading}>
+                    <X className="h-3 w-3" />
+                    Decline
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+
+          {challenge.status === "accepted" && (
             <div className="space-y-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full text-xs gap-2"
-                onClick={handleLearnFirst}
-                disabled={learningFirst}
-              >
-                <BookOpen className="h-3 w-3" />
-                {learningFirst ? "Adding..." : "Learn First"}
-              </Button>
-              <Link href={`/challenges/${challengeId}/quiz`}>
-                <Button size="sm" className="w-full text-xs gap-2 bg-orange-500 hover:bg-orange-600">
-                  <Play className="h-3 w-3" />
-                  Accept Challenge
-                </Button>
-              </Link>
+              {/* Opponent Progress Info */}
+              <div className="text-[10px] text-muted-foreground bg-muted/30 p-2 rounded space-y-1">
+                {isChallenger ? (
+                  <p className="flex items-center gap-1.5">
+                    {challengedPlayed ? <CheckCheck className="h-3 w-3 text-green-500" /> : <Clock className="h-3 w-3" />}
+                    {challengedPlayed ? `${friendNickname} already locked in answer` : `Waiting for ${friendNickname} to take quiz`}
+                  </p>
+                ) : (
+                  <p className="flex items-center gap-1.5">
+                    {challengerPlayed ? <CheckCheck className="h-3 w-3 text-green-500" /> : <Clock className="h-3 w-3" />}
+                    {challengerPlayed ? `${friendNickname} already locked in score` : `Waiting for ${friendNickname} to take quiz`}
+                  </p>
+                )}
+              </div>
+
+              {/* Player Actions */}
+              {((isChallenger && !challengerPlayed) || (isChallenged && !challengedPlayed)) ? (
+                <div className="flex gap-2">
+                  <Link href={`/challenges/${challengeId}/quiz`} className="flex-1">
+                    <Button size="sm" className="w-full text-xs gap-2">
+                      <Play className="h-3 w-3" />
+                      Take Quiz
+                    </Button>
+                  </Link>
+                  {isChallenged && (
+                    <Button size="sm" variant="outline" className="text-xs gap-2" onClick={handleLearnFirst} disabled={actionLoading}>
+                      <BookOpen className="h-3 w-3" />
+                      Learn
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-2 px-4 bg-green-500/10 rounded-md text-green-600 dark:text-green-400 gap-2">
+                  <CheckCheck className="h-4 w-4" />
+                  <span className="text-xs font-bold uppercase">Score Locked</span>
+                </div>
+              )}
             </div>
-          )
-        ) : isCompleted ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-xs font-medium text-green-600 dark:text-green-400">
-              <Trophy className="h-3 w-3" />
-              <span>Challenge Completed</span>
+          )}
+
+          {isCompleted && (
+            <div className="space-y-2">
+              <div className="flex flex-col items-center justify-center p-3 bg-green-500/10 rounded-lg text-center">
+                <Trophy className="h-6 w-6 text-yellow-500 mb-1" />
+                <p className="text-xs font-bold text-green-600 dark:text-green-400">
+                  {challenge.winnerId === user?.uid ? "YOU WON!" : 
+                   challenge.winnerId === null ? "DRAW!" : "YOU LOST"}
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-4 w-full border-t border-green-500/20 pt-2">
+                  <div className="text-[10px]">
+                    <p className="text-muted-foreground uppercase">You</p>
+                    <p className="font-bold">{isChallenger ? challenge.challengerScore : challenge.challengedScore} pts</p>
+                  </div>
+                  <div className="text-[10px]">
+                    <p className="text-muted-foreground uppercase">{friendNickname}</p>
+                    <p className="font-bold">{isChallenger ? challenge.challengedScore : challenge.challengerScore} pts</p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <Link href={`/challenges/${challengeId}/waiting`}>
-              <Button size="sm" variant="ghost" className="w-full text-xs">
-                View Results
-              </Button>
-            </Link>
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground italic">Challenge {challenge.status}</p>
-        )}
+          )}
+
+          {isExpired && (
+            <div className="flex flex-col items-center justify-center p-3 bg-muted rounded-lg text-center">
+              <Clock className="h-5 w-5 text-muted-foreground mb-1" />
+              <p className="text-xs font-bold text-muted-foreground uppercase">Challenge Expired</p>
+              {challenge.winnerId && (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {challenge.winnerId === user?.uid ? "Won by default" : `${friendNickname} won by default`}
+                </p>
+              )}
+            </div>
+          )}
+
+          {isRejected && (
+            <div className="flex flex-col items-center justify-center p-3 bg-red-500/5 rounded-lg text-center border border-red-500/10">
+              <X className="h-5 w-5 text-red-500/50 mb-1" />
+              <p className="text-xs font-bold text-red-500/50 uppercase">Declined/Cancelled</p>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   )
@@ -479,7 +662,7 @@ function CourseShareMessageCard({
       })
 
       setHasAddedViaThisInvite(true)
-      router.push(`/courses/${newCourseId}`)
+      router.push(`/journey/${newCourseId}`)
     } catch (error) {
       console.error("Error adding course to library:", error)
       alert("Failed to add course to library. Please try again.")
