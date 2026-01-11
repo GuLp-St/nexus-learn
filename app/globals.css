@@ -250,6 +250,55 @@
    COSMETIC STYLES
    ============================================ */
 
+/* Theme - RGB Chroma */
+@keyframes rgb-cycle {
+  0% { background-color: #ef4444; color: white; border-color: #ef4444; }
+  25% { background-color: #eab308; color: black; border-color: #eab308; }
+  50% { background-color: #22c55e; color: white; border-color: #22c55e; }
+  75% { background-color: #3b82f6; color: white; border-color: #3b82f6; }
+  100% { background-color: #ef4444; color: white; border-color: #ef4444; }
+}
+
+@keyframes rgb-cycle-text {
+  0% { color: #ef4444; }
+  25% { color: #eab308; }
+  50% { color: #22c55e; }
+  75% { color: #3b82f6; }
+  100% { color: #ef4444; }
+}
+
+@keyframes rgb-cycle-stroke {
+  0% { stroke: #ef4444; }
+  25% { stroke: #eab308; }
+  50% { stroke: #22c55e; }
+  75% { stroke: #3b82f6; }
+  100% { stroke: #ef4444; }
+}
+
+@keyframes rgb-cycle-border {
+  0% { border-color: #ef4444; }
+  25% { border-color: #eab308; }
+  50% { border-color: #22c55e; }
+  75% { border-color: #3b82f6; }
+  100% { border-color: #ef4444; }
+}
+
+.theme-rgb-chroma .bg-primary {
+  animation: rgb-cycle 10s infinite linear !important;
+}
+
+.theme-rgb-chroma .text-primary {
+  animation: rgb-cycle-text 10s infinite linear !important;
+}
+
+.theme-rgb-chroma .border-primary {
+  animation: rgb-cycle-border 10s infinite linear !important;
+}
+
+.theme-rgb-chroma .stroke-primary {
+  animation: rgb-cycle-stroke 10s infinite linear !important;
+}
+
 /* XP Bar Specific Effects (SVG compatible) */
 .xp-glow-neon-blue {
   stroke: #06b6d4;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { ShoppingBag, Eye, Check, Sparkles, Image, Palette, Frame } from "lucide-react"
+import { ShoppingBag, Eye, Check, Sparkles, Image, Palette, Frame, Paintbrush } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -24,7 +24,7 @@ import { NexonHistoryModal } from "@/components/nexon-history-modal"
 import { WallpaperRenderer } from "@/components/wallpapers/wallpaper-renderer"
 
 export default function StorePage() {
-  const { user, nickname, loading: authLoading } = useAuth()
+  const { user, nickname, refreshProfile, loading: authLoading } = useAuth()
   const { setPageContext } = useChatContext()
   const router = useRouter()
   const [nexon, setNexon] = useState<number>(0)
@@ -87,10 +87,10 @@ export default function StorePage() {
     }
   }, [user, authLoading, nexon, selectedCategory, cosmetics, userCosmetics, setPageContext])
 
-  const loadData = async () => {
+  const loadData = async (showLoading = true) => {
     if (!user) return
     try {
-      setLoading(true)
+      if (showLoading) setLoading(true)
       const [nexonBalance, allCosmetics, userCosmeticData] = await Promise.all([
         getUserNexon(user.uid),
         getAllCosmetics(),
@@ -103,7 +103,7 @@ export default function StorePage() {
       console.error("Error loading store data:", error)
       toast.error("Failed to load store")
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }
 
@@ -113,7 +113,7 @@ export default function StorePage() {
       setPurchasing(cosmeticId)
       await purchaseCosmetic(user.uid, cosmeticId)
       toast.success("Cosmetic purchased!")
-      await loadData()
+      await loadData(false)
     } catch (error: any) {
       console.error("Error purchasing cosmetic:", error)
       toast.error(error.message || "Failed to purchase cosmetic")
@@ -128,7 +128,9 @@ export default function StorePage() {
       setEquipping(cosmeticId)
       await equipCosmetic(user.uid, cosmeticId, category)
       toast.success("Cosmetic equipped!")
-      await loadData()
+      // Refresh profile to update global state (including theme)
+      await refreshProfile()
+      await loadData(false)
     } catch (error: any) {
       console.error("Error equipping cosmetic:", error)
       toast.error(error.message || "Failed to equip cosmetic")
@@ -282,6 +284,7 @@ export default function StorePage() {
     if (selectedCategory === "frame") return userCosmetics?.avatarFrame === cosmeticId
     if (selectedCategory === "wallpaper") return userCosmetics?.wallpaper === cosmeticId
     if (selectedCategory === "nameColor") return userCosmetics?.nameColor === cosmeticId
+    if (selectedCategory === "theme") return userCosmetics?.theme === cosmeticId
     return false
   }
 
@@ -294,6 +297,26 @@ export default function StorePage() {
         </main>
       </div>
     )
+  }
+
+  const getThemePreviewStyle = (cosmetic: Cosmetic) => {
+    if (cosmetic.id === "theme-rgb") {
+      return { animation: "rgb-cycle 10s infinite linear" }
+    }
+    if (cosmetic.id === "theme-noir") {
+      return { backgroundColor: "var(--foreground)" } // Contrast color
+    }
+    return { backgroundColor: cosmetic.config?.primary || "var(--primary)" }
+  }
+
+  const getThemeTextColor = (cosmetic: Cosmetic) => {
+    if (cosmetic.id === "theme-rgb") {
+      return { animation: "rgb-cycle-text 10s infinite linear" }
+    }
+    if (cosmetic.id === "theme-noir") {
+      return { color: "var(--foreground)" }
+    }
+    return { color: cosmetic.config?.primary || "var(--primary)" }
   }
 
   return (
@@ -325,7 +348,7 @@ export default function StorePage() {
 
             {/* Category Tabs */}
             <Tabs value={selectedCategory} onValueChange={(v) => setSelectedCategory(v as CosmeticCategory)}>
-              <TabsList ref={tabsListRef} className="flex h-auto w-full items-center justify-start overflow-x-auto overflow-y-hidden bg-muted p-1 text-muted-foreground md:grid md:grid-cols-4 no-scrollbar">
+              <TabsList ref={tabsListRef} className="flex h-auto w-full items-center justify-start overflow-x-auto overflow-y-hidden bg-muted p-1 text-muted-foreground md:grid md:grid-cols-5 no-scrollbar">
                 <TabsTrigger value="avatar" className="flex items-center gap-2 px-4 py-2 flex-shrink-0 md:flex-shrink">
                   <Sparkles className="h-4 w-4" />
                   Avatars
@@ -341,6 +364,10 @@ export default function StorePage() {
                 <TabsTrigger value="nameColor" className="flex items-center gap-2 px-4 py-2 flex-shrink-0 md:flex-shrink">
                   <Palette className="h-4 w-4" />
                   Name Colors
+                </TabsTrigger>
+                <TabsTrigger value="theme" className="flex items-center gap-2 px-4 py-2 flex-shrink-0 md:flex-shrink">
+                  <Paintbrush className="h-4 w-4" />
+                  Themes
                 </TabsTrigger>
               </TabsList>
 
@@ -400,6 +427,22 @@ export default function StorePage() {
                                 Sample Text
                               </div>
                             )}
+                            {cosmetic.category === "theme" && (
+                              <div className="flex flex-col items-center gap-4 w-full px-4">
+                                <div className="flex gap-2 w-full">
+                                  <div className="h-10 flex-1 rounded-md shadow-sm border border-border flex items-center justify-center text-xs font-bold" style={getThemePreviewStyle(cosmetic)}>
+                                    <span className={cosmetic.id === "theme-noir" ? "text-background" : "text-white"}>BUTTON</span>
+                                  </div>
+                                  <div className="h-10 w-10 rounded-full border-2 border-border" style={getThemePreviewStyle(cosmetic)} />
+                                </div>
+                                <div className="flex items-center gap-2 w-full">
+                                  <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden">
+                                    <div className="h-full w-2/3" style={getThemePreviewStyle(cosmetic)} />
+                                  </div>
+                                  <span className="text-xs font-bold" style={getThemeTextColor(cosmetic)}>75%</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex items-center justify-between">
@@ -419,6 +462,7 @@ export default function StorePage() {
                             {!owned ? (
                               <Button
                                 className="flex-1"
+                                variant="outline"
                                 onClick={() => handlePurchase(cosmetic.id)}
                                 disabled={!canAfford || purchasing === cosmetic.id}
                               >
@@ -446,6 +490,7 @@ export default function StorePage() {
                             ) : !equipped ? (
                               <Button
                                 className="flex-1"
+                                variant="secondary"
                                 onClick={() => handleEquip(cosmetic.id, cosmetic.category)}
                                 disabled={equipping === cosmetic.id}
                               >
@@ -529,7 +574,7 @@ export default function StorePage() {
                 </div>
 
                 {/* Profile Header Preview */}
-                <div className="flex flex-col items-center space-y-6 text-center py-4">
+                <div className={`flex flex-col items-center space-y-6 text-center py-4 rounded-xl transition-colors duration-500`} style={previewCosmetic.category === "theme" ? { border: `2px solid ${previewCosmetic.id === "theme-rgb" ? "transparent" : (previewCosmetic.id === "theme-noir" ? "var(--foreground)" : (previewCosmetic.config?.primary || "var(--primary)"))}` } : {}}>
                   {/* Avatar with Level Progress */}
                   <div className="relative h-40 w-40 flex items-center justify-center">
                     {/* Use CSS-based glitch ring when previewing glitch frame */}
@@ -562,6 +607,7 @@ export default function StorePage() {
                             previewCosmetic.category === "frame" ? previewCosmetic.id : userCosmetics?.avatarFrame
                           )} transition-all duration-1000`}
                           strokeLinecap="round"
+                          style={previewCosmetic.category === "theme" ? getThemeTextColor(previewCosmetic) : {}}
                         />
                       </svg>
                     )}
@@ -577,7 +623,7 @@ export default function StorePage() {
                     {renderStructuralXPFrame(
                       previewCosmetic.category === "frame" ? previewCosmetic.id : userCosmetics?.avatarFrame
                     )}
-                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-4 py-1 text-sm font-bold text-primary-foreground shadow-md z-10">
+                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full px-4 py-1 text-sm font-bold text-primary-foreground shadow-md z-10" style={previewCosmetic.category === "theme" ? getThemePreviewStyle(previewCosmetic) : { backgroundColor: "var(--primary)" }}>
                       Level 10
                     </div>
                   </div>

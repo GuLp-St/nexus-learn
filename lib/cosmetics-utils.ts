@@ -3,7 +3,7 @@ import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs } 
 import { spendNexon, awardNexon } from "./nexon-utils"
 import { generateAvatarUrl, AvatarStyle } from "./avatar-generator"
 
-export type CosmeticCategory = "avatar" | "frame" | "wallpaper" | "nameColor"
+export type CosmeticCategory = "avatar" | "frame" | "wallpaper" | "nameColor" | "theme"
 export type CosmeticRarity = "common" | "uncommon" | "rare" | "epic" | "legendary" | "unique"
 
 export interface Cosmetic {
@@ -21,12 +21,14 @@ export interface UserCosmetics {
   avatarFrame?: string
   wallpaper?: string
   nameColor?: string
+  theme?: string
   avatarSeed?: string
   ownedCosmetics: {
     avatars: string[]
     frames: string[]
     wallpapers: string[]
     nameColors: string[]
+    themes: string[]
   }
 }
 
@@ -123,6 +125,28 @@ const COSMETICS: Cosmetic[] = [
   { id: "name-rgb-gamer", category: "nameColor", rarity: "legendary", price: 1000, name: "RGB Gamer", description: "Animated rainbow gradient", config: { type: "animated", animation: "rgb" } },
   { id: "name-neon", category: "nameColor", rarity: "legendary", price: 1000, name: "Neon", description: "Glowing cyan text", config: { type: "glow", color: "cyan" } },
   { id: "name-glitch", category: "nameColor", rarity: "unique", price: 2000, name: "Glitch", description: "Cyberpunk glitch effect", config: { type: "animated", animation: "glitch" } },
+
+  // Themes - Common
+  { id: "theme-teal", category: "theme", rarity: "common", price: 0, name: "Nexon Teal", description: "The classic Nexus look", config: { primary: "oklch(0.55 0.15 195)" } },
+  { id: "theme-crimson", category: "theme", rarity: "common", price: 50, name: "Crimson Guard", description: "Aggressive, bold, urgent", config: { primary: "#ef4444" } },
+  { id: "theme-blue", category: "theme", rarity: "common", price: 50, name: "Royal Blue", description: "Trustworthy, classic, professional", config: { primary: "#3b82f6" } },
+  { id: "theme-green", category: "theme", rarity: "common", price: 50, name: "Forest Ranger", description: "Natural, calm, growth", config: { primary: "#22c55e" } },
+
+  // Themes - Uncommon
+  { id: "theme-orange", category: "theme", rarity: "uncommon", price: 100, name: "Solar Flare", description: "Energetic, warm, friendly", config: { primary: "#f97316" } },
+  { id: "theme-purple", category: "theme", rarity: "uncommon", price: 100, name: "Amethyst", description: "Creative, mysterious, magical", config: { primary: "#a855f7" } },
+  { id: "theme-pink", category: "theme", rarity: "uncommon", price: 100, name: "Hot Pink", description: "Playful, loud, confident", config: { primary: "#ec4899" } },
+
+  // Themes - Rare
+  { id: "theme-yellow", category: "theme", rarity: "rare", price: 250, name: "Cyber Yellow", description: "Industrial, caution, high-tech", config: { primary: "#eab308" } },
+  { id: "theme-nordic", category: "theme", rarity: "rare", price: 250, name: "Nordic Frost", description: "Minimalist, clean, Scandinavian", config: { primary: "#94a3b8" } },
+  { id: "theme-dracula", category: "theme", rarity: "rare", price: 250, name: "Dracula's Blood", description: "A cult classic for developers", config: { primary: "#ff5555" } },
+
+  // Themes - Epic
+  { id: "theme-noir", category: "theme", rarity: "epic", price: 500, name: "Noir", description: "Luxury, high-fashion, ultra-minimalist", config: { primaryLight: "#171717", primaryDark: "#ffffff" } },
+
+  // Themes - Legendary
+  { id: "theme-rgb", category: "theme", rarity: "legendary", price: 1000, name: "RGB Chroma", description: "The ultimate status symbol", config: { type: "animated", animation: "rgb" } },
 ]
 
 /**
@@ -165,6 +189,7 @@ export async function getUserCosmetics(userId: string): Promise<UserCosmetics> {
           frames: [],
           wallpapers: [],
           nameColors: [],
+          themes: ["theme-teal"],
         },
       }
     }
@@ -175,11 +200,14 @@ export async function getUserCosmetics(userId: string): Promise<UserCosmetics> {
       frames: [],
       wallpapers: [],
       nameColors: [],
+      themes: [],
     }
 
     // Ensure common avatars are always included and normalize all IDs
     const defaultAvatars = ["avatar-initials", "avatar-icons", "avatar-identicon"]
+    const defaultThemes = ["theme-teal"]
     const rawAvatars = Array.isArray(owned.avatars) ? owned.avatars : []
+    const rawThemes = Array.isArray(owned.themes) ? owned.themes : []
     
     // Normalize existing IDs (e.g., "initials" -> "avatar-initials")
     const normalizedOwnedAvatars = rawAvatars.map((id: string) => 
@@ -187,16 +215,19 @@ export async function getUserCosmetics(userId: string): Promise<UserCosmetics> {
     )
     
     const avatars = Array.from(new Set([...normalizedOwnedAvatars, ...defaultAvatars]))
+    const themes = Array.from(new Set([...rawThemes, ...defaultThemes]))
 
     return {
       avatarStyle: data.cosmetics?.avatarStyle || (data.avatarStyle ? (data.avatarStyle.startsWith("avatar-") ? data.avatarStyle : `avatar-${data.avatarStyle}`) : undefined),
       avatarFrame: data.cosmetics?.avatarFrame,
       wallpaper: data.cosmetics?.wallpaper,
       nameColor: data.cosmetics?.nameColor,
+      theme: data.cosmetics?.theme || "theme-teal",
       avatarSeed: data.avatarSeed || data.cosmetics?.avatarSeed,
       ownedCosmetics: {
         ...owned,
         avatars,
+        themes,
       },
     }
   } catch (error) {
@@ -207,6 +238,7 @@ export async function getUserCosmetics(userId: string): Promise<UserCosmetics> {
         frames: [],
         wallpapers: [],
         nameColors: [],
+        themes: ["theme-teal"],
       },
     }
   }
@@ -244,6 +276,7 @@ export async function purchaseCosmetic(userId: string, cosmeticId: string): Prom
       frames: [],
       wallpapers: [],
       nameColors: [],
+      themes: [],
     }
 
     const updatedOwned = {
@@ -284,7 +317,12 @@ export async function equipCosmetic(userId: string, cosmeticId: string, category
 
     // Update equipped cosmetic
     const userRef = doc(db, "users", userId)
-    const cosmeticField = category === "avatar" ? "avatarStyle" : category === "frame" ? "avatarFrame" : category === "wallpaper" ? "wallpaper" : "nameColor"
+    const cosmeticField = 
+      category === "avatar" ? "avatarStyle" : 
+      category === "frame" ? "avatarFrame" : 
+      category === "wallpaper" ? "wallpaper" : 
+      category === "theme" ? "theme" :
+      "nameColor"
 
     await updateDoc(userRef, {
       [`cosmetics.${cosmeticField}`]: cosmeticId,
