@@ -190,7 +190,7 @@ export async function ensureUserProgress(userId: string, courseId: string, isOwn
       allAttempts.forEach(attempt => {
         if (attempt.completedAt && !(attempt as any).abandoned && attempt.maxScore > 0) {
           const score = Math.round((attempt.totalScore / attempt.maxScore) * 100)
-          if (attempt.quizType === "module" && attempt.moduleIndex !== null) {
+          if (attempt.quizType === "module" && attempt.moduleIndex !== null && attempt.moduleIndex !== undefined) {
             const mIndex = attempt.moduleIndex.toString()
             if (!moduleQuizScores[mIndex] || score > moduleQuizScores[mIndex]) {
               moduleQuizScores[mIndex] = score
