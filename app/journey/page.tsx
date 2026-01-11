@@ -6,6 +6,7 @@ import { BookOpen, Play, Trash2, Star, Target } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { LoadingScreen } from "@/components/ui/LoadingScreen"
 import { Spinner } from "@/components/ui/spinner"
 import Link from "next/link"
 import SidebarNav from "@/components/sidebar-nav"
@@ -106,111 +107,135 @@ const CourseCard = ({ course, index, onRemove, onRate, userId }: { course: Cours
   }, [isPublished, isOwnCourse, userId, course.id])
 
   return (
-    <Card className="group overflow-hidden transition-all hover:shadow-lg hover:border-primary/50 relative">
-      <CardContent className="p-6">
-        <div className="space-y-4">
-          <div className="flex items-start justify-between">
-            <div 
-              className="flex items-center gap-3 flex-1 cursor-pointer"
+    <Card className="group overflow-hidden transition-all hover:shadow-lg hover:border-primary/50 relative flex flex-col">
+      {/* Course Image / Header */}
+      <div 
+        className="relative aspect-video w-full cursor-pointer overflow-hidden bg-muted"
+        onClick={() => router.push(`/journey/${course.id}`)}
+      >
+        {course.imageUrl ? (
+          <img 
+            src={course.imageUrl} 
+            alt={course.title} 
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <div
+            className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${color} text-4xl font-bold text-white shadow-sm`}
+          >
+            {initials}
+          </div>
+        )}
+        
+        {/* Overlay for actions */}
+        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+        
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0 duration-200">
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-8 w-8 bg-background/90 backdrop-blur-sm text-muted-foreground hover:text-destructive shadow-lg"
+            onClick={(e) => {
+              e.stopPropagation()
+              onRemove()
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {isNew && (
+          <Badge className="absolute top-2 left-2 bg-primary text-primary-foreground shadow-lg">
+            New
+          </Badge>
+        )}
+
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/30">
+          <div 
+            className="h-full bg-primary transition-all duration-1000 ease-out"
+            style={{ width: `${course.userProgress?.progress || 0}%` }}
+          />
+        </div>
+      </div>
+
+      <CardContent className="p-4 flex-1 flex flex-col">
+        <div className="flex-1 space-y-3">
+          <div className="space-y-1">
+            <h3 
+              className="font-bold text-lg leading-tight group-hover:text-primary transition-colors cursor-pointer line-clamp-1"
               onClick={() => router.push(`/journey/${course.id}`)}
             >
-              <div
-                className={`flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br ${color} text-lg font-bold text-white shadow-sm`}
-              >
-                {initials}
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                  {course.title}
-                </h3>
-                <p className="text-sm text-muted-foreground">{course.userProgress?.progress || 0}% Complete</p>
-                {/* Resume button if user has progress */}
-                {course.userProgress?.lastAccessedModule !== undefined && course.userProgress?.lastAccessedLesson !== undefined && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs mt-2"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (course.userProgress?.lastAccessedModule !== undefined && course.userProgress?.lastAccessedLesson !== undefined) {
-                        router.push(`/journey/${course.id}/modules/${course.userProgress.lastAccessedModule}/lessons/${course.userProgress.lastAccessedLesson}`)
-                      }
-                    }}
-                  >
-                    <Play className="h-3 w-3 mr-1" />
-                    Resume
-                  </Button>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onRemove()
-                }}
-                title="Remove Course"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {course.title}
+            </h3>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{course.userProgress?.progress || 0}% Complete</span>
+              <span>{completedModulesCount}/{course.modules.length} Modules</span>
             </div>
           </div>
 
-          {isNew && (
-            <Badge variant="secondary" className="text-xs">
-              New
-            </Badge>
-          )}
-
-          {isOwnCourse && !isPublished && (
-            <div className="mt-2">
+          <div className="flex flex-wrap gap-2">
+            {course.userProgress?.lastAccessedModule !== undefined && course.userProgress?.lastAccessedLesson !== undefined && (
               <Button
-                variant="outline"
+                variant="default"
                 size="sm"
-                className={`w-full text-xs transition-colors ${
-                  expandedPublish 
-                    ? "bg-primary text-primary-foreground hover:bg-primary/90" 
-                    : "border-primary/50 text-primary hover:bg-primary/5"
-                }`}
+                className="h-8 text-xs flex-1"
                 onClick={(e) => {
                   e.stopPropagation()
-                  setExpandedPublish(!expandedPublish)
+                  router.push(`/journey/${course.id}/modules/${course.userProgress?.lastAccessedModule}/lessons/${course.userProgress?.lastAccessedLesson}`)
                 }}
               >
-                <Upload className="h-3 w-3 mr-1" />
-                {expandedPublish ? "Hide Publish Requirements" : "Publish Course"}
+                <Play className="h-3 w-3 mr-1 fill-current" />
+                Resume
               </Button>
-            </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs flex-1"
+              onClick={() => router.push(`/journey/${course.id}`)}
+            >
+              Details
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t space-y-2">
+          {isOwnCourse && !isPublished && (
+            <Button
+              variant="outline"
+              size="sm"
+              className={`w-full text-xs transition-colors ${
+                expandedPublish 
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary" 
+                  : "border-primary/30 text-primary hover:bg-primary/5"
+              }`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setExpandedPublish(!expandedPublish)
+              }}
+            >
+              <Upload className="h-3 w-3 mr-1" />
+              {expandedPublish ? "Hide Requirements" : "Publish Course"}
+            </Button>
           )}
 
           {isOwnCourse && !isPublished && expandedPublish && (
-            <div className="mt-4 space-y-2 rounded-lg border border-border bg-muted/50 p-4">
+            <div className="space-y-2 rounded-lg bg-muted/50 p-3">
               {checkingReqs ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Spinner className="h-4 w-4" />
-                  Checking requirements...
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                  <Spinner className="h-3 w-3" />
+                  Checking...
                 </div>
               ) : publishReqs ? (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    {publishReqs.canPublish ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-red-500" />
-                    )}
-                    <span>Publish Requirements</span>
-                  </div>
-                  <div className="space-y-1 text-xs text-muted-foreground">
+                  <div className="space-y-1 text-[10px] text-muted-foreground">
                     <div className="flex items-center gap-2">
                       {publishReqs.courseCompleted ? (
                         <CheckCircle2 className="h-3 w-3 text-green-500" />
                       ) : (
                         <AlertCircle className="h-3 w-3 text-red-500" />
                       )}
-                      <span>Course completed (100%)</span>
+                      <span>Completed (100%)</span>
                     </div>
                     <div className="flex items-center gap-2">
                       {publishReqs.quizPassed ? (
@@ -220,27 +245,11 @@ const CourseCard = ({ course, index, onRemove, onRate, userId }: { course: Cours
                       )}
                       <span>Final quiz &gt;70%</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {publishReqs.isLevelFive ? (
-                        <CheckCircle2 className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <AlertCircle className="h-3 w-3 text-red-500" />
-                      )}
-                      <span>Level {publishReqs.currentLevel} (need 5)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {publishReqs.hasEnoughNexon ? (
-                        <CheckCircle2 className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <AlertCircle className="h-3 w-3 text-red-500" />
-                      )}
-                      <span>{publishReqs.currentNexon} Nexon (need 500)</span>
-                    </div>
                   </div>
                   {publishReqs.canPublish && (
-                    <Link href={`/journey/${course.id}/publish`}>
-                      <Button size="sm" className="mt-2 w-full">
-                        Publish Course
+                    <Link href={`/journey/${course.id}/publish`} className="block w-full">
+                      <Button size="sm" className="w-full text-[10px] h-7">
+                        Go to Publish Page
                       </Button>
                     </Link>
                   )}
@@ -250,11 +259,11 @@ const CourseCard = ({ course, index, onRemove, onRate, userId }: { course: Cours
           )}
 
           {isPublished && !isOwnCourse && canReview && !hasRated && (
-            <div className="mt-2">
+            <div className="space-y-1">
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="w-full text-xs"
+                className="w-full text-xs text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50"
                 onClick={() => {
                   setShowReviewHint(true)
                   setTimeout(() => setShowReviewHint(false), 3000)
@@ -262,11 +271,11 @@ const CourseCard = ({ course, index, onRemove, onRate, userId }: { course: Cours
                 }}
               >
                 <Star className="h-3 w-3 mr-1" />
-                Rate this course
+                Rate Course
               </Button>
               {showReviewHint && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Help others by rating this course!
+                <p className="text-[10px] text-center text-muted-foreground">
+                  Help others by rating!
                 </p>
               )}
             </div>

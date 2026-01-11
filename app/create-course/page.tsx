@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Sparkles, Search, BookOpen, Star, Plus, ArrowDown } from "lucide-react"
+import { Sparkles, Search, BookOpen, Star, Plus, ArrowDown, Eye, Clock, Info, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { LoadingScreen } from "@/components/ui/LoadingScreen"
 import { Spinner } from "@/components/ui/spinner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -16,6 +17,15 @@ import { db } from "@/lib/firebase"
 import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore"
 import { createOrGetCourse, PublicCourse } from "@/lib/course-utils"
 import { copyCourseToUserLibrary } from "@/lib/course-copy-utils"
+import { getUnsplashImageByTags } from "@/lib/unsplash-utils"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 
 type SortOption = "popularity" | "newest" | "oldest" | "mostAdded"
 
@@ -39,6 +49,7 @@ export default function CreateCoursePage() {
   const [userCourseIds, setUserCourseIds] = useState<Set<string>>(new Set())
   const [difficultyAnalysis, setDifficultyAnalysis] = useState<TopicDifficultyAnalysis | null>(null)
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyOption | null>(null)
+  const [detailCourse, setDetailCourse] = useState<PublishedCourse | null>(null)
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
   const { setPageContext } = useChatContext()
@@ -204,6 +215,12 @@ export default function CreateCoursePage() {
 
     try {
       const analysis = await analyzeTopicDifficulty(courseInput.trim())
+      
+      if (analysis.errorMessage) {
+        setError(analysis.errorMessage)
+        return
+      }
+
       setDifficultyAnalysis(analysis)
     } catch (err: any) {
       console.error("Error analyzing topic:", err)
@@ -247,6 +264,15 @@ export default function CreateCoursePage() {
         courseData = await generateCourseContent(courseInput.trim())
       }
 
+      // Automatically fetch a relevant Unsplash image
+      try {
+        const imageUrl = await getUnsplashImageByTags(courseData.tags || [], courseData.title)
+        courseData.imageUrl = imageUrl
+      } catch (imageErr) {
+        console.error("Error fetching course image:", imageErr)
+        // Continue without image or with default
+      }
+
       const courseId = await createOrGetCourse(courseData, user.uid)
       router.push(`/journey/${courseId}`)
     } catch (err: any) {
@@ -279,6 +305,10 @@ export default function CreateCoursePage() {
       })
     }
   }, [courses, authLoading, user, setPageContext])
+
+  if (isGenerating) {
+    return <LoadingScreen />
+  }
 
   if (authLoading) {
     return (
@@ -390,28 +420,10 @@ export default function CreateCoursePage() {
                       <CardHeader className="space-y-2">
                         <div className="flex items-start justify-between gap-2">
                           <CardTitle className="text-lg line-clamp-1">{course.title}</CardTitle>
-                          {userCourseIds.has(course.id) ? (
+                          {userCourseIds.has(course.id) && (
                             <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded shrink-0">
                               In Library
                             </span>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                handleAddToLibrary(course.id)
-                              }}
-                              disabled={addingCourseId === course.id}
-                              title="Add to Library"
-                            >
-                              {addingCourseId === course.id ? (
-                                <Spinner className="h-4 w-4" />
-                              ) : (
-                                <Plus className="h-4 w-4" />
-                              )}
-                            </Button>
                           )}
                         </div>
                         <CardDescription className="line-clamp-2">{course.description}</CardDescription>
@@ -430,17 +442,51 @@ export default function CreateCoursePage() {
                           </div>
                         )}
                         <div className="flex items-center justify-between text-sm text-muted-foreground">
-                          {course.averageRating && course.averageRating > 0 && (
+                          <div className="flex items-center gap-3">
+                            {course.averageRating && course.averageRating > 0 && (
+                              <div className="flex items-center gap-1">
+                                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                                <span>{course.averageRating.toFixed(1)}</span>
+                              </div>
+                            )}
                             <div className="flex items-center gap-1">
-                              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                              <span>{course.averageRating.toFixed(1)}</span>
-                              {course.ratingCount && course.ratingCount > 0 && (
-                                <span className="text-muted-foreground/70">({course.ratingCount})</span>
-                              )}
+                              <BookOpen className="h-4 w-4" />
+                              <span>{course.modules?.length || 0} Modules</span>
                             </div>
-                          )}
+                          </div>
                           {course.addedCount !== undefined && (
                             <span>{course.addedCount} added</span>
+                          )}
+                        </div>
+                        
+                        <div className="flex gap-2 pt-2">
+                          <Button
+                            variant="outline"
+                            className="flex-1 gap-2 h-9"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              setDetailCourse(course)
+                            }}
+                          >
+                            <Info className="h-4 w-4" />
+                            Details
+                          </Button>
+                          {!userCourseIds.has(course.id) && (
+                            <Button
+                              className="flex-1 gap-2 h-9"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                handleAddToLibrary(course.id)
+                              }}
+                              disabled={addingCourseId === course.id}
+                            >
+                              {addingCourseId === course.id ? (
+                                <Spinner className="h-4 w-4" />
+                              ) : (
+                                <Plus className="h-4 w-4" />
+                              )}
+                              Add
+                            </Button>
                           )}
                         </div>
                       </CardContent>
@@ -519,18 +565,9 @@ export default function CreateCoursePage() {
                     size="lg"
                     className="gap-2"
                   >
-                    {isGenerating ? (
-                      <>
-                        <Spinner className="h-4 w-4" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4" />
-                          Generate Course
-                        </>
-                      )}
-                    </Button>
+                    <Sparkles className="h-4 w-4" />
+                    Generate Course
+                  </Button>
                   )}
                 </div>
 
@@ -623,6 +660,120 @@ export default function CreateCoursePage() {
           </div>
         </div>
       </main>
+
+      {/* Course Detail Modal */}
+      <Dialog open={!!detailCourse} onOpenChange={(open) => !open && setDetailCourse(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {detailCourse && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center justify-between mb-2 pr-8">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                    detailCourse.difficulty === "beginner" ? "bg-green-500/10 text-green-600" :
+                    detailCourse.difficulty === "intermediate" ? "bg-yellow-500/10 text-yellow-600" :
+                    "bg-red-500/10 text-red-600"
+                  }`}>
+                    {detailCourse.difficulty}
+                  </span>
+                  {detailCourse.averageRating && detailCourse.averageRating > 0 && (
+                    <div className="flex items-center gap-1 text-sm font-medium">
+                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                      <span>{detailCourse.averageRating.toFixed(1)}</span>
+                    </div>
+                  )}
+                </div>
+                <DialogTitle className="text-2xl font-bold">{detailCourse.title}</DialogTitle>
+                <DialogDescription className="text-base pt-2">
+                  {detailCourse.description}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6 py-4">
+                {/* Course Meta Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
+                    <Clock className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Duration</p>
+                      <p className="text-sm font-semibold">{detailCourse.estimatedDuration || "N/A"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
+                    <BookOpen className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Modules</p>
+                      <p className="text-sm font-semibold">{detailCourse.modules?.length || 0} Modules</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
+                    <Plus className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Added By</p>
+                      <p className="text-sm font-semibold">{detailCourse.addedCount || 0} Learners</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tag Cloud */}
+                {detailCourse.tags && detailCourse.tags.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Topics</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {detailCourse.tags.map((tag) => (
+                        <span key={tag} className="px-3 py-1 rounded-full bg-primary/5 border border-primary/10 text-xs font-medium text-primary">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Module List Sneak Peek */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Curriculum</h4>
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    {detailCourse.modules?.map((module, idx) => (
+                      <div key={idx} className="flex items-start gap-3 p-3 rounded-lg border bg-card/50">
+                        <div className="h-6 w-6 rounded bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                          {idx + 1}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold line-clamp-1">{module.title}</p>
+                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{module.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
+                <Button variant="ghost" onClick={() => setDetailCourse(null)}>
+                  Close
+                </Button>
+                {!userCourseIds.has(detailCourse.id) ? (
+                <Button
+                  className="gap-2"
+                  onClick={() => {
+                    handleAddToLibrary(detailCourse.id)
+                    setDetailCourse(null)
+                  }}
+                  disabled={addingCourseId === detailCourse.id}
+                >
+                  {addingCourseId === detailCourse.id ? <Spinner className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                  Add to Library
+                </Button>
+                ) : (
+                  <Button variant="secondary" disabled className="gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Already in Library
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

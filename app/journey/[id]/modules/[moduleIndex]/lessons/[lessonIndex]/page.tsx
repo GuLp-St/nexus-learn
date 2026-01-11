@@ -6,6 +6,7 @@ import { ArrowLeft, CheckCircle2, Clock, Sparkles, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
+import { LoadingScreen } from "@/components/ui/LoadingScreen"
 import Link from "next/link"
 import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
@@ -698,13 +699,17 @@ export default function LessonPage() {
     }
   }, [course, lessonStream, currentBlockIndex, moduleIndex, lessonIndex, loading, generating, user, setPageContext])
 
-  if (loading || generating) {
+  if (generating) {
+    return <LoadingScreen />
+  }
+
+  if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-center space-y-4">
           <Spinner className="h-8 w-8 mx-auto" />
           <p className="text-muted-foreground">
-            {generating ? "Generating lesson content..." : "Loading lesson..."}
+            Loading lesson...
           </p>
         </div>
       </div>

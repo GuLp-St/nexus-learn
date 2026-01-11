@@ -1,51 +1,74 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
-import { Search, X } from "lucide-react"
+import { Search, X, AlertCircle } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface UnsplashImagePickerProps {
   value: string
   onChange: (url: string) => void
 }
 
-// Using Unsplash Source API (no API key needed for basic usage)
-const UNSPLASH_SOURCE_URL = "https://source.unsplash.com"
+const ACCESS_KEY = process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY
 
 export function UnsplashImagePicker({ value, onChange }: UnsplashImagePickerProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [isOpen, setIsOpen] = useState(false)
   const [selectedUrl, setSelectedUrl] = useState(value)
   const [searchResults, setSearchResults] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Generate placeholder image URLs based on search query
-  const generateImageUrls = (query: string): string[] => {
-    if (!query.trim()) {
-      // Default images if no search
-      return [
-        `${UNSPLASH_SOURCE_URL}/800x450/?education`,
-        `${UNSPLASH_SOURCE_URL}/800x450/?learning`,
-        `${UNSPLASH_SOURCE_URL}/800x450/?study`,
-        `${UNSPLASH_SOURCE_URL}/800x450/?books`,
-        `${UNSPLASH_SOURCE_URL}/800x450/?knowledge`,
-        `${UNSPLASH_SOURCE_URL}/800x450/?course`,
-      ]
+  const fetchImages = async (query: string = "") => {
+    if (!ACCESS_KEY) {
+      setError("Unsplash Access Key is missing. Please add NEXT_PUBLIC_UNSPLASH_ACCESS_KEY to your .env.local file.")
+      return
     }
 
-    // Generate images based on search query
-    const keywords = query.trim().toLowerCase().replace(/\s+/g, ",")
-    return Array.from({ length: 6 }, (_, i) => 
-      `${UNSPLASH_SOURCE_URL}/800x450/?${keywords}&sig=${i}`
-    )
+    setLoading(true)
+    setError(null)
+    try {
+      // Use search endpoint if query is provided, otherwise get editorial photos
+      const endpoint = query 
+        ? `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=12`
+        : `https://api.unsplash.com/photos?per_page=12`
+      
+      const response = await fetch(endpoint, {
+        headers: {
+          Authorization: `Client-ID ${ACCESS_KEY}`
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.errors?.[0] || "Failed to fetch images from Unsplash")
+      }
+      
+      const data = await response.json()
+      const results = query ? data.results : data
+      
+      if (Array.isArray(results)) {
+        setSearchResults(results.map((img: any) => img.urls.regular))
+      } else {
+        setSearchResults([])
+      }
+    } catch (err: any) {
+      console.error("Error fetching images:", err)
+      setError(err.message || "Failed to load images. Please check your API key.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleSearch = () => {
-    const urls = generateImageUrls(searchQuery)
-    setSearchResults(urls)
+    if (searchQuery.trim()) {
+      fetchImages(searchQuery)
+    }
   }
 
   const handleSelectImage = (url: string) => {
@@ -58,6 +81,13 @@ export function UnsplashImagePicker({ value, onChange }: UnsplashImagePickerProp
     setSelectedUrl("")
     onChange("")
   }
+
+  // Load initial images when dialog opens
+  useEffect(() => {
+    if (isOpen && searchResults.length === 0 && !loading && !error) {
+      fetchImages("education") // Default search for education
+    }
+  }, [isOpen])
 
   return (
     <div className="space-y-2">
@@ -87,29 +117,23 @@ export function UnsplashImagePicker({ value, onChange }: UnsplashImagePickerProp
       <Button
         type="button"
         variant="outline"
-        onClick={() => {
-          setIsOpen(true)
-          if (!searchResults.length) {
-            const urls = generateImageUrls(searchQuery)
-            setSearchResults(urls)
-          }
-        }}
+        onClick={() => setIsOpen(true)}
         className="w-full"
       >
         <Search className="h-4 w-4 mr-2" />
-        {selectedUrl ? "Change Image" : "Select Image"}
+        {selectedUrl ? "Change Image" : "Select Image from Unsplash"}
       </Button>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Select Course Image</DialogTitle>
             <DialogDescription>
-              Search for an image or browse suggested images
+              Search high-quality images from Unsplash for your course
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
             {/* Search */}
             <div className="flex gap-2">
               <Input
@@ -121,44 +145,56 @@ export function UnsplashImagePicker({ value, onChange }: UnsplashImagePickerProp
                     handleSearch()
                   }
                 }}
-                placeholder="Search for images (e.g., 'programming', 'math', 'science')"
+                placeholder="Search for images (e.g., 'programming', 'science', 'art')"
               />
-              <Button onClick={handleSearch}>
-                <Search className="h-4 w-4" />
+              <Button onClick={handleSearch} disabled={loading}>
+                {loading ? <Spinner className="h-4 w-4" /> : <Search className="h-4 w-4" />}
               </Button>
             </div>
 
-            {/* Image Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {searchResults.map((url, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => handleSelectImage(url)}
-                  className="relative group aspect-video rounded-md overflow-hidden border-2 hover:border-primary transition-colors"
-                >
-                  <img
-                    src={url}
-                    alt={`Option ${index + 1}`}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                  {selectedUrl === url && (
-                    <div className="absolute inset-0 bg-primary/20 border-2 border-primary" />
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {!searchResults.length && (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>Enter a search term and click search to find images</p>
-              </div>
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
+
+            {/* Image Grid */}
+            <div className="flex-1 overflow-y-auto">
+              {loading ? (
+                <div className="flex items-center justify-center h-64">
+                  <Spinner className="h-8 w-8" />
+                </div>
+              ) : searchResults.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-1">
+                  {searchResults.map((url, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => handleSelectImage(url)}
+                      className="relative group aspect-video rounded-md overflow-hidden border-2 hover:border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <img
+                        src={url}
+                        alt={`Unsplash result ${index + 1}`}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                      {selectedUrl === url && (
+                        <div className="absolute inset-0 bg-primary/20 border-2 border-primary" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : !error && (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p>No images found. Try a different search term.</p>
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
     </div>
   )
 }
-

@@ -137,6 +137,28 @@
     }
   }
 
+  @keyframes float-pulse {
+    0%, 100% {
+      transform: translateY(0);
+      filter: drop-shadow(0 0 0px rgba(var(--primary), 0));
+    }
+    50% {
+      transform: translateY(-10px);
+      filter: drop-shadow(0 0 15px var(--primary));
+    }
+  }
+
+  @keyframes shadow-pulse {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 0.4;
+    }
+    50% {
+      transform: scale(0.6);
+      opacity: 0.2;
+    }
+  }
+
   @keyframes count-up {
     from {
       opacity: 0;
@@ -184,6 +206,14 @@
 
 .animate-float {
   animation: float 3s ease-in-out infinite;
+}
+
+.animate-float-pulse {
+  animation: float-pulse 2s ease-in-out infinite;
+}
+
+.animate-shadow-pulse {
+  animation: shadow-pulse 2s ease-in-out infinite;
 }
 
 .animate-scale-up-center {

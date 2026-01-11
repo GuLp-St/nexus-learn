@@ -41,6 +41,7 @@ export interface CourseData {
   difficulty: "beginner" | "intermediate" | "expert"
   xpMultiplier: number
   tags?: string[]
+  imageUrl?: string
 }
 
 export interface DifficultyOption {
@@ -59,6 +60,8 @@ export interface TopicDifficultyAnalysis {
   modules?: number
   lessonsPerModule?: number[]
   xpMultiplier?: number
+  errorType?: "gibberish" | "too_broad" | "too_simple" | "invalid"
+  errorMessage?: string
 }
 
 export interface LessonSlide {
@@ -139,9 +142,23 @@ export async function analyzeTopicDifficulty(topic: string): Promise<TopicDiffic
 
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
 
-  const prompt = `Analyze the topic "${topic}" and determine if it can be split into different difficulty levels (beginner, intermediate, expert).
+  const prompt = `Analyze the topic "${topic}" and determine if it is a valid educational topic and how it can be structured.
 
-If the topic is complex enough to have variable difficulty, return:
+1. If the input is gibberish, nonsense, or has extreme spelling errors (e.g., "guei", "asdf"), return:
+{
+  "hasVariableDifficulty": false,
+  "errorType": "gibberish",
+  "errorMessage": "This topic seems unclear. Please check your spelling or try a different term."
+}
+
+2. If the topic is way too broad to be a single course (e.g., "house", "life", "world", "thing"), return:
+{
+  "hasVariableDifficulty": false,
+  "errorType": "too_broad",
+  "errorMessage": "This topic is very broad. Could you please provide more detail or specify a sub-topic (e.g., 'Modern House Architecture' instead of 'house')?"
+}
+
+3. If the topic is complex enough to have variable difficulty (beginner, intermediate, expert), return:
 {
   "hasVariableDifficulty": true,
   "options": [
@@ -169,7 +186,7 @@ If the topic is complex enough to have variable difficulty, return:
   ]
 }
 
-If the topic is simple or doesn't have variable difficulty (e.g., "how to walk", trivial topics), return:
+4. If the topic is valid but simple/specific (e.g., "how to bake a cake", "basic arithmetic"), return:
 {
   "hasVariableDifficulty": false,
   "title": "Single course title",

@@ -153,76 +153,102 @@ export async function ensureUserProgress(userId: string, courseId: string, isOwn
   const courseCreatedBy = courseData?.createdBy
   
   if (!progressDoc.exists()) {
-    // If addedFrom is set and equals courseId, this is a fresh add from community library - reset progress
-    // Otherwise, try to restore progress if course was previously removed
-    const isFreshCommunityAdd = addedFrom === courseId && !isOwnCourse
+    // We always try to restore progress if it exists in the detailed records
+    // (userCompletedItems and userLessonProgress), even for community courses.
     
     let completedLessons: string[] = []
     let totalLessons = 0
     let lastAccessedModule: number | undefined
     let lastAccessedLesson: number | undefined
+    let moduleQuizScores: { [key: string]: number } = {}
+    let finalQuizScore: number | undefined
+    let claimedRewards: { [key: string]: string[] } = {}
     
-    if (!isFreshCommunityAdd) {
-      // Only restore progress if not a fresh community add
-      try {
-        // Query userCompletedItems for all lessons in this course
-        const completedQuery = query(
-          collection(db, "userCompletedItems"),
-          where("userId", "==", userId),
-          where("courseId", "==", courseId),
-          where("itemType", "==", "lesson")
-        )
-        const completedSnapshot = await getDocs(completedQuery)
+    try {
+      // Query permanent rewards to restore
+      const permanentRef = doc(db, "userPermanentRewards", `${userId}-${courseId}`)
+      const permanentDoc = await getDoc(permanentRef)
+      if (permanentDoc.exists()) {
+        const data = permanentDoc.data()
+        claimedRewards = data.claimedRewards || {}
         
-        const completedSet = new Set<string>()
-        completedSnapshot.forEach((docSnap) => {
-          const data = docSnap.data()
-          if (data.moduleIndex !== undefined && data.moduleIndex !== null && 
-              data.lessonIndex !== undefined && data.lessonIndex !== null) {
-            completedSet.add(`${data.moduleIndex}-${data.lessonIndex}`)
+        // Robustness: also check for flattened keys if they were accidentally created
+        Object.keys(data).forEach(key => {
+          if (key.startsWith("claimedRewards.")) {
+            const typeKey = key.replace("claimedRewards.", "")
+            if (!claimedRewards[typeKey]) {
+              claimedRewards[typeKey] = data[key]
+            }
           }
         })
+      }
 
-        // Also check userLessonProgress for lessons that might not have reached userCompletedItems yet
-        const lessonProgressQuery = query(
-          collection(db, "userLessonProgress"),
-          where("userId", "==", userId),
-          where("courseId", "==", courseId)
-        )
-        const lpSnapshot = await getDocs(lessonProgressQuery)
-        
-        let latestLp: any = null
-        lpSnapshot.forEach((docSnap) => {
-          const data = docSnap.data()
-          if (data.completed) {
-            completedSet.add(`${data.moduleIndex}-${data.lessonIndex}`)
-          }
-          // Track the most recently updated progress for lastAccessed restoration
-          if (!latestLp || (data.updatedAt && latestLp.updatedAt && data.updatedAt.toMillis() > latestLp.updatedAt.toMillis())) {
-            latestLp = data
-          }
-        })
-
-        completedLessons = Array.from(completedSet)
-        
-        if (latestLp) {
-          lastAccessedModule = latestLp.moduleIndex
-          lastAccessedLesson = latestLp.lessonIndex
-        }
-
-        // Calculate total lessons from course data
-        if (courseData && Array.isArray(courseData.modules)) {
-          for (const module of courseData.modules) {
-            if (Array.isArray(module.lessons)) {
-              totalLessons += module.lessons.length
+      // Query quizAttempts to restore scores
+      const { getQuizAttempts } = await import("./quiz-utils")
+      const allAttempts = await getQuizAttempts(userId, courseId)
+      
+      allAttempts.forEach(attempt => {
+        if (attempt.completedAt && !(attempt as any).abandoned && attempt.maxScore > 0) {
+          const score = Math.round((attempt.totalScore / attempt.maxScore) * 100)
+          if (attempt.quizType === "module" && attempt.moduleIndex !== null) {
+            const mIndex = attempt.moduleIndex.toString()
+            if (!moduleQuizScores[mIndex] || score > moduleQuizScores[mIndex]) {
+              moduleQuizScores[mIndex] = score
+            }
+          } else if (attempt.quizType === "course") {
+            if (finalQuizScore === undefined || score > finalQuizScore) {
+              finalQuizScore = score
             }
           }
         }
-      } catch (error) {
-        console.error("Error restoring progress:", error)
+      })
+
+      // Query userCompletedItems for all lessons in this course
+      const completedQuery = query(
+        collection(db, "userCompletedItems"),
+        where("userId", "==", userId),
+        where("courseId", "==", courseId),
+        where("itemType", "==", "lesson")
+      )
+      const completedSnapshot = await getDocs(completedQuery)
+      
+      const completedSet = new Set<string>()
+      completedSnapshot.forEach((docSnap) => {
+        const data = docSnap.data()
+        if (data.moduleIndex !== undefined && data.moduleIndex !== null && 
+            data.lessonIndex !== undefined && data.lessonIndex !== null) {
+          completedSet.add(`${data.moduleIndex}-${data.lessonIndex}`)
+        }
+      })
+
+      // Also check userLessonProgress for lessons that might not have reached userCompletedItems yet
+      const lessonProgressQuery = query(
+        collection(db, "userLessonProgress"),
+        where("userId", "==", userId),
+        where("courseId", "==", courseId)
+      )
+      const lpSnapshot = await getDocs(lessonProgressQuery)
+      
+      let latestLp: any = null
+      lpSnapshot.forEach((docSnap) => {
+        const data = docSnap.data()
+        if (data.completed) {
+          completedSet.add(`${data.moduleIndex}-${data.lessonIndex}`)
+        }
+        // Track the most recently updated progress for lastAccessed restoration
+        if (!latestLp || (data.updatedAt && latestLp.updatedAt && data.updatedAt.toMillis() > latestLp.updatedAt.toMillis())) {
+          latestLp = data
+        }
+      })
+
+      completedLessons = Array.from(completedSet)
+      
+      if (latestLp) {
+        lastAccessedModule = latestLp.moduleIndex
+        lastAccessedLesson = latestLp.lessonIndex
       }
-    } else {
-      // For fresh community adds, calculate total lessons but start with 0 progress
+
+      // Calculate total lessons from course data
       if (courseData && Array.isArray(courseData.modules)) {
         for (const module of courseData.modules) {
           if (Array.isArray(module.lessons)) {
@@ -230,6 +256,8 @@ export async function ensureUserProgress(userId: string, courseId: string, isOwn
           }
         }
       }
+    } catch (error) {
+      console.error("Error restoring progress:", error)
     }
 
     const progressPercent = totalLessons > 0 ? Math.min(100, Math.round((completedLessons.length / totalLessons) * 100)) : 0
@@ -239,6 +267,9 @@ export async function ensureUserProgress(userId: string, courseId: string, isOwn
       courseId,
       progress: progressPercent,
       completedLessons,
+      moduleQuizScores,
+      finalQuizScore: finalQuizScore || null,
+      claimedRewards,
       createdAt: serverTimestamp(),
       lastAccessed: serverTimestamp(),
       isOwnCourse: isOwnCourse || (courseCreatedBy === userId),

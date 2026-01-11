@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import { LoadingScreen } from "@/components/ui/LoadingScreen"
 import { Sparkles, Star, Plus } from "lucide-react"
 import { getAISuggestedCourses, CourseSuggestion } from "@/lib/ai-suggestion-utils"
 import { PublicCourse, createOrGetCourse } from "@/lib/course-utils"
@@ -12,6 +13,7 @@ import { copyCourseToUserLibrary } from "@/lib/course-copy-utils"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { generateCourseContent } from "@/lib/gemini"
+import { getUnsplashImageByTags } from "@/lib/unsplash-utils"
 
 export function AISuggestedCourseCard() {
   const { user } = useAuth()
@@ -53,6 +55,15 @@ export function AISuggestedCourseCard() {
       } else {
         // AI suggested name - generate full content first
         const courseData = await generateCourseContent(suggestion.title)
+        
+        // Automatically fetch a relevant Unsplash image
+        try {
+          const imageUrl = await getUnsplashImageByTags(courseData.tags || [], courseData.title)
+          courseData.imageUrl = imageUrl
+        } catch (imageErr) {
+          console.error("Error fetching course image:", imageErr)
+        }
+
         const newCourseId = await createOrGetCourse(courseData, user.uid)
         router.push(`/journey/${newCourseId}`)
       }
@@ -103,7 +114,9 @@ export function AISuggestedCourseCard() {
   }
 
   return (
-    <Card className="h-full flex flex-col">
+    <>
+      {actionId && <LoadingScreen />}
+      <Card className="h-full flex flex-col">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Sparkles className="h-5 w-5 text-primary" />
@@ -162,11 +175,7 @@ export function AISuggestedCourseCard() {
                   onClick={() => handleAction(suggestion, index)}
                   disabled={!!actionId}
                 >
-                  {isProcessing ? (
-                    <Spinner className="h-4 w-4" />
-                  ) : (
-                    <Plus className="h-4 w-4" />
-                  )}
+                  <Plus className="h-4 w-4" />
                 </Button>
               </div>
             )
@@ -174,6 +183,7 @@ export function AISuggestedCourseCard() {
         </div>
       </CardContent>
     </Card>
+    </>
   )
 }
 

@@ -1,5 +1,5 @@
 import { db } from "./firebase"
-import { doc, getDoc, updateDoc, serverTimestamp, arrayUnion } from "firebase/firestore"
+import { doc, getDoc, updateDoc, serverTimestamp, arrayUnion, setDoc } from "firebase/firestore"
 import { awardXP, XPAwardResult } from "./xp-utils"
 import { awardNexon } from "./nexon-utils"
 
@@ -75,12 +75,25 @@ export async function hasClaimedReward(
     const progressDoc = await getDoc(progressRef)
     
     if (!progressDoc.exists()) {
+      // Safety net: Check permanent record if progress doc is missing or hasn't been restored yet
+      const permanentRef = doc(db, "userPermanentRewards", `${userId}-${courseId}`)
+      const permanentDoc = await getDoc(permanentRef)
+      if (permanentDoc.exists()) {
+        const data = permanentDoc.data()
+        const claimedRewards = data.claimedRewards || {}
+        const typeKey = `${rewardType}_${rewardKey}`
+        // Check both nested and flattened keys
+        const claimedTiers = claimedRewards[typeKey] || data[`claimedRewards.${typeKey}`] || []
+        return claimedTiers.includes(tier)
+      }
       return false
     }
 
-    const claimedRewards = progressDoc.data().claimedRewards || {}
+    const data = progressDoc.data()
+    const claimedRewards = data.claimedRewards || {}
     const typeKey = `${rewardType}_${rewardKey}`
-    const claimedTiers = claimedRewards[typeKey] || []
+    // Check both nested and flattened keys here too for extra safety
+    const claimedTiers = claimedRewards[typeKey] || data[`claimedRewards.${typeKey}`] || []
     return claimedTiers.includes(tier)
   } catch (error) {
     console.error("Error checking claimed reward:", error)
@@ -155,12 +168,36 @@ export async function claimReward(
       )
     }
 
-    // Mark as claimed
+    // Mark as claimed in both current progress and permanent record
     const progressRef = doc(db, "userCourseProgress", `${userId}-${courseId}`)
+    const permanentRef = doc(db, "userPermanentRewards", `${userId}-${courseId}`)
     const typeKey = `${rewardType}_${rewardKey}`
-    await updateDoc(progressRef, {
+    
+    const updates = {
       [`claimedRewards.${typeKey}`]: arrayUnion(tier),
-    })
+    }
+
+    // Update current progress
+    await updateDoc(progressRef, updates)
+
+    // Update permanent record (ensure it exists first)
+    try {
+      const permanentDoc = await getDoc(permanentRef)
+      if (!permanentDoc.exists()) {
+        await setDoc(permanentRef, {
+          claimedRewards: { [typeKey]: [tier] },
+          updatedAt: serverTimestamp()
+        })
+      } else {
+        await updateDoc(permanentRef, {
+          ...updates,
+          updatedAt: serverTimestamp()
+        })
+      }
+    } catch (permError) {
+      console.error("Error updating permanent rewards:", permError)
+      // Don't fail the whole claim if permanent storage fails, but log it
+    }
 
     return {
       xpAwarded: xpResult,

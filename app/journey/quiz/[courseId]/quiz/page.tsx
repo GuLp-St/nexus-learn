@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
+import { LoadingScreen } from "@/components/ui/LoadingScreen"
 import Link from "next/link"
 import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
@@ -476,13 +477,17 @@ export default function CourseQuizPage() {
     }
   }
 
-  if (loading || generating) {
+  if (generating) {
+    return <LoadingScreen />
+  }
+
+  if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-center space-y-4">
           <Spinner className="h-8 w-8 mx-auto" />
           <p className="text-muted-foreground">
-            {generating ? "Generating questions..." : "Loading quiz..."}
+            Loading quiz...
           </p>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Lock, CheckCircle2, Play, BookOpen, GraduationCap, Castle, Flag, XCircle, RotateCcw, Eye, Gift, FileQuestion, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { CourseWithProgress } from "@/lib/course-utils"
 import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
 import { useAuth } from "@/components/auth-provider"
@@ -20,7 +21,6 @@ import {
 } from "@/components/ui/dialog"
 import { getAvailableTiers, hasClaimedReward, claimReward, type RewardTier } from "@/lib/reward-utils"
 import { useXP } from "@/components/xp-context-provider"
-import { Spinner } from "@/components/ui/spinner"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 import { getUserNexon, spendNexon } from "@/lib/nexon-utils"
 import { db } from "@/lib/firebase"
@@ -36,6 +36,7 @@ const LESSON_NODE_SIZE = 32
 const QUIZ_NODE_SIZE = 40
 const FINAL_NODE_SIZE = 56
 const FINAL_CARD_MIN_HEIGHT = MODULE_CARD_HEIGHT + 80
+const LESSON_SPACING = 100
 
 // Module colors
 const MODULE_COLORS = [
@@ -56,57 +57,51 @@ function getGradeFromScore(score: number): string {
   return "D"
 }
 
-// Generate sine wave path points within card bounds (with horizontal padding)
-// Includes extension for quiz node at the end
-function generateWavePath(lessonCount: number): string {
-  if (lessonCount === 0) return ""
-  
-  const padding = 8 // left padding to keep avatar inside card
-  const usableWidth = 80 // percentage reserved for lesson nodes before quiz
-  const width = usableWidth
-  const amplitude = 30 // percentage
-  const baseY = 50 // percentage
+// Generate sine wave path points within card bounds
+function generateWavePath(lessonCount: number, nodePositions: Array<{ x: number; y: number }>): string {
+  if (lessonCount === 0 || nodePositions.length === 0) return ""
   
   let path = ""
   for (let i = 0; i < lessonCount; i++) {
-    const x = padding + (i / (lessonCount - 1 || 1)) * width
-    const y = baseY + Math.sin(i * 0.8) * amplitude
+    const { x, y } = nodePositions[i]
     
     if (i === 0) {
       path += `M ${x} ${y}`
     } else {
-      const prevX = padding + ((i - 1) / (lessonCount - 1 || 1)) * width
-      const prevY = baseY + Math.sin((i - 1) * 0.8) * amplitude
-      const midX = (prevX + x) / 2
-      path += ` Q ${midX} ${prevY}, ${midX} ${(prevY + y) / 2} Q ${midX} ${y}, ${x} ${y}`
+      const prev = nodePositions[i - 1]
+      const midX = (prev.x + x) / 2
+      path += ` Q ${midX} ${prev.y}, ${midX} ${(prev.y + y) / 2} Q ${midX} ${y}, ${x} ${y}`
     }
   }
   
   // Add connector line to quiz node at the end
   if (lessonCount > 0) {
-    const lastX = padding + width
-    const lastY = baseY + Math.sin((lessonCount - 1) * 0.8) * amplitude
-    const quizX = 95 // leave small padding from the right wall
-    const quizY = lastY // Keep quiz at same Y level as last lesson
-    path += ` L ${quizX} ${quizY}`
+    const last = nodePositions[lessonCount - 1]
+    const quizX = last.x + 12 // % offset
+    const quizY = last.y + 15 // % offset
+    
+    // Make the final line squiggly too
+    const midX = (last.x + quizX) / 2
+    path += ` Q ${midX} ${last.y}, ${midX} ${(last.y + quizY) / 2} Q ${midX} ${quizY}, ${quizX} ${quizY}`
   }
   
   return path
 }
 
-// Generate node positions along the wave
+// Generate node positions along the wave (in percentages 0-100)
 function generateNodePositions(lessonCount: number): Array<{ x: number; y: number }> {
   if (lessonCount === 0) return []
   
-  const padding = 8
-  const usableWidth = 80
-  const width = usableWidth
-  const amplitude = 30 // percentage
-  const baseY = 50 // percentage
+  const paddingLeft = 8 // %
+  const usableWidth = 75 // %
+  const amplitude = 25 // %
+  const baseY = 50 // %
+  
+  const spacing = lessonCount > 1 ? usableWidth / (lessonCount - 1) : 0
   
   const positions: Array<{ x: number; y: number }> = []
   for (let i = 0; i < lessonCount; i++) {
-    const x = padding + (i / (lessonCount - 1 || 1)) * width
+    const x = paddingLeft + i * spacing
     const y = baseY + Math.sin(i * 0.8) * amplitude
     positions.push({ x, y })
   }
@@ -290,8 +285,9 @@ function ModuleLevelCard({
     }
   }
   
-  const wavePath = generateWavePath(module.lessons.length)
   const nodePositions = generateNodePositions(module.lessons.length)
+  const wavePath = generateWavePath(module.lessons.length, nodePositions)
+  const minWidth = (module.lessons.length * 60) + 120 // Safety min-width in pixels to prevent overlap
   
   const handleCardClick = () => {
     if (isLocked) {
@@ -388,9 +384,9 @@ function ModuleLevelCard({
       onClick={handleCardClick}
     >
       {/* Content wrapper with blur when locked */}
-      <div className={isLocked ? "blur-sm opacity-60 pointer-events-none" : ""}>
+      <div className={`${isLocked ? "blur-sm opacity-60 pointer-events-none" : ""} overflow-x-auto pb-4`}>
         {/* Module Header */}
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between min-w-[300px]">
           <div>
             <h3 className="text-xl font-bold text-foreground">Module {moduleIndex + 1}</h3>
             <p className="text-sm text-muted-foreground">{module.title}</p>
@@ -410,7 +406,7 @@ function ModuleLevelCard({
         </div>
       
       {/* SVG Path Layer */}
-      <div className="relative w-full" style={{ height: `${MODULE_CARD_HEIGHT}px` }}>
+      <div className="relative w-full" style={{ height: `${MODULE_CARD_HEIGHT}px`, minWidth: `${minWidth}px` }}>
         <svg
           width="100%"
           height={MODULE_CARD_HEIGHT}
@@ -557,8 +553,8 @@ function ModuleLevelCard({
                 isQuizLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"
               }`}
               style={{
-                left: "95%",
-                top: `${nodePositions[nodePositions.length - 1].y}%`,
+                left: `${nodePositions[nodePositions.length - 1].x + 12}%`,
+                top: `${nodePositions[nodePositions.length - 1].y + 15}%`,
                 transform: "translate(-50%, -50%)",
                 zIndex: 10,
               }}

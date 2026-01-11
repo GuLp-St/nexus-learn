@@ -11,6 +11,7 @@ import { useAuth } from "@/components/auth-provider"
 import { getUserCourses, CourseWithProgress } from "@/lib/course-utils"
 import { useRouter } from "next/navigation"
 import { Spinner } from "@/components/ui/spinner"
+import { LoadingScreen } from "@/components/ui/LoadingScreen"
 import { canAccessCourseQuiz, canAccessModuleQuiz } from "@/lib/quiz-access-utils"
 import { createChallenge } from "@/lib/challenge-utils"
 import { sendMessage } from "@/lib/chat-utils"
@@ -110,7 +111,9 @@ export function ChallengeSelectionModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      {submitting && <LoadingScreen />}
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Challenge {friendNickname}</DialogTitle>
@@ -305,6 +308,7 @@ export function ChallengeSelectionModal({
         )}
       </DialogContent>
     </Dialog>
+    </>
   )
 }
 
