@@ -81,6 +81,11 @@ export function ChatbotOverlay() {
     }
 
     const handleMove = (e: MouseEvent | TouchEvent) => {
+      // Prevent page scrolling while dragging on touch devices
+      if ('touches' in e && isDragging) {
+        if (e.cancelable) e.preventDefault()
+      }
+
       // Cancel previous frame if exists
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)

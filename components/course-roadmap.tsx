@@ -285,9 +285,8 @@ function ModuleLevelCard({
     }
   }
   
-  const nodePositions = generateNodePositions(module.lessons.length)
+    const nodePositions = generateNodePositions(module.lessons.length)
   const wavePath = generateWavePath(module.lessons.length, nodePositions)
-  const minWidth = (module.lessons.length * 60) + 120 // Safety min-width in pixels to prevent overlap
   
   const handleCardClick = () => {
     if (isLocked) {
@@ -384,9 +383,9 @@ function ModuleLevelCard({
       onClick={handleCardClick}
     >
       {/* Content wrapper with blur when locked */}
-      <div className={`${isLocked ? "blur-sm opacity-60 pointer-events-none" : ""} overflow-x-auto pb-4`}>
+      <div className={`${isLocked ? "blur-sm opacity-60 pointer-events-none" : ""} pb-4`}>
         {/* Module Header */}
-        <div className="mb-4 flex items-center justify-between min-w-[300px]">
+        <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-xl font-bold text-foreground">Module {moduleIndex + 1}</h3>
             <p className="text-sm text-muted-foreground">{module.title}</p>
@@ -406,7 +405,7 @@ function ModuleLevelCard({
         </div>
       
       {/* SVG Path Layer */}
-      <div className="relative w-full" style={{ height: `${MODULE_CARD_HEIGHT}px`, minWidth: `${minWidth}px` }}>
+      <div className="relative w-full" style={{ height: `${MODULE_CARD_HEIGHT}px` }}>
         <svg
           width="100%"
           height={MODULE_CARD_HEIGHT}
