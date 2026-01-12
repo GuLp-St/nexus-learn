@@ -76,12 +76,17 @@ export function AvatarWithCosmetics({
   const seed = propAvatarSeed || cosmetics?.avatarSeed || nickname || userId || "default"
   
   // Generate avatar URL if using cosmetic style
-  let displayAvatarUrl = avatarUrl
-  // Prefer the dynamic cosmetic style over the static avatarUrl if a custom style is equipped
-  // or if no static URL is provided.
-  if (avatarStyle && (avatarStyle !== "initials" || !avatarUrl)) {
+  // Use prop avatarUrl as primary, fallback to cosmetics.avatarUrl if available
+  let displayAvatarUrl = avatarUrl || cosmetics?.avatarUrl
+  
+  // Check if it's a custom image-based style
+  const isCustomStyle = ["hf", "unsplash", "upload"].includes(avatarStyle)
+  
+  // Prefer the dynamic cosmetic style over the static avatarUrl if a non-custom style is equipped
+  // or if we have no URL at all.
+  if (avatarStyle && !isCustomStyle && (avatarStyle !== "initials" || !displayAvatarUrl)) {
     try {
-      displayAvatarUrl = generateAvatarUrl(avatarStyle, seed)
+      displayAvatarUrl = generateAvatarUrl(avatarStyle as AvatarStyle, seed)
     } catch (error) {
       console.error("Error generating avatar URL:", error)
     }
@@ -95,7 +100,16 @@ export function AvatarWithCosmetics({
     <div className={`relative ${frameSizeClasses[size]} flex items-center justify-center ${className}`}>
       <Avatar className={`${sizeClasses[size]} ${frameClass}`}>
         {displayAvatarUrl ? (
-          <AvatarImage src={displayAvatarUrl} alt={nickname || "User"} />
+          <AvatarImage 
+            src={displayAvatarUrl} 
+            alt={nickname || "User"} 
+            style={isCustomStyle && cosmetics?.avatarImageConfig ? {
+              objectFit: cosmetics.avatarImageConfig.fit,
+              transform: `scale(${cosmetics.avatarImageConfig.scale || 1}) translate(${cosmetics.avatarImageConfig.position.x - 50}%, ${cosmetics.avatarImageConfig.position.y - 50}%)`
+            } : {
+              objectFit: "cover"
+            }}
+          />
         ) : (
           <AvatarFallback>{nickname?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
         )}

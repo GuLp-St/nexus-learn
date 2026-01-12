@@ -401,11 +401,20 @@ export default function StorePage() {
                           {/* Preview area - different for each category */}
                           <div className="h-32 rounded-lg bg-muted flex items-center justify-center">
                             {cosmetic.category === "avatar" && (
-                              <img
-                                src={getCosmeticPreviewUrl(cosmetic, user?.uid || "preview") || ""}
-                                alt={cosmetic.name}
-                                className="h-24 w-24 rounded-full"
-                              />
+                              (() => {
+                                const previewUrl = getCosmeticPreviewUrl(cosmetic, user?.uid || "preview");
+                                return previewUrl ? (
+                                  <img
+                                    src={previewUrl}
+                                    alt={cosmetic.name}
+                                    className="h-24 w-24 rounded-full"
+                                  />
+                                ) : (
+                                  <div className="h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <Image className="h-10 w-10 text-primary/40" />
+                                  </div>
+                                );
+                              })()
                             )}
                             {cosmetic.category === "frame" && (
                               <div className={`relative h-24 w-24 rounded-full bg-primary/20 border-4 flex items-center justify-center ${getFrameClass(cosmetic.id)}`}>
@@ -505,12 +514,14 @@ export default function StorePage() {
                                 )}
                               </Button>
                             ) : null}
-                            <Button
-                              variant="outline"
-                              onClick={() => handlePreview(cosmetic)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
+                            {cosmetic.id !== "avatar-upload" && (
+                              <Button
+                                variant="outline"
+                                onClick={() => handlePreview(cosmetic)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </CardContent>
                       </Card>

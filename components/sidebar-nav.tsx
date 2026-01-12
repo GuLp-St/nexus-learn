@@ -30,7 +30,7 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const { theme, toggleTheme } = useTheme()
   const { totalSocialNotifications } = useSocialNotifications()
-  const { signOut } = useAuth()
+  const { user, nickname, avatarUrl, signOut } = useAuth()
 
   const handleLogout = async () => {
     try {
@@ -62,15 +62,18 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
       {/* Mobile Header */}
       <header className="sticky top-0 z-30 flex h-16 w-full items-center border-b border-border bg-background px-4 lg:hidden shrink-0">
         {leftAction || (
-          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
+          <Button variant="ghost" size="icon-sm" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
         )}
-        <h1 className="ml-3 text-lg font-semibold text-foreground truncate">{title}</h1>
+        <div className="ml-3 flex items-center gap-2 overflow-hidden">
+          <img src="/icon.svg" alt="Nexon" className="h-7 w-7 shrink-0 -mt-2" />
+          <h1 className="text-lg font-semibold text-foreground truncate">{title}</h1>
+        </div>
         <div className="ml-auto flex items-center gap-2">
-          <NotificationBell />
+          <NotificationBell size="icon-sm" />
           <Link href="/friends">
-            <Button variant="ghost" size="icon" className="relative">
+            <Button variant="ghost" size="icon-sm" className="relative">
               <Users className="h-5 w-5" />
               {totalSocialNotifications > 0 && (
                 <Badge variant="destructive" className="absolute -right-1 -top-1 h-4 w-4 rounded-full p-0 text-[8px] flex items-center justify-center">
@@ -80,11 +83,11 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
             </Button>
           </Link>
           <Link href="/profile">
-            <Button variant="ghost" size="icon">
-              <User className="h-5 w-5" />
+            <Button variant="ghost" size="icon-sm">
+              <User className="h-4 w-4" />
             </Button>
           </Link>
-          <Button variant="ghost" size="icon" onClick={toggleTheme}>
+          <Button variant="ghost" size="icon-sm" onClick={toggleTheme}>
             {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
           </Button>
         </div>
@@ -99,16 +102,17 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
         <div className="flex h-full flex-col">
           {/* Logo/Header */}
           <div className="flex h-16 items-center justify-center border-b border-border px-4 relative">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
+              <img src="/icon.svg" alt="Nexon" className="h-7 w-7 shrink-0 -mt-2" />
               <h1 className="text-[1.1rem] font-bold tracking-tighter text-foreground whitespace-nowrap">NexusLearn</h1>
               <div className="hidden lg:flex items-center gap-0">
-                <NotificationBell align="left" />
+                <NotificationBell align="left" size="icon-sm" />
                 <Link href="/profile">
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <User className="h-5 w-5" />
+                  <Button variant="ghost" size="icon-sm" className="h-8 w-8 ml-1">
+                    <User className="h-4 w-4" />
                   </Button>
                 </Link>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleTheme}>
+                <Button variant="ghost" size="icon-sm" className="h-8 w-8" onClick={toggleTheme}>
                   {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
                 </Button>
               </div>

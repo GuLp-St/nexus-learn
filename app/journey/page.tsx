@@ -18,7 +18,7 @@ import { CompletedCoursesModal } from "@/components/completed-courses-modal"
 import { checkPublishRequirements, PublishRequirements } from "@/lib/publish-utils"
 import { getCompletedCourses } from "@/lib/completion-utils"
 import { RatingModal } from "@/components/rating-modal"
-import { Upload, AlertCircle, CheckCircle2, XCircle, Trophy as TrophyIcon } from "lucide-react"
+import { Upload, AlertCircle, CheckCircle2, XCircle, Trophy as TrophyIcon, Image as ImageIcon } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -114,11 +114,26 @@ const CourseCard = ({ course, index, onRemove, onRate, userId }: { course: Cours
         onClick={() => router.push(`/journey/${course.id}`)}
       >
         {course.imageUrl ? (
-          <img 
-            src={course.imageUrl} 
-            alt={course.title} 
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
+          <div 
+            className="h-full w-full transition-transform duration-500 group-hover:scale-105"
+            style={{
+              transform: `scale(${course.imageConfig?.scale || 1})`
+            }}
+          >
+            <img 
+              src={course.imageUrl} 
+              alt={course.title} 
+              className="h-full w-full"
+              style={{
+                objectFit: course.imageConfig?.fit || "cover",
+                transform: `scale(${course.imageConfig?.scale || 1}) translate(${course.imageConfig?.position ? course.imageConfig.position.x - 50 : 0}%, ${course.imageConfig?.position ? course.imageConfig.position.y - 50 : 0}%)`
+              }}
+              onError={(e) => {
+                // Fallback if image fails to load
+                (e.target as any).src = `https://images.unsplash.com/photo-1501504905252-473c47e087f8?auto=format&fit=crop&q=80&w=800`
+              }}
+            />
+          </div>
         ) : (
           <div
             className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${color} text-4xl font-bold text-white shadow-sm`}

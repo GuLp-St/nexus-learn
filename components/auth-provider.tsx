@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { useRouter } from "next/navigation"
 import { User, onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth"
 import { auth, db } from "@/lib/firebase"
-import { doc, getDoc } from "firebase/firestore"
+import { doc, getDoc, onSnapshot } from "firebase/firestore"
 import { useXP } from "./xp-context-provider"
 
 interface AuthContextType {
@@ -120,13 +120,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [theme])
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribeProfile: (() => void) | undefined
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setUser(user)
       
       if (user) {
-        // Fetch user profile from Firestore
-        await fetchUserProfile(user.uid)
-        
+        // Real-time user profile updates
+        unsubscribeProfile = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data()
+            setNickname(data.nickname || null)
+            setAvatarUrl(data.avatarUrl || null)
+            setTheme(data.cosmetics?.theme || "theme-teal")
+          }
+        })
+
         // Initialize presence system (set user online)
         const { initializePresence } = await import("@/lib/presence-utils")
         await initializePresence(user.uid).catch((error) => {
@@ -147,6 +156,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Don't throw - badge check failure shouldn't block login
         })
       } else {
+        if (unsubscribeProfile) {
+          unsubscribeProfile()
+          unsubscribeProfile = undefined
+        }
         setNickname(null)
         setAvatarUrl(null)
       }
@@ -155,7 +168,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     return () => {
-      unsubscribe()
+      unsubscribeAuth()
+      if (unsubscribeProfile) unsubscribeProfile()
       // Cleanup presence when component unmounts (user logs out)
       if (auth.currentUser) {
         const { cleanupPresence } = require("@/lib/presence-utils")

@@ -14,11 +14,21 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { generateAvatarUrl, AvatarStyle } from "@/lib/avatar-generator"
+import { UniversalImagePicker } from "./universal-image-picker"
 
 interface AvatarBuilderProps {
   currentSeed?: string
   currentStyle?: AvatarStyle
-  onSave: (avatarUrl: string, style: AvatarStyle, seed: string) => Promise<void>
+  currentUrl?: string
+  currentImageKey?: string
+  currentImageConfig?: { fit: "cover" | "contain"; position: { x: number; y: number }; scale: number }
+  onSave: (
+    avatarUrl: string, 
+    style: AvatarStyle, 
+    seed: string, 
+    imageKey?: string,
+    imageConfig?: { fit: "cover" | "contain"; position: { x: number; y: number }; scale: number }
+  ) => Promise<void>
   onCancel?: () => void
   isLoading?: boolean
   allowedStyles?: string[] // Array of allowed style names (from owned cosmetics)
@@ -51,11 +61,18 @@ const AVATAR_STYLES: { value: AvatarStyle; label: string }[] = [
   // Legendary
   { value: "lorelei", label: "Lorelei" },
   { value: "micah", label: "Micah" },
+  // Unique / Custom
+  { value: "hf", label: "AI Generated (HF)" },
+  { value: "unsplash", label: "Unsplash Pro" },
+  { value: "upload", label: "Masterpiece Upload" },
 ]
 
 export function AvatarBuilder({
   currentSeed = "",
   currentStyle = "initials",
+  currentUrl = "",
+  currentImageKey,
+  currentImageConfig,
   onSave,
   onCancel,
   isLoading = false,
@@ -63,18 +80,65 @@ export function AvatarBuilder({
 }: AvatarBuilderProps) {
   const [selectedStyle, setSelectedStyle] = useState<AvatarStyle>(currentStyle)
   const [seed, setSeed] = useState(currentSeed || "")
-  const [avatarUrl, setAvatarUrl] = useState("")
+  const [avatarUrl, setAvatarUrl] = useState(currentUrl)
+  const [imageKey, setImageKey] = useState<string | undefined>(currentImageKey)
+  const [imageConfig, setImageConfig] = useState(currentImageConfig || { fit: "cover" as const, position: { x: 50, y: 50 }, scale: 1 })
+
+  const isCustomStyle = ["hf", "unsplash", "upload"].includes(selectedStyle)
+  
+  // Sync internal state with props
+  useEffect(() => {
+    setAvatarUrl(currentUrl)
+  }, [currentUrl])
+
+  useEffect(() => {
+    setImageKey(currentImageKey)
+  }, [currentImageKey])
+
+  useEffect(() => {
+    if (currentImageConfig) {
+      setImageConfig(currentImageConfig)
+    }
+  }, [currentImageConfig])
   
   // Sync selected style if prop changes
   useEffect(() => {
     setSelectedStyle(currentStyle)
-  }, [currentStyle])
+    // If switching to a custom style, and it matches the currently equipped style,
+    // restore the equipped URL and image key.
+    if (["hf", "unsplash", "upload"].includes(currentStyle)) {
+      setAvatarUrl(currentUrl)
+      setImageKey(currentImageKey)
+    }
+  }, [currentStyle, currentUrl, currentImageKey])
 
   // Sync seed if prop changes
   useEffect(() => {
     setSeed(currentSeed || "")
   }, [currentSeed])
 
+  // Handle style switching logic
+  useEffect(() => {
+    const isNowCustom = ["hf", "unsplash", "upload"].includes(selectedStyle)
+    const wasOriginallyCustom = ["hf", "unsplash", "upload"].includes(currentStyle)
+
+    if (isNowCustom) {
+      if (selectedStyle === currentStyle && wasOriginallyCustom) {
+        // Switching back to the currently equipped custom style
+        setAvatarUrl(currentUrl)
+        setImageKey(currentImageKey)
+      } else {
+        // Switching to a DIFFERENT custom style (or first time)
+        // If it's not the currently equipped one, we might want to clear or keep.
+        // Let's clear if it's a different custom style to avoid confusion.
+        if (selectedStyle !== currentStyle) {
+          setAvatarUrl("")
+          setImageKey(undefined)
+        }
+      }
+    }
+  }, [selectedStyle, currentStyle, currentUrl, currentImageKey])
+  
   // Filter available styles based on owned cosmetics
   const availableStyles = allowedStyles.length > 0
     ? AVATAR_STYLES.filter(style => allowedStyles.includes(style.value))
@@ -91,9 +155,13 @@ export function AvatarBuilder({
 
   // Generate avatar URL whenever style or seed changes
   useEffect(() => {
+    if (isCustomStyle) {
+      // For custom styles, the URL is handled by the UniversalImagePicker
+      return
+    }
     const url = generateAvatarUrl(selectedStyle, seed || "default")
     setAvatarUrl(url)
-  }, [selectedStyle, seed])
+  }, [selectedStyle, seed, isCustomStyle])
 
   const handleRandomize = () => {
     // Generate a random seed
@@ -102,7 +170,7 @@ export function AvatarBuilder({
   }
 
   const handleSave = async () => {
-    await onSave(avatarUrl, selectedStyle, seed)
+    await onSave(avatarUrl, selectedStyle, seed, imageKey, isCustomStyle ? imageConfig : undefined)
   }
 
   return (
@@ -119,12 +187,18 @@ export function AvatarBuilder({
         {/* Live Preview */}
         <div className="flex justify-center">
           <div className="relative">
-            <div className="w-64 h-64 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 p-4 shadow-lg border-2 border-primary/20 flex items-center justify-center">
+            <div className="w-64 h-64 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 p-4 shadow-lg border-2 border-primary/20 flex items-center justify-center overflow-hidden">
               {avatarUrl ? (
                 <img
                   src={avatarUrl}
                   alt="Avatar preview"
-                  className="w-full h-full object-contain drop-shadow-lg"
+                  className="w-full h-full"
+                  style={isCustomStyle ? {
+                    objectFit: imageConfig.fit,
+                    transform: `scale(${imageConfig.scale || 1}) translate(${imageConfig.position.x - 50}%, ${imageConfig.position.y - 50}%)`
+                  } : {
+                    objectFit: "cover"
+                  }}
                 />
               ) : (
                 <div className="text-muted-foreground">Loading...</div>
@@ -135,6 +209,42 @@ export function AvatarBuilder({
             </div>
           </div>
         </div>
+
+        {/* Custom Image Picker for Unique Styles */}
+        {isCustomStyle && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="p-4 rounded-lg border bg-primary/5 border-primary/20">
+              <Label className="text-base font-semibold mb-2 block">
+                {selectedStyle === "hf" ? "Generate AI Avatar" : 
+                 selectedStyle === "unsplash" ? "Pick Unsplash Photo" : 
+                 "Upload Your Own Avatar"}
+              </Label>
+              <UniversalImagePicker
+                value={avatarUrl}
+                imageKey={imageKey}
+                initialKey={currentImageKey}
+                onChange={(url, key, config) => {
+                  setAvatarUrl(url)
+                  setImageKey(key)
+                  if (config) {
+                    setImageConfig(config)
+                  }
+                }}
+                routeSlug="avatarImage"
+                isCircular={true}
+                hidePreview={true}
+                initialObjectFit={imageConfig.fit}
+                initialPosition={imageConfig.position}
+                initialScale={imageConfig.scale}
+                allowedModes={
+                  selectedStyle === "hf" ? ["ai"] :
+                  selectedStyle === "unsplash" ? ["unsplash"] :
+                  ["upload"]
+                }
+              />
+            </div>
+          </div>
+        )}
 
         {/* Style Selection */}
         <div className="space-y-2">
@@ -165,37 +275,39 @@ export function AvatarBuilder({
           </Select>
         </div>
 
-        {/* Seed Input with Randomize */}
-        <div className="space-y-2">
-          <Label htmlFor="avatar-seed" className="text-base font-semibold">
-            Seed (Unique Identifier)
-          </Label>
-          <div className="flex gap-2">
-            <Input
-              id="avatar-seed"
-              type="text"
-              value={seed}
-              onChange={(e) => setSeed(e.target.value)}
-              placeholder="Enter seed or click randomize"
-              className="flex-1"
-              disabled={isLoading}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleRandomize}
-              disabled={isLoading}
-              className="px-4"
-              title="Generate random seed"
-            >
-              <Shuffle className="h-4 w-4 mr-2" />
-              Randomize
-            </Button>
+        {/* Seed Input with Randomize - Only show for non-custom styles */}
+        {!isCustomStyle && (
+          <div className="space-y-2">
+            <Label htmlFor="avatar-seed" className="text-base font-semibold">
+              Seed (Unique Identifier)
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                id="avatar-seed"
+                type="text"
+                value={seed}
+                onChange={(e) => setSeed(e.target.value)}
+                placeholder="Enter seed or click randomize"
+                className="flex-1"
+                disabled={isLoading}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleRandomize}
+                disabled={isLoading}
+                className="px-4"
+                title="Generate random seed"
+              >
+                <Shuffle className="h-4 w-4 mr-2" />
+                Randomize
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The seed determines your avatar's appearance. Same seed = same avatar.
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            The seed determines your avatar's appearance. Same seed = same avatar.
-          </p>
-        </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex gap-3 pt-4">
@@ -213,7 +325,7 @@ export function AvatarBuilder({
           <Button
             type="button"
             onClick={handleSave}
-            disabled={isLoading || !seed.trim() || availableStyles.length === 0}
+            disabled={isLoading || (!isCustomStyle && !seed.trim()) || (isCustomStyle && !avatarUrl) || availableStyles.length === 0}
             className="flex-1 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
           >
             {isLoading ? "Saving..." : availableStyles.length === 0 ? "No Styles Available" : "Save Avatar"}

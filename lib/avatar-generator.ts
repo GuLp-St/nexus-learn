@@ -25,6 +25,9 @@ export type AvatarStyle =
   | "avataaars" 
   | "lorelei"
   | "micah"
+  | "hf"
+  | "unsplash"
+  | "upload"
 
 /**
  * Generate avatar URL from DiceBear API

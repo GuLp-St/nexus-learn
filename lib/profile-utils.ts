@@ -101,12 +101,16 @@ export async function updateUserPassword(
  * @param avatarUrl DiceBear avatar URL
  * @param avatarStyle Avatar style used
  * @param avatarSeed Seed used for the avatar
+ * @param avatarImageKey Optional Uploadthing file key
+ * @param avatarImageConfig Optional image configuration (fit, position)
  */
 export async function updateUserAvatar(
   userId: string,
   avatarUrl: string,
   avatarStyle: string,
-  avatarSeed: string
+  avatarSeed: string,
+  avatarImageKey?: string,
+  avatarImageConfig?: { fit: "cover" | "contain"; position: { x: number; y: number }; scale: number }
 ): Promise<void> {
   try {
     const userRef = doc(db, "users", userId)
@@ -117,6 +121,8 @@ export async function updateUserAvatar(
       avatarUrl,
       avatarSeed,
       "cosmetics.avatarStyle": cosmeticId,
+      "cosmetics.avatarImageKey": avatarImageKey || null,
+      "cosmetics.avatarImageConfig": avatarImageConfig || null,
       updatedAt: serverTimestamp(),
     })
   } catch (error: any) {

@@ -13,7 +13,7 @@ import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
 import { checkPublishRequirements, publishCourse, PublishRequirements } from "@/lib/publish-utils"
 import { getCourseWithProgress } from "@/lib/course-utils"
-import { UnsplashImagePicker } from "@/components/unsplash-image-picker"
+import { UniversalImagePicker } from "@/components/universal-image-picker"
 import { CheckCircle2, XCircle, AlertCircle, Trophy } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { NexonIcon } from "@/components/ui/nexon-icon"
@@ -37,6 +37,8 @@ export default function PublishCoursePage() {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [imageUrl, setImageUrl] = useState("")
+  const [imageKey, setImageKey] = useState<string | undefined>(undefined)
+  const [imageConfig, setImageConfig] = useState<{ fit: "cover" | "contain", position: { x: number, y: number }, scale: number }>({ fit: "cover", position: { x: 50, y: 50 }, scale: 1 })
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
 
@@ -74,6 +76,10 @@ export default function PublishCoursePage() {
         setTitle(courseData.title || "")
         setDescription(courseData.description || "")
         setImageUrl(courseData.imageUrl || "")
+        setImageKey(courseData.imageKey || undefined)
+        if (courseData.imageConfig) {
+          setImageConfig(courseData.imageConfig)
+        }
         setTags(courseData.tags || [])
 
         // Check requirements
@@ -113,6 +119,8 @@ export default function PublishCoursePage() {
         title: title.trim(),
         description: description.trim(),
         imageUrl: imageUrl || undefined,
+        imageKey: imageKey || undefined,
+        imageConfig: imageUrl ? imageConfig : undefined,
         tags: tags.length > 0 ? tags : undefined,
       })
 
@@ -248,9 +256,19 @@ export default function PublishCoursePage() {
                   {/* Image */}
                   <div className="space-y-2">
                     <Label>Course Image</Label>
-                    <UnsplashImagePicker
+                    <UniversalImagePicker
                       value={imageUrl}
-                      onChange={setImageUrl}
+                      imageKey={imageKey}
+                      initialKey={course?.imageKey}
+                      initialObjectFit={imageConfig.fit}
+                      initialPosition={imageConfig.position}
+                      initialScale={imageConfig.scale}
+                      onChange={(url, key, config) => {
+                        setImageUrl(url);
+                        setImageKey(key);
+                        if (config) setImageConfig(config);
+                      }}
+                      routeSlug="courseImage"
                     />
                   </div>
 

@@ -101,6 +101,8 @@ export async function publishCourse(
     title?: string
     description?: string
     imageUrl?: string
+    imageKey?: string
+    imageConfig?: { fit: "cover" | "contain"; position: { x: number; y: number }; scale: number }
     tags?: string[]
   }
 ): Promise<any> {
@@ -127,6 +129,8 @@ export async function publishCourse(
     ...(updates.title && { title: updates.title }),
     ...(updates.description && { description: updates.description }),
     ...(updates.imageUrl && { imageUrl: updates.imageUrl }),
+    ...(updates.imageKey && { imageKey: updates.imageKey }),
+    ...(updates.imageConfig && { imageConfig: updates.imageConfig }),
     ...(updates.tags && { tags: updates.tags }),
   })
 

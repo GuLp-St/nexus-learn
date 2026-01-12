@@ -11,6 +11,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { AvatarBuilder } from "@/components/avatar-builder"
 import { getUserCosmetics, getAllCosmetics, resolveAvatarStyle } from "@/lib/cosmetics-utils"
 import { AvatarStyle } from "@/lib/avatar-generator"
+import { deleteFileFromUploadthing } from "@/lib/upload-actions"
 
 interface ProfileSettingsModalProps {
   open: boolean
@@ -34,6 +35,8 @@ export function ProfileSettingsModal({ open, onOpenChange, onUpdate }: ProfileSe
   const [ownedAvatarStyles, setOwnedAvatarStyles] = useState<string[]>([])
   const [currentAvatarSeed, setCurrentAvatarSeed] = useState("")
   const [currentAvatarStyle, setCurrentAvatarStyle] = useState<AvatarStyle>("initials")
+  const [currentAvatarImageKey, setCurrentAvatarImageKey] = useState<string | undefined>(undefined)
+  const [currentAvatarImageConfig, setCurrentAvatarImageConfig] = useState<{ fit: "cover" | "contain", position: { x: number, y: number }, scale: number } | undefined>(undefined)
 
   // Load owned avatar styles and current seed when modal opens
   useEffect(() => {
@@ -43,11 +46,17 @@ export function ProfileSettingsModal({ open, onOpenChange, onUpdate }: ProfileSe
         const userCosmetics = await getUserCosmetics(user.uid)
         setCurrentAvatarSeed(userCosmetics.avatarSeed || nickname || "")
         setCurrentAvatarStyle(resolveAvatarStyle(userCosmetics.avatarStyle))
+        setCurrentAvatarImageKey(userCosmetics.avatarImageKey)
+        setCurrentAvatarImageConfig(userCosmetics.avatarImageConfig)
         
         const ownedAvatarIds = userCosmetics.ownedCosmetics?.avatars || []
         
+        // Ensure defaults are included if missing
+        const defaults = ["avatar-initials", "avatar-icons", "avatar-identicon"]
+        const allOwnedIds = Array.from(new Set([...ownedAvatarIds, ...defaults]))
+        
         // Map owned avatar IDs to their style values using resolveAvatarStyle for safety
-        const styles = ownedAvatarIds.map(id => resolveAvatarStyle(id))
+        const styles = allOwnedIds.map(id => resolveAvatarStyle(id))
         setOwnedAvatarStyles(styles)
       } catch (error) {
         console.error("Error loading user cosmetic data:", error)
@@ -72,14 +81,25 @@ export function ProfileSettingsModal({ open, onOpenChange, onUpdate }: ProfileSe
     onOpenChange(newOpen)
   }
 
-  const handleAvatarSave = async (avatarUrl: string, style: string, seed: string) => {
+  const handleAvatarSave = async (
+    avatarUrl: string, 
+    style: string, 
+    seed: string, 
+    imageKey?: string,
+    imageConfig?: { fit: "cover" | "contain", position: { x: number, y: number }, scale: number }
+  ) => {
     if (!user) return
 
     setLoading(true)
     setError("")
 
     try {
-      await updateUserAvatar(user.uid, avatarUrl, style, seed)
+      // If we have a previous image key, and we are saving a NEW one, delete the old one
+      if (currentAvatarImageKey && imageKey && currentAvatarImageKey !== imageKey) {
+        await deleteFileFromUploadthing(currentAvatarImageKey)
+      }
+      
+      await updateUserAvatar(user.uid, avatarUrl, style, seed, imageKey, imageConfig)
       setSuccess("Avatar updated successfully!")
       setShowAvatarBuilder(false)
       
@@ -190,6 +210,9 @@ export function ProfileSettingsModal({ open, onOpenChange, onUpdate }: ProfileSe
             <AvatarBuilder
               currentSeed={currentAvatarSeed}
               currentStyle={currentAvatarStyle}
+              currentUrl={avatarUrl || ""}
+              currentImageKey={currentAvatarImageKey}
+              currentImageConfig={currentAvatarImageConfig}
               onSave={handleAvatarSave}
               onCancel={() => setShowAvatarBuilder(false)}
               isLoading={loading}
@@ -204,7 +227,16 @@ export function ProfileSettingsModal({ open, onOpenChange, onUpdate }: ProfileSe
               <div className="flex items-center gap-4">
                 <Avatar className="h-20 w-20">
                   {avatarUrl ? (
-                    <AvatarImage src={avatarUrl} alt={nickname || "User"} />
+                    <AvatarImage 
+                      src={avatarUrl} 
+                      alt={nickname || "User"} 
+                      style={currentAvatarStyle && ["hf", "unsplash", "upload"].includes(currentAvatarStyle) && currentAvatarImageConfig ? {
+                        objectFit: currentAvatarImageConfig.fit,
+                        transform: `scale(${currentAvatarImageConfig.scale || 1}) translate(${currentAvatarImageConfig.position.x - 50}%, ${currentAvatarImageConfig.position.y - 50}%)`
+                      } : {
+                        objectFit: "cover"
+                      }}
+                    />
                   ) : (
                     <AvatarFallback className="text-2xl">
                       {getInitials(nickname)}

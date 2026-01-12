@@ -18,6 +18,7 @@ import { collection, getDocs, query, where, orderBy, limit } from "firebase/fire
 import { createOrGetCourse, PublicCourse } from "@/lib/course-utils"
 import { copyCourseToUserLibrary } from "@/lib/course-copy-utils"
 import { getUnsplashImageByTags } from "@/lib/unsplash-utils"
+import { generateAndUploadImage } from "@/lib/upload-actions"
 import {
   Dialog,
   DialogContent,
@@ -264,13 +265,21 @@ export default function CreateCoursePage() {
         courseData = await generateCourseContent(courseInput.trim())
       }
 
-      // Automatically fetch a relevant Unsplash image
+      // Automatically generate a relevant AI image
       try {
-        const imageUrl = await getUnsplashImageByTags(courseData.tags || [], courseData.title)
-        courseData.imageUrl = imageUrl
+        const prompt = `A high-quality, professional educational cover image for a course titled "${courseData.title}". Style: modern, clean, digital art. Topics: ${courseData.tags?.join(", ")}`;
+        const result = await generateAndUploadImage(prompt);
+        courseData.imageUrl = result.url;
+        courseData.imageKey = result.key;
       } catch (imageErr) {
-        console.error("Error fetching course image:", imageErr)
-        // Continue without image or with default
+        console.error("Error generating course image:", imageErr);
+        // Fallback to Unsplash if AI generation fails
+        try {
+          const imageUrl = await getUnsplashImageByTags(courseData.tags || [], courseData.title)
+          courseData.imageUrl = imageUrl
+        } catch (unsplashErr) {
+          console.error("Error fetching fallback Unsplash image:", unsplashErr);
+        }
       }
 
       const courseId = await createOrGetCourse(courseData, user.uid)
@@ -406,11 +415,22 @@ export default function CreateCoursePage() {
                     <Card key={course.id} className="overflow-hidden transition-shadow hover:shadow-lg">
                       {course.imageUrl ? (
                         <div className="aspect-video w-full overflow-hidden">
-                          <img
-                            src={course.imageUrl}
-                            alt={course.title}
-                            className="h-full w-full object-cover"
-                          />
+                          <div 
+                            className="h-full w-full"
+                            style={{
+                              transform: `scale(${course.imageConfig?.scale || 1})`
+                            }}
+                          >
+                            <img
+                              src={course.imageUrl}
+                              alt={course.title}
+                              className="h-full w-full"
+                              style={{
+                                objectFit: course.imageConfig?.fit || "cover",
+                                transform: `scale(${course.imageConfig?.scale || 1}) translate(${course.imageConfig?.position ? course.imageConfig.position.x - 50 : 0}%, ${course.imageConfig?.position ? course.imageConfig.position.y - 50 : 0}%)`
+                              }}
+                            />
+                          </div>
                         </div>
                       ) : (
                         <div className="aspect-video w-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">

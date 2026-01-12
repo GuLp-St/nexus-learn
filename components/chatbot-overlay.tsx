@@ -5,6 +5,7 @@ import { MessageSquare, Send, X, Loader2, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { AvatarWithCosmetics } from "./avatar-with-cosmetics"
 import { useChatContext } from "@/context/ChatContext"
 import { useAuth } from "@/components/auth-provider"
 import { generateChatResponse, ChatMessage } from "@/lib/gemini"
@@ -328,9 +329,18 @@ export function ChatbotOverlay() {
                     <div className="bg-teal-600 text-white rounded-2xl rounded-tr-sm px-4 py-3">
                       <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                     </div>
-                    <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarFallback className="bg-muted text-muted-foreground text-xs">You</AvatarFallback>
-                    </Avatar>
+                    {user ? (
+                      <AvatarWithCosmetics
+                        userId={user.uid}
+                        nickname={null}
+                        size="sm"
+                        hideFrame={true}
+                      />
+                    ) : (
+                      <Avatar className="h-8 w-8 shrink-0">
+                        <AvatarFallback className="bg-muted text-muted-foreground text-xs">You</AvatarFallback>
+                      </Avatar>
+                    )}
                   </>
                 ) : (
                   <>

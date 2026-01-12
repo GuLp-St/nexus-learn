@@ -17,7 +17,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { formatDateForDisplay } from "@/lib/date-utils"
 
-export function NotificationBell({ align = "right" }: { align?: "left" | "right" }) {
+export function NotificationBell({ align = "right", size = "icon" }: { align?: "left" | "right", size?: "icon" | "icon-sm" }) {
   const { user } = useAuth()
   const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -122,7 +122,7 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
     <div className="relative">
       <Button
         variant="ghost"
-        size="icon"
+        size={size}
         onClick={() => setIsOpen(!isOpen)}
         className="relative"
       >

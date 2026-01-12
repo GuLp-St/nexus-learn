@@ -1,5 +1,6 @@
 import { db } from "./firebase"
 import { doc, deleteDoc, getDoc, collection, query, where, getDocs, limit } from "firebase/firestore"
+import { deleteFileFromUploadthing } from "./upload-actions"
 
 /**
  * Remove a course from user's library by deleting the userCourseProgress entry
@@ -30,6 +31,10 @@ export async function removeCourseFromLibrary(userId: string, courseId: string):
         
         // If NO one else has this course, delete the original course data
         if (subscribersSnapshot.empty) {
+          // Clean up the image from Uploadthing if it exists
+          if (courseData.imageKey) {
+            await deleteFileFromUploadthing(courseData.imageKey);
+          }
           await deleteDoc(courseRef)
         }
       }

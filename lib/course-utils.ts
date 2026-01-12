@@ -13,6 +13,12 @@ export interface PublicCourse extends CourseData {
   publishedAt?: Timestamp
   tags?: string[]
   imageUrl?: string
+  imageKey?: string
+  imageConfig?: {
+    fit: "cover" | "contain"
+    position: { x: number; y: number }
+    scale: number
+  }
   addedCount?: number
   addedBy?: string[]
   publishXP?: number
