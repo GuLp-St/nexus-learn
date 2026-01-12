@@ -67,8 +67,8 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
           </Button>
         )}
         <div className="ml-3 flex items-center gap-2 overflow-hidden">
-          <img src="/icon.svg" alt="Nexon" className="h-7 w-7 shrink-0 -mt-2" />
-          <h1 className="text-lg font-semibold text-foreground truncate">{title}</h1>
+          <img src="/icon.svg" alt="Nexon" className="h-7 w-7 shrink-0 object-contain" />
+          <h1 className="text-lg font-semibold text-foreground truncate leading-none flex items-center">{title}</h1>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <NotificationBell size="icon-sm" />
@@ -103,8 +103,8 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
           {/* Logo/Header */}
           <div className="flex h-16 items-center justify-center border-b border-border px-4 relative">
             <div className="flex items-center gap-2">
-              <img src="/icon.svg" alt="Nexon" className="h-7 w-7 shrink-0 -mt-2" />
-              <h1 className="text-[1.1rem] font-bold tracking-tighter text-foreground whitespace-nowrap">NexusLearn</h1>
+              <img src="/icon.svg" alt="Nexon" className="h-7 w-7 shrink-0 object-contain" />
+              <h1 className="text-[1.1rem] font-bold tracking-tighter text-foreground whitespace-nowrap leading-none flex items-center">NexusLearn</h1>
               <div className="hidden lg:flex items-center gap-0">
                 <NotificationBell align="left" size="icon-sm" />
                 <Link href="/profile">
