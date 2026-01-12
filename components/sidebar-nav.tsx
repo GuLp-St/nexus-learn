@@ -101,7 +101,7 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
       >
         <div className="flex h-full flex-col">
           {/* Logo/Header */}
-          <div className="flex h-16 items-center justify-center border-b border-border px-4 relative">
+          <div className="flex h-16 items-center justify-start border-b border-border px-4 relative">
             <div className="flex items-center gap-2">
               <img src="/icon.svg" alt="Nexon" className="h-7 w-7 shrink-0 object-contain" />
               <h1 className="text-[1.1rem] font-bold tracking-tighter text-foreground whitespace-nowrap leading-none flex items-center">NexusLearn</h1>

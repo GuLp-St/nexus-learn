@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
-import { Search, X, AlertCircle, Sparkles, Upload, Image as ImageIcon, Maximize, Move, ZoomIn } from "lucide-react"
+import { Search, X, AlertCircle, Sparkles, Upload, Image as ImageIcon, Move, ZoomIn } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -291,30 +291,6 @@ export function UniversalImagePicker({
 
       {selectedUrl && (
         <div className="space-y-4 p-4 border rounded-lg bg-muted/10">
-          <div className="flex items-center justify-between gap-4">
-            <Label className="text-xs font-medium flex items-center gap-2">
-              <Maximize className="h-3 w-3" /> Fit Mode
-            </Label>
-            <div className="flex gap-1">
-              <Button 
-                variant={objectFit === "cover" ? "default" : "outline"} 
-                size="sm" 
-                className="h-7 text-[10px] px-2"
-                onClick={() => setObjectFit("cover")}
-              >
-                Free Form
-              </Button>
-              <Button 
-                variant={objectFit === "contain" ? "default" : "outline"} 
-                size="sm" 
-                className="h-7 text-[10px] px-2"
-                onClick={() => setObjectFit("contain")}
-              >
-                Fit
-              </Button>
-            </div>
-          </div>
-
           <div className="space-y-3">
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
