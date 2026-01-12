@@ -22,9 +22,9 @@ export async function generateAIImage(prompt: string, model: string = "black-for
     const blob = await client.textToImage({
       model: model,
       inputs: prompt,
-    });
+    }) as any;
 
-    return blob;
+    return blob as Blob;
   } catch (error: any) {
     const errorMsg = error.message || String(error);
     console.error(`[Hugging Face] Error with model ${model}:`, errorMsg);
@@ -39,8 +39,8 @@ export async function generateAIImage(prompt: string, model: string = "black-for
         const fallbackBlob = await client.textToImage({
           model: "black-forest-labs/FLUX.1-schnell",
           inputs: prompt,
-        });
-        return fallbackBlob;
+        }) as any;
+        return fallbackBlob as Blob;
       } catch (fallbackError: any) {
         console.error(`[Hugging Face] Fallback also failed:`, fallbackError.message || fallbackError);
       }

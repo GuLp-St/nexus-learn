@@ -42,6 +42,7 @@ export interface CourseData {
   xpMultiplier: number
   tags?: string[]
   imageUrl?: string
+  imageKey?: string
 }
 
 export interface DifficultyOption {
