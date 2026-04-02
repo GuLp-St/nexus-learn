@@ -16,6 +16,22 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Gemini model selection (Firebase-controlled)
+
+The app reads the Gemini model name from Firestore so you can change it centrally without redeploying.
+
+- **Firestore doc**: `config/ai`
+- **Field (string)**: `geminiModel`
+- **Default if missing/unreadable**: `gemini-3.1-flash-lite`
+
+Example document:
+
+```json
+{
+  "geminiModel": "gemini-3.1-flash-lite"
+}
+```
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

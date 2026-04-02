@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI, Tool, SchemaType } from "@google/generative-ai"
+import { getGeminiModelName } from "./gemini-model"
 
 interface PageContext {
   title: string
@@ -141,7 +142,7 @@ export async function analyzeTopicDifficulty(topic: string): Promise<TopicDiffic
     throw new Error("Gemini API key is not configured")
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const prompt = `Analyze the topic "${topic}" and determine if it is a valid educational topic and how it can be structured.
 
@@ -250,7 +251,7 @@ export async function generateCourseSkeleton(
     throw new Error("Gemini API key is not configured")
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const xpMultiplier = difficulty === "beginner" ? 1.0 : difficulty === "intermediate" ? 1.5 : 2.0
 
@@ -454,7 +455,7 @@ export async function generateCourseContent(topic: string, difficulty?: "beginne
     throw new Error("Gemini API key is not configured")
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const prompt = `Generate a comprehensive course structure for "${topic}" in JSON format. The course should have 3-5 modules, each with 2-4 lessons. Return ONLY valid JSON without markdown formatting, following this exact structure:
 
@@ -530,7 +531,7 @@ export async function generateLessonStream(
     throw new Error("Gemini API key is not configured")
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   // Build source material context if available
   let sourceMaterialContext = ""
@@ -700,7 +701,7 @@ export async function generateLessonContent(
     throw new Error("Gemini API key is not configured")
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const prompt = `Generate a detailed lesson content for "${lessonTitle}" as part of the course "${courseTitle}", module "${moduleTitle}".
 
@@ -792,9 +793,8 @@ export async function generateChatResponse(
     throw new Error("Gemini API key is not configured")
   }
 
-  // Use gemini-1.5-flash for faster responses and tool support
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.5-flash-lite",
+    model: await getGeminiModelName(),
     tools: [
       {
         functionDeclarations: [
@@ -1008,7 +1008,7 @@ export async function generateCourseSuggestions(courseTitles: string[], count: n
     return []
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const coursesList = courseTitles.join(", ")
 

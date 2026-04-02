@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { QuizQuestion } from "./quiz-utils"
 import { CourseData, CourseModule } from "./gemini"
 import { v4 as uuidv4 } from "uuid"
+import { getGeminiModelName } from "./gemini-model"
 
 const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
 
@@ -28,7 +29,7 @@ export async function generateLessonQuizQuestions(
     throw new Error("Gemini API key is not configured")
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   // Lesson quizzes: no subjective questions
   const objectiveCount = count
@@ -161,7 +162,7 @@ async function generateSubjectiveQuestion(
     throw new Error("Gemini API key is not configured")
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
   const prompt = `Generate 1 subjective (open-ended) quiz question for the lesson "${lessonTitle}" in the module "${moduleTitle}" of the course "${courseTitle}".
 
 Lesson Description: ${lessonDescription}
@@ -281,7 +282,7 @@ export async function generateModuleQuizQuestions(
     throw new Error("Gemini API key is not configured")
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
   
   // Prepare facts text with IDs
   const factsText = accumulatedContext.map((fact: any) => 
@@ -457,7 +458,7 @@ export async function generateCourseQuizQuestions(
     throw new Error("Gemini API key is not configured")
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
   
   // Prepare facts text with IDs, grouped by module
   const factsByModule: { [moduleIndex: number]: Array<{ id: string; text: string }> } = {}
@@ -583,7 +584,7 @@ export async function evaluateSubjectiveAnswer(
     throw new Error("Gemini API key is not configured")
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const rubricText = rubric 
     ? `Grading Rubric:

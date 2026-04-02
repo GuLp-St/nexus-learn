@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { getGeminiModelName } from "./gemini-model"
 
 const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
 
@@ -60,7 +61,7 @@ async function analyzeSingleFileMaterial(
     throw new Error("Gemini API key is not configured")
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   // Construct parts array
   const parts: any[] = []
@@ -279,7 +280,7 @@ ${visualsText}`
     .join("\n\n------------------------\n\n")
 
   // Step 3: ask Gemini to create the full course structure from the combined important information
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
+  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const systemInstruction = `You are an expert academic course designer.
 
