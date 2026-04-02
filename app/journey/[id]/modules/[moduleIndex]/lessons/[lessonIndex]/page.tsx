@@ -177,6 +177,9 @@ export default function LessonPage() {
         // Generate lesson stream if not exists
         setGenerating(true)
         
+        // Extract source context if available (from uploaded materials)
+        const sourceContext = (lesson as any).sourceContext
+        
         // Set minimum loading time to 30 seconds for optimistic loading
         const minLoadingTime = 30000
         const startTime = Date.now()
@@ -186,7 +189,12 @@ export default function LessonPage() {
           generatedStream = await generateLessonStream(
             lesson.title,
             courseData.title,
-            module.title
+            module.title,
+            sourceContext ? {
+              keyPoints: sourceContext.keyPoints || [],
+              references: sourceContext.references || [],
+              processedImages: sourceContext.processedImages || [],
+            } : undefined
           )
         } catch (err: any) {
           // If timeout or error, wait 2 seconds then check Firestore
@@ -804,6 +812,21 @@ export default function LessonPage() {
             <p className="text-sm text-muted-foreground">
               Module {moduleIndex + 1}: {module?.title ? module.title.replace(/^Module\s+\d+:\s*/i, "").trim() : ""}
             </p>
+            {/* Show actual visuals from uploaded materials when available */}
+            {lesson && (lesson as any).sourceContext && (lesson as any).sourceContext.imageUrls && (lesson as any).sourceContext.imageUrls.length > 0 && (
+              <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-3">
+                {(lesson as any).sourceContext.imageUrls.map((url: string, idx: number) => (
+                  <div key={idx} className="relative w-full pb-[56.25%] overflow-hidden rounded-md border bg-muted">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`Reference visual ${idx + 1}`}
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Progress indicator */}

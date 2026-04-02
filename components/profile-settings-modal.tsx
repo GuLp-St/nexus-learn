@@ -230,7 +230,7 @@ export function ProfileSettingsModal({ open, onOpenChange, onUpdate }: ProfileSe
                     <AvatarImage 
                       src={avatarUrl} 
                       alt={nickname || "User"} 
-                      style={currentAvatarStyle && ["hf", "unsplash", "upload"].includes(currentAvatarStyle) && currentAvatarImageConfig ? {
+                      style={currentAvatarStyle && ["ai", "unsplash", "upload"].includes(currentAvatarStyle) && currentAvatarImageConfig ? {
                         objectFit: currentAvatarImageConfig.fit,
                         transform: `scale(${currentAvatarImageConfig.scale || 1}) translate(${currentAvatarImageConfig.position.x - 50}%, ${currentAvatarImageConfig.position.y - 50}%)`
                       } : {

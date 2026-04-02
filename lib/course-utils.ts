@@ -111,7 +111,8 @@ export async function findExistingPublicCourse(title: string): Promise<string | 
  */
 export async function createOrGetCourse(
   courseData: CourseData,
-  userId: string
+  userId: string,
+  sourceMaterialId?: string
 ): Promise<string> {
   // Always create a new course (private by default)
   // Course becomes public only after completion + rating >= 4
@@ -126,6 +127,7 @@ export async function createOrGetCourse(
     ratingCount: 0,
     addedCount: 0,
     addedBy: [],
+    ...(sourceMaterialId && { sourceMaterialId }),
   })
   
   // Create user progress entry

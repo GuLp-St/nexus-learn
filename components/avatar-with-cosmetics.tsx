@@ -80,7 +80,7 @@ export function AvatarWithCosmetics({
   let displayAvatarUrl = avatarUrl || cosmetics?.avatarUrl
   
   // Check if it's a custom image-based style
-  const isCustomStyle = ["hf", "unsplash", "upload"].includes(avatarStyle)
+  const isCustomStyle = ["ai", "unsplash", "upload"].includes(avatarStyle)
   
   // Prefer the dynamic cosmetic style over the static avatarUrl if a non-custom style is equipped
   // or if we have no URL at all.

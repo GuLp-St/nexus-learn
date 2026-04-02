@@ -8,12 +8,19 @@ export const ourFileRouter = {
   courseImage: f({ image: { maxFileSize: "4MB", maxFileCount: 1 } })
     .onUploadComplete(async ({ metadata, file }) => {
       console.log("Upload complete for courseImage:", file.ufsUrl);
-      return { url: file.ufsUrl };
+      return { fileUrl: file.ufsUrl };
     }),
   avatarImage: f({ image: { maxFileSize: "2MB", maxFileCount: 1 } })
     .onUploadComplete(async ({ metadata, file }) => {
       console.log("Upload complete for avatarImage:", file.ufsUrl);
-      return { url: file.ufsUrl };
+      return { fileUrl: file.ufsUrl };
+    }),
+  courseMaterials: f({
+    blob: { maxFileSize: "8MB", maxFileCount: 10 },
+  })
+    .onUploadComplete(async ({ metadata, file }) => {
+      console.log("Upload complete for courseMaterials:", file.ufsUrl);
+      return { fileUrl: file.ufsUrl };
     }),
 } satisfies FileRouter;
 

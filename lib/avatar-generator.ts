@@ -25,7 +25,7 @@ export type AvatarStyle =
   | "avataaars" 
   | "lorelei"
   | "micah"
-  | "hf"
+  | "ai"
   | "unsplash"
   | "upload"
 

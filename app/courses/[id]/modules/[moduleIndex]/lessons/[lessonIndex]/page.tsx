@@ -165,10 +165,15 @@ export default function LessonPage() {
 
         // Generate lesson stream if not exists
         setGenerating(true)
+        
+        // Extract source context if available (from uploaded materials)
+        const sourceContext = (lesson as any).sourceContext
+        
         const generatedStream = await generateLessonStream(
           lesson.title,
           courseData.title,
-          module.title
+          module.title,
+          sourceContext ? { keyPoints: sourceContext.keyPoints || [], references: sourceContext.references || [] } : undefined
         )
 
         // Save facts to module's accumulatedContext

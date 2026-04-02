@@ -11,7 +11,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Slider } from "./ui/slider"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { UploadButton } from "@/lib/uploadthing"
 import { generateAndUploadImage, deleteFileFromUploadthing, uploadGeneratedImage, generateAIImageAction } from "@/lib/upload-actions"
 
 interface UniversalImagePickerProps {
@@ -29,13 +28,13 @@ interface UniversalImagePickerProps {
   hidePreview?: boolean
 }
 
-const ACCESS_KEY = process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY
-
 const AI_MODELS = [
-  { id: "black-forest-labs/FLUX.1-dev", name: "Flux Dev (High Quality)" },
-  { id: "black-forest-labs/FLUX.1-schnell", name: "Flux Schnell (Fast)" },
-  { id: "stabilityai/stable-diffusion-xl-base-1.0", name: "Stable Diffusion XL" },
+  { id: "@cf/black-forest-labs/flux-1-schnell", name: "Flux Schnell (Default)" },
+  { id: "@cf/bytedance/stable-diffusion-xl-lightning", name: "SDXL Lightning" },
+  { id: "@cf/stabilityai/stable-diffusion-xl-base-1.0", name: "SDXL Base" },
 ]
+
+const ACCESS_KEY = process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY
 
 export function UniversalImagePicker({ 
   value, 
@@ -88,7 +87,7 @@ export function UniversalImagePicker({
   const [searchResults, setSearchResults] = useState<string[]>([])
   const [unsplashLoading, setUnsplashLoading] = useState(false)
   const [unsplashError, setUnsplashError] = useState<string | null>(null)
-
+  
   // AI state
   const [aiPrompt, setAiPrompt] = useState("")
   const [aiLoading, setAiLoading] = useState(false)
@@ -175,7 +174,7 @@ export function UniversalImagePicker({
 
       const result = await uploadGeneratedImage(blob, `ai-${Date.now()}.png`)
       lastGeneratedKeyRef.current = result.key
-      handleSelectImage(result.url, result.key)
+      handleSelectImage(result.ufsUrl, result.key)
       
       // Clear temp state
       setTempAiUrl(null)
@@ -209,7 +208,7 @@ export function UniversalImagePicker({
       // we can reuse it.
       const result = await uploadGeneratedImage(tempUploadFile, tempUploadFile.name)
       lastGeneratedKeyRef.current = result.key
-      handleSelectImage(result.url, result.key)
+      handleSelectImage(result.ufsUrl, result.key)
       
       setTempUploadFile(null)
       setTempUploadUrl(null)
@@ -404,6 +403,7 @@ export function UniversalImagePicker({
                     {searchResults.map((url, idx) => (
                       <button
                         key={idx}
+                        type="button"
                         onClick={() => handleSelectImage(url)}
                         className="aspect-video rounded-md overflow-hidden border-2 hover:border-primary transition-all relative"
                       >

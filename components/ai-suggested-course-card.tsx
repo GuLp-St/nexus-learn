@@ -13,7 +13,7 @@ import { copyCourseToUserLibrary } from "@/lib/course-copy-utils"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { generateCourseContent } from "@/lib/gemini"
-import { getUnsplashImageByTags } from "@/lib/unsplash-utils"
+import { generateAndUploadImage } from "@/lib/upload-actions"
 
 export function AISuggestedCourseCard() {
   const { user } = useAuth()
@@ -56,12 +56,16 @@ export function AISuggestedCourseCard() {
         // AI suggested name - generate full content first
         const courseData = await generateCourseContent(suggestion.title)
         
-        // Automatically fetch a relevant Unsplash image
+        // Automatically generate a relevant AI image with Cloudflare AI
         try {
-          const imageUrl = await getUnsplashImageByTags(courseData.tags || [], courseData.title)
-          courseData.imageUrl = imageUrl
+          const prompt = `A high-quality, professional educational cover image for a course titled "${courseData.title}". Style: modern, clean, digital art. Topics: ${courseData.tags?.join(", ")}`;
+          const result = await generateAndUploadImage(prompt);
+          courseData.imageUrl = result.ufsUrl;
+          courseData.imageKey = result.key;
         } catch (imageErr) {
-          console.error("Error fetching course image:", imageErr)
+          console.error("Error generating course image:", imageErr)
+          // Fallback to a default image if generation fails
+          courseData.imageUrl = "https://images.unsplash.com/photo-1501504905252-473c47e087f8?auto=format&fit=crop&q=80&w=800"
         }
 
         const newCourseId = await createOrGetCourse(courseData, user.uid)

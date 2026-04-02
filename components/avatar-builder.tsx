@@ -62,7 +62,7 @@ const AVATAR_STYLES: { value: AvatarStyle; label: string }[] = [
   { value: "lorelei", label: "Lorelei" },
   { value: "micah", label: "Micah" },
   // Unique / Custom
-  { value: "hf", label: "AI Generated (HF)" },
+  { value: "ai", label: "AI Generated (Cloudflare)" },
   { value: "unsplash", label: "Unsplash Pro" },
   { value: "upload", label: "Masterpiece Upload" },
 ]
@@ -84,7 +84,7 @@ export function AvatarBuilder({
   const [imageKey, setImageKey] = useState<string | undefined>(currentImageKey)
   const [imageConfig, setImageConfig] = useState(currentImageConfig || { fit: "cover" as const, position: { x: 50, y: 50 }, scale: 1 })
 
-  const isCustomStyle = ["hf", "unsplash", "upload"].includes(selectedStyle)
+  const isCustomStyle = ["ai", "unsplash", "upload"].includes(selectedStyle)
   
   // Sync internal state with props
   useEffect(() => {
@@ -106,7 +106,7 @@ export function AvatarBuilder({
     setSelectedStyle(currentStyle)
     // If switching to a custom style, and it matches the currently equipped style,
     // restore the equipped URL and image key.
-    if (["hf", "unsplash", "upload"].includes(currentStyle)) {
+    if (["ai", "unsplash", "upload"].includes(currentStyle)) {
       setAvatarUrl(currentUrl)
       setImageKey(currentImageKey)
     }
@@ -119,8 +119,8 @@ export function AvatarBuilder({
 
   // Handle style switching logic
   useEffect(() => {
-    const isNowCustom = ["hf", "unsplash", "upload"].includes(selectedStyle)
-    const wasOriginallyCustom = ["hf", "unsplash", "upload"].includes(currentStyle)
+    const isNowCustom = ["ai", "unsplash", "upload"].includes(selectedStyle)
+    const wasOriginallyCustom = ["ai", "unsplash", "upload"].includes(currentStyle)
 
     if (isNowCustom) {
       if (selectedStyle === currentStyle && wasOriginallyCustom) {
@@ -215,7 +215,7 @@ export function AvatarBuilder({
           <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="p-4 rounded-lg border bg-primary/5 border-primary/20">
               <Label className="text-base font-semibold mb-2 block">
-                {selectedStyle === "hf" ? "Generate AI Avatar" : 
+                {selectedStyle === "ai" ? "Generate AI Avatar" : 
                  selectedStyle === "unsplash" ? "Pick Unsplash Photo" : 
                  "Upload Your Own Avatar"}
               </Label>
@@ -237,7 +237,7 @@ export function AvatarBuilder({
                 initialPosition={imageConfig.position}
                 initialScale={imageConfig.scale}
                 allowedModes={
-                  selectedStyle === "hf" ? ["ai"] :
+                  selectedStyle === "ai" ? ["ai"] :
                   selectedStyle === "unsplash" ? ["unsplash"] :
                   ["upload"]
                 }

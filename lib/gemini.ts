@@ -243,7 +243,8 @@ export async function generateCourseSkeleton(
   topic: string,
   difficulty: "beginner" | "intermediate" | "expert",
   moduleCount: number,
-  lessonCounts: number[]
+  lessonCounts: number[],
+  sourceMaterialId?: string
 ): Promise<CourseData> {
   if (!genAI) {
     throw new Error("Gemini API key is not configured")
@@ -253,11 +254,72 @@ export async function generateCourseSkeleton(
 
   const xpMultiplier = difficulty === "beginner" ? 1.0 : difficulty === "intermediate" ? 1.5 : 2.0
 
-  const prompt = `Generate a course skeleton for "${topic}" at ${difficulty} level.
+  // Fetch source material if provided
+  let sourceMaterialContext = ""
+  let storedModules: any[] | null = null
+  if (sourceMaterialId) {
+    try {
+      const { db } = await import("./firebase")
+      const { doc, getDoc } = await import("firebase/firestore")
+      const materialDoc = await getDoc(doc(db, "course_materials", sourceMaterialId))
+      
+      if (materialDoc.exists()) {
+        const material = materialDoc.data()
+        
+        // Check if detailed modules structure exists
+        if (material.modules && Array.isArray(material.modules) && material.modules.length > 0) {
+          storedModules = material.modules
+          // Build detailed context from modules structure
+          const modulesStructure = material.modules.map((mod: any, idx: number) => {
+            const lessonsList = mod.lessons && Array.isArray(mod.lessons)
+              ? mod.lessons.map((les: any, lesIdx: number) => {
+                  const keyPoints = les.keyPoints && Array.isArray(les.keyPoints) ? les.keyPoints.join(", ") : "None"
+                  const references = les.references && Array.isArray(les.references) ? les.references.join(", ") : "None"
+                  return `  Lesson ${lesIdx + 1}: "${les.title || "Untitled"}"\n    Key Points: ${keyPoints}\n    References: ${references}`
+                }).join("\n")
+              : "No lessons defined"
+            return `Module ${idx + 1}: "${mod.title || "Untitled"}"\n${lessonsList}`
+          }).join("\n\n")
+          
+          sourceMaterialContext = `
+
+Based on the uploaded course materials:
+Summary: ${material.summary || "No summary available"}
+Visual Descriptions: ${Array.isArray(material.visualDescriptions) ? material.visualDescriptions.join("\n- ") : "None"}
+
+Detailed Course Structure (MUST follow this exact structure):
+${modulesStructure}
+
+IMPORTANT: You MUST generate a course structure that matches the modules and lessons listed above exactly. Use the provided module titles, lesson titles, and incorporate the key points and references into your course descriptions. Do not add or remove modules or lessons.`
+        } else {
+          // Fallback to simple suggested modules
+          sourceMaterialContext = `
+
+Based on the uploaded course materials:
+Summary: ${material.summary || "No summary available"}
+Visual Descriptions: ${Array.isArray(material.visualDescriptions) ? material.visualDescriptions.join("\n- ") : "None"}
+Suggested Modules: ${Array.isArray(material.suggestedModules) ? material.suggestedModules.join(", ") : "None"}
+
+Use this material as the foundation for the course structure. The course should comprehensively cover the concepts, definitions, and workflows described in the summary.`
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching source material:", error)
+      // Continue without source material context
+    }
+  }
+
+  // If we have stored modules, use their structure instead of the provided counts
+  const actualModuleCount = storedModules ? storedModules.length : moduleCount
+  const actualLessonCounts = storedModules 
+    ? storedModules.map((mod: any) => (mod.lessons && Array.isArray(mod.lessons) ? mod.lessons.length : 3))
+    : lessonCounts
+
+  const prompt = `Generate a course skeleton${sourceMaterialContext ? " based on the uploaded course materials" : ` for "${topic}"`} at ${difficulty} level.${sourceMaterialContext}
 
 Course Structure:
-- ${moduleCount} modules
-- Lesson counts per module: ${lessonCounts.join(", ")}
+- ${actualModuleCount} modules
+- Lesson counts per module: ${actualLessonCounts.join(", ")}
 
 Return ONLY valid JSON without markdown formatting, following this exact structure:
 
@@ -289,6 +351,7 @@ Requirements:
 - Generate 3-5 relevant tags
 - Tags should be lowercase, single words or short phrases
 - Make sure titles are educational and well-structured
+${storedModules ? "- IMPORTANT: Use the EXACT module and lesson titles provided in the detailed structure above. Match them precisely." : ""}
 - Return only the JSON object.`
 
   try {
@@ -325,6 +388,54 @@ Requirements:
         delete (lesson as any).content
       })
     })
+    
+    // If we have stored modules with lesson details, inject the context
+    if (storedModules && sourceMaterialId) {
+      // Fetch processedImages from material document
+      let processedImages: Array<{ url: string; description: string; tags: string[]; imageIndex: number }> = []
+      try {
+        const { db } = await import("./firebase")
+        const { doc, getDoc } = await import("firebase/firestore")
+        const materialDoc = await getDoc(doc(db, "course_materials", sourceMaterialId))
+        if (materialDoc.exists()) {
+          const materialData = materialDoc.data()
+          processedImages = materialData.processedImages || []
+        }
+      } catch (error) {
+        console.error("Error fetching processedImages:", error)
+      }
+
+      courseData.modules.forEach((module, moduleIdx) => {
+        if (storedModules && storedModules[moduleIdx] && storedModules[moduleIdx].lessons) {
+          const storedModule = storedModules[moduleIdx]
+          module.lessons.forEach((lesson, lessonIdx) => {
+            const storedLesson = storedModule.lessons[lessonIdx]
+            if (storedLesson) {
+              // Match images to this lesson based on references and tags
+              const lessonImages = processedImages.filter((img) => {
+                // Check if image tags match lesson key points or references mention the image
+                const refsLower = storedLesson.references?.map((r: string) => r.toLowerCase()) || []
+                const tagsLower = img.tags.map(t => t.toLowerCase())
+                const keyPointsLower = storedLesson.keyPoints?.map((kp: string) => kp.toLowerCase()) || []
+                
+                // Match if references mention image index or tags match key points
+                return refsLower.some((ref: string) => ref.includes(`image index ${img.imageIndex}`) || ref.includes(`index ${img.imageIndex}`)) ||
+                       tagsLower.some(tag => keyPointsLower.some((kp: string) => kp.includes(tag)))
+              })
+
+              ;(lesson as any).sourceContext = {
+                sourceMaterialId,
+                keyPoints: storedLesson.keyPoints || [],
+                references: storedLesson.references || [],
+                processedImages: lessonImages, // Include relevant images for this lesson
+                imageUrls: lessonImages.map(img => img.url), // For backward compatibility
+              }
+            }
+          })
+        }
+      })
+    }
+    
     return courseData
   } catch (error) {
     console.error("Error generating course skeleton:", error)
@@ -412,7 +523,8 @@ Requirements:
 export async function generateLessonStream(
   lessonTitle: string,
   courseTitle: string,
-  moduleTitle: string
+  moduleTitle: string,
+  sourceContext?: { keyPoints: string[]; references: string[]; processedImages?: Array<{ url: string; description: string; tags: string[]; imageIndex: number }> }
 ): Promise<LessonStream> {
   if (!genAI) {
     throw new Error("Gemini API key is not configured")
@@ -420,7 +532,35 @@ export async function generateLessonStream(
 
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
 
-  const prompt = `Generate a lesson stream for "${lessonTitle}" as part of the course "${courseTitle}", module "${moduleTitle}".
+  // Build source material context if available
+  let sourceMaterialContext = ""
+  if (sourceContext && (sourceContext.keyPoints.length > 0 || sourceContext.references.length > 0)) {
+    const imagesContext = sourceContext.processedImages && sourceContext.processedImages.length > 0
+      ? `
+
+Available Images from Course Materials:
+${sourceContext.processedImages.map((img, idx) => `Image ${idx + 1} (Index ${img.imageIndex}): ${img.url}
+  Description: ${img.description}
+  Tags: ${img.tags.join(", ")}`).join("\n\n")}
+
+IMPORTANT: You MUST include these images in your lesson content using markdown image syntax: ![Description](URL)
+Place images strategically within text blocks where they best illustrate the concepts being explained.`
+      : ""
+
+    sourceMaterialContext = `
+
+IMPORTANT: This lesson is based on user-uploaded course materials. You MUST incorporate the following information:
+
+Key Points to Cover:
+${sourceContext.keyPoints.map((kp, idx) => `${idx + 1}. ${kp}`).join("\n")}
+
+References to Include:
+${sourceContext.references.map((ref, idx) => `${idx + 1}. ${ref}`).join("\n")}${imagesContext}
+
+Ensure all key points are thoroughly explained and referenced in your lesson content. Link the references to the concepts being taught.`
+  }
+
+  const prompt = `Generate a lesson stream for "${lessonTitle}" as part of the course "${courseTitle}", module "${moduleTitle}".${sourceMaterialContext}
 
 Return ONLY valid JSON without markdown formatting, following this exact structure:
 
@@ -501,6 +641,8 @@ Requirements:
 - Generate exactly 7 indisputable facts in the "facts" array
 - Use all 6 interaction types appropriately: swipe, reorder, fill_blank, bug_hunter, matching, chat_sim
 - Each interaction MUST test the concept from the immediately preceding text block
+- If images are provided in the source material context, you MUST include them in relevant text blocks using markdown image syntax: ![Image description](image_url)
+- Place images strategically where they best illustrate the concepts being explained
 - Make content educational, engaging, and suitable for learning
 - Return only the JSON object.`
 
