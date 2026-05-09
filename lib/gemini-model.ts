@@ -1,4 +1,5 @@
-const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
+// Default fallback ONLY when Firestore has no configuration (or is unreadable).
+const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 
 type CacheEntry = { value: string; expiresAt: number }
 
@@ -12,13 +13,16 @@ function extractModelFromDoc(data: Record<string, unknown>): string | null {
   // Supported shapes:
   // - { geminiModel: "..." }
   // - { model: "..." }
+  // - { modelName: "..." }
   // - { gemini: { model: "..." } }
-  const direct = data.geminiModel ?? data.model
+  const direct = data.geminiModel ?? data.model ?? data.modelName
   if (isNonEmptyString(direct)) return direct.trim()
 
   const gemini = data.gemini
   if (gemini && typeof gemini === "object") {
-    const nestedModel = (gemini as Record<string, unknown>).model
+    const nestedModel =
+      (gemini as Record<string, unknown>).model ??
+      (gemini as Record<string, unknown>).modelName
     if (isNonEmptyString(nestedModel)) return nestedModel.trim()
   }
 
@@ -42,8 +46,20 @@ export async function getGeminiModelName(): Promise<string> {
     const { db } = await import("./firebase")
     const { doc, getDoc } = await import("firebase/firestore")
 
-    const snap = await getDoc(doc(db, "config", "ai"))
-    if (snap.exists()) {
+    // Try a few common config doc locations (in priority order).
+    // This stays safe: we're only reading a *model name*, not secrets.
+    const candidates: Array<[collection: string, docId: string]> = [
+      ["config", "ai"],
+      ["config", "gemini"],
+      ["config", "models"],
+      ["settings", "ai"],
+      ["settings", "gemini"],
+    ]
+
+    for (const [collection, docId] of candidates) {
+      const snap = await getDoc(doc(db, collection, docId))
+      if (!snap.exists()) continue
+
       const data = snap.data() as Record<string, unknown>
       const fromDb = extractModelFromDoc(data)
       if (fromDb) {
