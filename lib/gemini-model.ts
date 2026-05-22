@@ -1,6 +1,5 @@
 // Default fallback ONLY when Firestore has no configuration (or is unreadable).
 const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
-
 type CacheEntry = { value: string; expiresAt: number }
 
 let cachedModel: CacheEntry | null = null

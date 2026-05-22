@@ -1,5 +1,90 @@
-import { GoogleGenerativeAI, Tool, SchemaType } from "@google/generative-ai"
-import { getGeminiModelName } from "./gemini-model"
+import { SchemaType, type Tool } from "@google/generative-ai"
+import { hasGeminiApiKeys } from "./gemini-keys"
+import { getPooledModel, poolGenerateText, runWithKeyRetry } from "./gemini-pool"
+
+const CHATBOT_TOOLS: Tool[] = [
+  {
+    functionDeclarations: [
+      {
+        name: "getUserQuizHistory",
+        description: "Get user's past quiz attempts and results",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            userId: { type: SchemaType.STRING, description: "The ID of the user" },
+          },
+          required: ["userId"],
+        },
+      },
+      {
+        name: "getUserJourneyProgress",
+        description: "Get all courses in the user's journey with their progress",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            userId: { type: SchemaType.STRING, description: "The ID of the user" },
+          },
+          required: ["userId"],
+        },
+      },
+      {
+        name: "getDailyQuests",
+        description: "Get the current daily quests for the user",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            userId: { type: SchemaType.STRING, description: "The ID of the user" },
+          },
+          required: ["userId"],
+        },
+      },
+      {
+        name: "getUserXPHistory",
+        description: "Get the XP earning history for the user",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            userId: { type: SchemaType.STRING, description: "The ID of the user" },
+          },
+          required: ["userId"],
+        },
+      },
+      {
+        name: "getUserNexonHistory",
+        description: "Get the Nexon transaction history for the user",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            userId: { type: SchemaType.STRING, description: "The ID of the user" },
+          },
+          required: ["userId"],
+        },
+      },
+      {
+        name: "searchCommunityCourses",
+        description: "Search for public courses in the community library",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            query: { type: SchemaType.STRING, description: "Search query or keywords" },
+          },
+          required: ["query"],
+        },
+      },
+      {
+        name: "getQuizCorrectAnswer",
+        description: "Get the correct answer for a quiz question to provide a hint (only during quiz)",
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            questionId: { type: SchemaType.STRING, description: "The ID of the question" },
+          },
+          required: ["questionId"],
+        },
+      },
+    ],
+  },
+]
 
 interface PageContext {
   title: string
@@ -7,14 +92,6 @@ interface PageContext {
   data?: any
   type?: string
 }
-
-const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
-
-if (!apiKey) {
-  console.warn("NEXT_PUBLIC_GEMINI_API_KEY is not set")
-}
-
-const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null
 
 export interface CourseModule {
   title: string
@@ -79,6 +156,8 @@ export interface LessonContent {
 export interface TextBlock {
   type: "text"
   content: string
+  /** Set by Gemini; consumed by Cloudflare enrichment, then stripped before save */
+  illustrationPrompt?: string
 }
 
 export interface SwipeInteraction {
@@ -138,11 +217,9 @@ export interface LessonStream {
  * Analyze if a topic has variable difficulty and suggest course options
  */
 export async function analyzeTopicDifficulty(topic: string): Promise<TopicDifficultyAnalysis> {
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
-
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const prompt = `Analyze the topic "${topic}" and determine if it is a valid educational topic and how it can be structured.
 
@@ -206,9 +283,7 @@ Requirements:
 - Return ONLY valid JSON without markdown formatting`
 
   try {
-    const result = await model.generateContent(prompt)
-    const response = await result.response
-    const text = response.text()
+    const text = await poolGenerateText(prompt)
 
     // Clean the response
     let jsonText = text.trim()
@@ -247,11 +322,9 @@ export async function generateCourseSkeleton(
   lessonCounts: number[],
   sourceMaterialId?: string
 ): Promise<CourseData> {
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
-
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const xpMultiplier = difficulty === "beginner" ? 1.0 : difficulty === "intermediate" ? 1.5 : 2.0
 
@@ -356,9 +429,7 @@ ${storedModules ? "- IMPORTANT: Use the EXACT module and lesson titles provided 
 - Return only the JSON object.`
 
   try {
-    const result = await model.generateContent(prompt)
-    const response = await result.response
-    const text = response.text()
+    const text = await poolGenerateText(prompt)
 
     // Clean the response
     let jsonText = text.trim()
@@ -451,11 +522,9 @@ export async function generateCourseContent(topic: string, difficulty?: "beginne
   }
 
   // Legacy fallback for backward compatibility
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
-
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const prompt = `Generate a comprehensive course structure for "${topic}" in JSON format. The course should have 3-5 modules, each with 2-4 lessons. Return ONLY valid JSON without markdown formatting, following this exact structure:
 
@@ -491,9 +560,7 @@ Requirements:
 - Return only the JSON object.`
 
   try {
-    const result = await model.generateContent(prompt)
-    const response = await result.response
-    const text = response.text()
+    const text = await poolGenerateText(prompt)
 
     // Clean the response - remove markdown code blocks if present
     let jsonText = text.trim()
@@ -527,11 +594,9 @@ export async function generateLessonStream(
   moduleTitle: string,
   sourceContext?: { keyPoints: string[]; references: string[]; processedImages?: Array<{ url: string; description: string; tags: string[]; imageIndex: number }> }
 ): Promise<LessonStream> {
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
-
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   // Build source material context if available
   let sourceMaterialContext = ""
@@ -569,7 +634,8 @@ Return ONLY valid JSON without markdown formatting, following this exact structu
   "blocks": [
     {
       "type": "text",
-      "content": "Explanatory text content (markdown supported)"
+      "content": "Brief explanatory text (2-4 short paragraphs max, markdown supported). Keep text concise — visuals carry much of the teaching.",
+      "illustrationPrompt": "Optional: detailed prompt for an AI illustration of the concept just explained (omit if using only uploaded material images)"
     },
     {
       "type": "swipe",
@@ -634,17 +700,15 @@ Return ONLY valid JSON without markdown formatting, following this exact structu
 }
 
 Requirements:
-- Start with a substantial TextBlock that introduces the core concepts and provides the necessary context/answers for the first interaction block. Do NOT just provide a generic introduction; provide actual educational content.
-- Follow with an InteractionBlock that tests the specific concept explained in the immediately preceding text block.
-- Every TextBlock MUST provide the specific information needed to solve the interaction that follows it.
-- Repeat this pattern 3-4 times (text → interaction → text → interaction...)
-- IMPORTANT: Randomize the order of interaction types - do NOT follow the example order. Mix them up so different interaction types appear at different positions in each lesson.
-- Generate exactly 7 indisputable facts in the "facts" array
-- Use all 6 interaction types appropriately: swipe, reorder, fill_blank, bug_hunter, matching, chat_sim
-- Each interaction MUST test the concept from the immediately preceding text block
-- If images are provided in the source material context, you MUST include them in relevant text blocks using markdown image syntax: ![Image description](image_url)
-- Place images strategically where they best illustrate the concepts being explained
-- Make content educational, engaging, and suitable for learning
+- Visual-first lesson: keep text blocks SHORT (under 120 words each). Use illustrationPrompt on 2-3 text blocks for concepts that benefit from a diagram or scene (educational, clear, no text in image).
+- Start with a text block that introduces the core concept, then an interaction testing it.
+- Repeat 3-4 times (text → interaction → text → interaction...).
+- Randomize interaction types — do NOT use the same order every lesson.
+- Generate exactly 7 facts in the "facts" array.
+- Use all 6 interaction types: swipe, reorder, fill_blank, bug_hunter, matching, chat_sim.
+- Each interaction MUST test the immediately preceding text block.
+- If uploaded material images exist in context, include them with markdown ![desc](url) in the relevant text block AND skip illustrationPrompt for that block.
+- illustrationPrompt must describe a single clear educational visual (diagram, process, example scene) — not the whole lesson.
 - Return only the JSON object.`
 
   try {
@@ -654,9 +718,7 @@ Requirements:
     })
 
     const generationPromise = (async () => {
-      const result = await model.generateContent(prompt)
-      const response = await result.response
-      const text = response.text()
+      const text = await poolGenerateText(prompt)
 
       // Clean the response
       let jsonText = text.trim()
@@ -697,11 +759,9 @@ export async function generateLessonContent(
   lessonTitle: string,
   lessonDescription: string
 ): Promise<LessonContent> {
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
-
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const prompt = `Generate a detailed lesson content for "${lessonTitle}" as part of the course "${courseTitle}", module "${moduleTitle}".
 
@@ -731,9 +791,7 @@ Requirements:
 Return only the JSON object.`
 
   try {
-    const result = await model.generateContent(prompt)
-    const response = await result.response
-    const text = response.text()
+    const text = await poolGenerateText(prompt)
 
     // Clean the response - remove markdown code blocks if present
     let jsonText = text.trim()
@@ -789,96 +847,9 @@ export async function generateChatResponse(
   conversationHistory: ChatMessage[] = [],
   currentUserId?: string
 ): Promise<string> {
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
-
-  const model = genAI.getGenerativeModel({ 
-    model: await getGeminiModelName(),
-    tools: [
-      {
-        functionDeclarations: [
-          {
-            name: "getUserQuizHistory",
-            description: "Get user's past quiz attempts and results",
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                userId: { type: SchemaType.STRING, description: "The ID of the user" },
-              },
-              required: ["userId"],
-            },
-          },
-          {
-            name: "getUserJourneyProgress",
-            description: "Get all courses in the user's journey with their progress",
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                userId: { type: SchemaType.STRING, description: "The ID of the user" },
-              },
-              required: ["userId"],
-            },
-          },
-          {
-            name: "getDailyQuests",
-            description: "Get the current daily quests for the user",
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                userId: { type: SchemaType.STRING, description: "The ID of the user" },
-              },
-              required: ["userId"],
-            },
-          },
-          {
-            name: "getUserXPHistory",
-            description: "Get the XP earning history for the user",
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                userId: { type: SchemaType.STRING, description: "The ID of the user" },
-              },
-              required: ["userId"],
-            },
-          },
-          {
-            name: "getUserNexonHistory",
-            description: "Get the Nexon transaction history for the user",
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                userId: { type: SchemaType.STRING, description: "The ID of the user" },
-              },
-              required: ["userId"],
-            },
-          },
-          {
-            name: "searchCommunityCourses",
-            description: "Search for public courses in the community library",
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                query: { type: SchemaType.STRING, description: "Search query or keywords" },
-              },
-              required: ["query"],
-            },
-          },
-          {
-            name: "getQuizCorrectAnswer",
-            description: "Get the correct answer for a quiz question to provide a hint (only during quiz)",
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                questionId: { type: SchemaType.STRING, description: "The ID of the question" },
-              },
-              required: ["questionId"],
-            },
-          },
-        ],
-      },
-    ],
-  })
 
   // Build system context string
   const systemContextString = pageContext
@@ -907,18 +878,18 @@ Instructions:
 
 Respond naturally and conversationally.`
 
-  // Start chat with history
-  const chat = model.startChat({
-    history: conversationHistory.map(msg => ({
-      role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }],
-    })),
-  })
-
-  // Build the first message with context and user message
   const initialPrompt = `${systemPrompt}\n\n${systemContextString}\n\n[USER QUESTION]\n${userMessage}`
 
   try {
+    return await runWithKeyRetry(async (keyIndex) => {
+    const { model } = await getPooledModel({ tools: CHATBOT_TOOLS }, keyIndex)
+    const chat = model.startChat({
+      history: conversationHistory.map((msg) => ({
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: msg.content }],
+      })),
+    })
+
     let result = await chat.sendMessage(initialPrompt)
     let response = result.response
     
@@ -989,6 +960,7 @@ const {
     }
 
     return response.text().trim()
+    })
   } catch (error) {
     console.error("Error generating chat response:", error)
     throw new Error("Failed to generate response. Please try again.")
@@ -1000,15 +972,13 @@ const {
  * Returns an array of suggested course names/topics
  */
 export async function generateCourseSuggestions(courseTitles: string[], count: number = 3): Promise<string[]> {
-  if (!genAI) {
-    throw new Error("Gemini API key is not configured")
-  }
+  // Suggestions are a non-critical enhancement. If Gemini isn't configured,
+  // gracefully return no suggestions and let the caller fall back.
+  if (!(await hasGeminiApiKeys())) return []
 
   if (courseTitles.length === 0) {
     return []
   }
-
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const coursesList = courseTitles.join(", ")
 
@@ -1025,9 +995,7 @@ Make the suggestions:
 - Return only the JSON array, no markdown, no explanation`
 
   try {
-    const result = await model.generateContent(prompt)
-    const response = await result.response
-    const text = response.text()
+    const text = await poolGenerateText(prompt)
 
     // Clean the response - remove markdown code blocks if present
     let jsonText = text.trim()

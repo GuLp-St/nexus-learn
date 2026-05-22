@@ -16,7 +16,12 @@ async function ensureImports() {
   
   if (!pdfjsLib) {
     pdfjsLib = await import("pdfjs-dist")
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
+    // Use a bundler-resolved worker path (works without copying into /public).
+    // `pdfjs-dist@5` ships an ESM worker bundle at this path.
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+      "pdfjs-dist/build/pdf.worker.min.mjs",
+      import.meta.url
+    ).toString()
   }
   if (!mammoth) {
     mammoth = await import("mammoth")
@@ -94,7 +99,6 @@ async function processPDF(file: File): Promise<ProcessedFileResult> {
     await page.render({
       canvasContext: context,
       viewport: viewport,
-      canvas: canvas,
     }).promise
     
     // Convert canvas to base64 JPEG with lower quality to reduce size

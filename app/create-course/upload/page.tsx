@@ -14,6 +14,7 @@ import { analyzeCourseFromFiles, CourseMaterialAnalysis, FileProcessedData } fro
 import { generateCourseSkeleton } from "@/lib/gemini"
 import { createOrGetCourse } from "@/lib/course-utils"
 import { generateAndUploadImage, uploadCourseMaterialImagesBatch } from "@/lib/upload-actions"
+import { DEFAULT_COURSE_IMAGE_URL } from "@/lib/image-constants"
 import { db } from "@/lib/firebase"
 import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore"
 
@@ -78,16 +79,23 @@ export default function UploadCoursePage() {
 
     try {
       const fileData: FileProcessedData[] = []
+      // IMPORTANT: Make image indices globally unique across ALL uploaded files.
+      // The rest of the pipeline (Gemini references + UploadThing mapping) relies on stable unique indices.
+      let globalImageIndex = 0
 
       // Process each file
       for (let i = 0; i < uploadedFiles.length; i++) {
         const file = uploadedFiles[i]
         try {
           const result = await processFile(file)
+          const imagesWithGlobalIndex = result.images.map((img) => ({
+            ...img,
+            index: globalImageIndex++,
+          }))
           fileData.push({
             fileName: file.name,
             text: result.text,
-            images: result.images,
+            images: imagesWithGlobalIndex,
           })
           setExtractedCount(i + 1)
         } catch (err: any) {
@@ -219,15 +227,14 @@ export default function UploadCoursePage() {
         materialId
       )
 
-      // Generate course image
-      try {
-        const prompt = `A high-quality, professional educational cover image for a course. Style: modern, clean, digital art. Topics: ${aiAnalysis.suggestedModules.slice(0, 3).join(", ")}`
-        const result = await generateAndUploadImage(prompt)
-        courseData.imageUrl = result.ufsUrl
-        courseData.imageKey = result.key
-      } catch (imageErr) {
-        console.error("Error generating course image:", imageErr)
-        courseData.imageUrl = "https://images.unsplash.com/photo-1501504905252-473c47e087f8?auto=format&fit=crop&q=80&w=800"
+      // Generate course image (falls back when Cloudflare AI is not configured)
+      const prompt = `A high-quality, professional educational cover image for a course. Style: modern, clean, digital art. Topics: ${aiAnalysis.suggestedModules.slice(0, 3).join(", ")}`
+      const imageResult = await generateAndUploadImage(prompt)
+      if (imageResult) {
+        courseData.imageUrl = imageResult.ufsUrl
+        courseData.imageKey = imageResult.key
+      } else {
+        courseData.imageUrl = DEFAULT_COURSE_IMAGE_URL
       }
 
       // Create course

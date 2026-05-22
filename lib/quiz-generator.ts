@@ -1,16 +1,8 @@
-import { GoogleGenerativeAI } from "@google/generative-ai"
 import { QuizQuestion } from "./quiz-utils"
 import { CourseData, CourseModule } from "./gemini"
 import { v4 as uuidv4 } from "uuid"
-import { getGeminiModelName } from "./gemini-model"
-
-const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
-
-if (!apiKey) {
-  console.warn("NEXT_PUBLIC_GEMINI_API_KEY is not set")
-}
-
-const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null
+import { hasGeminiApiKeys } from "./gemini-keys"
+import { poolGenerateText } from "./gemini-pool"
 
 /**
  * Generate quiz questions for a lesson
@@ -25,11 +17,9 @@ export async function generateLessonQuizQuestions(
   lessonIndex: number,
   count: number = 3
 ): Promise<QuizQuestion[]> {
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
-
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   // Lesson quizzes: no subjective questions
   const objectiveCount = count
@@ -74,9 +64,7 @@ Make sure the questions are educational, clear, and test actual understanding. R
     })
 
     const generationPromise = (async () => {
-      const result = await model.generateContent(prompt)
-      const response = await result.response
-      const text = response.text()
+      const text = await poolGenerateText(prompt)
 
       let jsonText = text.trim()
       if (jsonText.startsWith("```json")) {
@@ -158,11 +146,9 @@ async function generateSubjectiveQuestion(
   moduleIndex: number,
   lessonIndex: number
 ): Promise<QuizQuestion> {
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
-
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
   const prompt = `Generate 1 subjective (open-ended) quiz question for the lesson "${lessonTitle}" in the module "${moduleTitle}" of the course "${courseTitle}".
 
 Lesson Description: ${lessonDescription}
@@ -182,9 +168,7 @@ Return ONLY valid JSON without markdown formatting, following this exact structu
 Return only the JSON object.`
 
   try {
-    const result = await model.generateContent(prompt)
-    const response = await result.response
-    const text = response.text()
+    const text = await poolGenerateText(prompt)
 
     let jsonText = text.trim()
     if (jsonText.startsWith("```json")) {
@@ -278,11 +262,9 @@ export async function generateModuleQuizQuestions(
   }
 
   // New method: Use accumulatedContext
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
-
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
   
   // Prepare facts text with IDs
   const factsText = accumulatedContext.map((fact: any) => 
@@ -328,9 +310,7 @@ Return ONLY valid JSON without markdown formatting, following this exact structu
 }`
 
   try {
-    const result = await model.generateContent(prompt)
-    const response = await result.response
-    const text = response.text()
+    const text = await poolGenerateText(prompt)
 
     let jsonText = text.trim()
     if (jsonText.startsWith("```json")) {
@@ -454,11 +434,9 @@ export async function generateCourseQuizQuestions(
   }
 
   // New method: Use accumulatedContext from all modules
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
-
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
   
   // Prepare facts text with IDs, grouped by module
   const factsByModule: { [moduleIndex: number]: Array<{ id: string; text: string }> } = {}
@@ -525,9 +503,7 @@ Return ONLY valid JSON without markdown formatting, following this exact structu
     })
 
     const generationPromise = (async () => {
-      const result = await model.generateContent(prompt)
-      const response = await result.response
-      const text = response.text()
+      const text = await poolGenerateText(prompt)
 
       let jsonText = text.trim()
       if (jsonText.startsWith("```json")) {
@@ -580,11 +556,9 @@ export async function evaluateSubjectiveAnswer(
   suggestedAnswer: string,
   rubric?: { keywords: string[]; maxMarks: number }
 ): Promise<{ correct: boolean; feedback: string; score: number }> {
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
-
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   const rubricText = rubric 
     ? `Grading Rubric:
@@ -611,9 +585,7 @@ Return ONLY valid JSON without markdown formatting:
 }`
 
   try {
-    const result = await model.generateContent(prompt)
-    const response = await result.response
-    const text = response.text()
+    const text = await poolGenerateText(prompt)
 
     let jsonText = text.trim()
     if (jsonText.startsWith("```json")) {

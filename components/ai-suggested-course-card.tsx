@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { generateCourseContent } from "@/lib/gemini"
 import { generateAndUploadImage } from "@/lib/upload-actions"
+import { DEFAULT_COURSE_IMAGE_URL } from "@/lib/image-constants"
 
 export function AISuggestedCourseCard() {
   const { user } = useAuth()
@@ -56,16 +57,13 @@ export function AISuggestedCourseCard() {
         // AI suggested name - generate full content first
         const courseData = await generateCourseContent(suggestion.title)
         
-        // Automatically generate a relevant AI image with Cloudflare AI
-        try {
-          const prompt = `A high-quality, professional educational cover image for a course titled "${courseData.title}". Style: modern, clean, digital art. Topics: ${courseData.tags?.join(", ")}`;
-          const result = await generateAndUploadImage(prompt);
-          courseData.imageUrl = result.ufsUrl;
-          courseData.imageKey = result.key;
-        } catch (imageErr) {
-          console.error("Error generating course image:", imageErr)
-          // Fallback to a default image if generation fails
-          courseData.imageUrl = "https://images.unsplash.com/photo-1501504905252-473c47e087f8?auto=format&fit=crop&q=80&w=800"
+        const prompt = `A high-quality, professional educational cover image for a course titled "${courseData.title}". Style: modern, clean, digital art. Topics: ${courseData.tags?.join(", ")}`
+        const imageResult = await generateAndUploadImage(prompt)
+        if (imageResult) {
+          courseData.imageUrl = imageResult.ufsUrl
+          courseData.imageKey = imageResult.key
+        } else {
+          courseData.imageUrl = DEFAULT_COURSE_IMAGE_URL
         }
 
         const newCourseId = await createOrGetCourse(courseData, user.uid)

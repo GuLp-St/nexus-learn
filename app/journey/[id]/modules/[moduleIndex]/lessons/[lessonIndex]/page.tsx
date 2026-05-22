@@ -14,7 +14,8 @@ import { useChatContext } from "@/context/ChatContext"
 import { useXP } from "@/components/xp-context-provider"
 import { db } from "@/lib/firebase"
 import { doc, getDoc, updateDoc, setDoc, arrayUnion, serverTimestamp } from "firebase/firestore"
-import { CourseData, LessonStream, LessonStreamBlock, TextBlock, generateLessonStream } from "@/lib/gemini"
+import { CourseData, LessonStream, LessonStreamBlock, TextBlock } from "@/lib/gemini"
+import { generateLessonStreamWithImages } from "@/lib/lesson-stream-actions"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { getCourseWithProgress, updateUserProgress, CourseWithProgress, ensureUserProgress, getLessonStreamProgress } from "@/lib/course-utils"
 import { useActivityTracking } from "@/hooks/use-activity-tracking"
@@ -186,7 +187,7 @@ export default function LessonPage() {
         
         let generatedStream: LessonStream | null = null
         try {
-          generatedStream = await generateLessonStream(
+          generatedStream = await generateLessonStreamWithImages(
             lesson.title,
             courseData.title,
             module.title,

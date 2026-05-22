@@ -25,13 +25,9 @@ export function LoadingScreen() {
         {/* Logo Container */}
         <div className="relative mb-8">
           <img
-            src="/logo.png"
+            src="/file.svg"
             alt="Nexus Logo"
             className="h-24 w-24 animate-float-pulse object-contain"
-            onError={(e) => {
-              // Fallback if logo.png doesn't exist
-              e.currentTarget.src = "/icon.svg"
-            }}
           />
           {/* Shadow element */}
           <div className="mx-auto mt-4 h-2 w-16 animate-shadow-pulse rounded-[100%] bg-primary/20" />

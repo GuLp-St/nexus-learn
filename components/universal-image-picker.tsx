@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Slider } from "./ui/slider"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { generateAndUploadImage, deleteFileFromUploadthing, uploadGeneratedImage, generateAIImageAction } from "@/lib/upload-actions"
+import { deleteFileFromUploadthing, uploadGeneratedImage, generateAIImageAction } from "@/lib/upload-actions"
 
 interface UniversalImagePickerProps {
   value: string

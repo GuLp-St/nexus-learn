@@ -7,20 +7,27 @@ const utapi = new UTApi({
   token: process.env.UPLOADTHING_TOKEN,
 });
 
+export type UploadedImageResult = { ufsUrl: string; key: string }
+
 /**
- * Generates an image with Cloudflare AI and uploads it to Uploadthing.
+ * Generates an image with Cloudflare Workers AI and uploads to Uploadthing.
+ * Returns null when credentials are missing or generation fails (callers should use a fallback image).
  */
-export async function generateAndUploadImage(prompt: string, fileName: string = "generated-image.png", model?: string) {
+export async function generateAndUploadImage(
+  prompt: string,
+  fileName: string = "generated-image.png",
+  model?: string
+): Promise<UploadedImageResult | null> {
   try {
-    const blob = await generateAIImage(prompt, model);
+    const blob = await generateAIImage(prompt)
     if (!blob) {
-      throw new Error("Failed to generate image with Cloudflare AI");
+      return null
     }
-    
-    return await uploadGeneratedImage(blob, fileName);
+
+    return await uploadGeneratedImage(blob, fileName)
   } catch (error) {
-    console.error("Error in generateAndUploadImage:", error);
-    throw error;
+    console.error("Error in generateAndUploadImage:", error)
+    return null
   }
 }
 
@@ -31,7 +38,7 @@ export async function generateAndUploadImage(prompt: string, fileName: string = 
 export async function generateAIImageAction(prompt: string, model?: string) {
   try {
     console.log(`[AI Generation] Prompt: "${prompt}", Model: ${model || "default"}`);
-    const blob = await generateAIImage(prompt, model);
+    const blob = await generateAIImage(prompt);
     if (!blob) {
       console.error("[AI Generation] Failed: generateAIImage returned null");
       return null;

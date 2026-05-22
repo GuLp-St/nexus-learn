@@ -1,13 +1,6 @@
-import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getGeminiModelName } from "./gemini-model"
-
-const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
-
-if (!apiKey) {
-  console.warn("NEXT_PUBLIC_GEMINI_API_KEY is not set")
-}
-
-const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null
+import { hasGeminiApiKeys } from "./gemini-keys"
+import { mapParallelWithKeys, poolGenerateContent } from "./gemini-pool"
 
 export interface LessonDetail {
   title: string
@@ -55,13 +48,12 @@ interface SingleFileAnalysis {
 async function analyzeSingleFileMaterial(
   fileName: string,
   text: string,
-  images: Array<{ index: number; base64: string }>
+  images: Array<{ index: number; base64: string }>,
+  keyIndex: number
 ): Promise<SingleFileAnalysis> {
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
-
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
 
   // Construct parts array
   const parts: any[] = []
@@ -139,12 +131,15 @@ Guidelines:
 - If there are no images, visualDescriptions should be an empty array`
 
   try {
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts }],
-      systemInstruction: systemInstruction,
-    })
+    const { response } = await poolGenerateContent(
+      {
+        contents: [{ role: "user", parts }],
+        systemInstruction,
+      },
+      { systemInstruction },
+      keyIndex
+    )
 
-    const response = await result.response
     const textResponse = response.text()
 
     // Clean the response
@@ -206,65 +201,42 @@ export async function analyzeCourseFromFiles(
   files: FileProcessedData[],
   onProgress?: (processed: number, total: number) => void
 ): Promise<CourseMaterialAnalysis> {
-  if (!genAI) {
+  if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
 
-  const fileAnalyses: SingleFileAnalysis[] = []
-
-  // Step 1: analyze each file individually (with simple retry for overload)
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i]
-    let attempts = 0
-    const maxAttempts = 3
-    while (true) {
-      try {
-        // Convert indexed images to base64 array for analysis (maintaining index order)
-        const imagesArray = file.images.map(img => img.base64)
-        // But we need to pass the indexed structure - let's update the function signature usage
-        // Actually, we need to maintain the index mapping, so let's pass the indexed structure
-        const analysis = await analyzeSingleFileMaterial(file.fileName, file.text, file.images)
-        fileAnalyses.push(analysis)
-        if (onProgress) onProgress(i + 1, files.length)
-        break
-      } catch (err: any) {
-        const message = err?.message || ""
-        const isOverloaded =
-          message.includes("overloaded") ||
-          message.includes("503") ||
-          message.includes("The model is overloaded")
-        attempts++
-        if (!isOverloaded || attempts >= maxAttempts) {
-          throw new Error(
-            `Failed to analyze file "${file.fileName}". Please try again later.`
-          )
-        }
-        // Simple backoff before retrying
-        await new Promise((resolve) => setTimeout(resolve, 1000 * attempts))
-      }
-    }
-  }
+  // Step 1: parallel per-file analysis (spread across API keys)
+  let completed = 0
+  const fileAnalyses = await mapParallelWithKeys(
+    files,
+    async (file, keyIndex) => {
+      const analysis = await analyzeSingleFileMaterial(
+        file.fileName,
+        file.text,
+        file.images,
+        keyIndex
+      )
+      completed++
+      if (onProgress) onProgress(completed, files.length)
+      return analysis
+    },
+    files.length
+  )
 
   // Step 2: build combined text from per-file analyses
-  // We need to track global image indices across all files
-  let globalImageIndexOffset = 0
   const combinedText = fileAnalyses
     .map((fa, fileIdx) => {
       const keyPointsText =
         fa.keyPoints.length > 0 ? fa.keyPoints.map((kp) => `- ${kp}`).join("\n") : "- (none)"
       
-      // Map visual descriptions with global indices
+      // Visual descriptions already use globally-unique image indices
+      // (assigned during client-side extraction), so we keep them as-is.
       const visualsText =
         fa.visualDescriptions.length > 0
           ? fa.visualDescriptions.map((v) => {
-              const globalIndex = globalImageIndexOffset + v.imageIndex
-              return `- Image Index ${globalIndex}: ${v.description} [Tags: ${v.tags.join(", ")}]`
+              return `- Image Index ${v.imageIndex}: ${v.description} [Tags: ${v.tags.join(", ")}]`
             }).join("\n")
           : "- (none)"
-      
-      // Update offset for next file
-      const fileImageCount = files[fileIdx].images.length
-      globalImageIndexOffset += fileImageCount
       
       return `FILE ${fileIdx + 1}: ${fa.fileName}
 
@@ -279,9 +251,7 @@ ${visualsText}`
     })
     .join("\n\n------------------------\n\n")
 
-  // Step 3: ask Gemini to create the full course structure from the combined important information
-  const model = genAI.getGenerativeModel({ model: await getGeminiModelName() })
-
+  // Step 3: single coherent aggregation (one key, full combined context from step 1+2)
   const systemInstruction = `You are an expert academic course designer.
 
 Task: You will receive summarized important information from MULTIPLE uploaded files (summaries, key points, and visual descriptions). Based on ALL of this combined information, design a complete course.
@@ -344,12 +314,14 @@ Guidelines:
   }
 
   try {
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts }],
-      systemInstruction,
-    })
+    const { response } = await poolGenerateContent(
+      {
+        contents: [{ role: "user", parts }],
+        systemInstruction,
+      },
+      { systemInstruction }
+    )
 
-    const response = await result.response
     const textResponse = response.text()
 
     // Clean the response
