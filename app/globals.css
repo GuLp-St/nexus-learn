@@ -1134,15 +1134,16 @@
   80% { transform: translateX(4px); }
 }
 
-@keyframes challenge-ring-expand {
-  0% {
-    transform: scale(0.4);
-    opacity: 0.9;
-  }
-  100% {
-    transform: scale(2.5);
-    opacity: 0;
-  }
+@keyframes challenge-screen-flash-correct {
+  0% { background-color: transparent; }
+  15% { background-color: rgba(34, 197, 94, 0.35); }
+  100% { background-color: transparent; }
+}
+
+@keyframes challenge-screen-flash-wrong {
+  0% { background-color: transparent; }
+  15% { background-color: rgba(239, 68, 68, 0.4); }
+  100% { background-color: transparent; }
 }
 
 @keyframes challenge-timer-flash-keyframes {
@@ -1162,9 +1163,12 @@
   animation: challenge-shake-wrong 0.4s ease-out;
 }
 
-.challenge-ring-correct,
-.challenge-ring-wrong {
-  animation: challenge-ring-expand 0.55s ease-out forwards;
+.challenge-screen-flash-correct {
+  animation: challenge-screen-flash-correct 0.55s ease-out forwards;
+}
+
+.challenge-screen-flash-wrong {
+  animation: challenge-screen-flash-wrong 0.55s ease-out forwards;
 }
 
 .challenge-timer-flash {

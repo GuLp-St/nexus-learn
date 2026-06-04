@@ -25,24 +25,17 @@ export function ChallengeQuizOverlay({
 
   return (
     <>
-      <div
-        className={cn(
-          "pointer-events-none fixed inset-0 z-40 transition-transform duration-150",
-          answerFx === "correct" && "challenge-shake-correct",
-          answerFx === "wrong" && "challenge-shake-wrong"
-        )}
-        aria-hidden
-      />
-
       {answerFx === "correct" && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
-          <div className="challenge-ring-correct h-32 w-32 rounded-full border-4 border-green-400/80" />
-        </div>
+        <div
+          className="pointer-events-none fixed inset-0 z-[60] challenge-screen-flash-correct"
+          aria-hidden
+        />
       )}
       {answerFx === "wrong" && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
-          <div className="challenge-ring-wrong h-32 w-32 rounded-full border-4 border-red-500/80" />
-        </div>
+        <div
+          className="pointer-events-none fixed inset-0 z-[60] challenge-screen-flash-wrong"
+          aria-hidden
+        />
       )}
 
       {comboStreak > 0 && (

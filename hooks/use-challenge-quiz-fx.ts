@@ -94,15 +94,15 @@ export function useChallengeQuizFx(questionIndex: number, totalQuestions: number
       setComboTimeLeft(COMBO_TIMEOUT_MS)
       return next
     })
-    playTone(520 + comboStreak * 40, 0.12, "triangle", 0.1)
-    setTimeout(() => setAnswerFx(null), 500)
+    playTone(660, 0.14, "triangle", 0.09)
+    setTimeout(() => setAnswerFx(null), 580)
   }, [comboStreak, playTone])
 
   const onWrongAnswer = useCallback(() => {
     setAnswerFx("wrong")
     resetCombo()
-    playTone(180, 0.2, "sawtooth", 0.07)
-    setTimeout(() => setAnswerFx(null), 500)
+    playTone(140, 0.22, "sawtooth", 0.06)
+    setTimeout(() => setAnswerFx(null), 580)
   }, [playTone, resetCombo])
 
   useEffect(() => {
