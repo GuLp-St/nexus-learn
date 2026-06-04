@@ -503,7 +503,7 @@ export async function rejectChallenge(challengeId: string): Promise<void> {
     })
   } catch (error) {
     console.error("Error rejecting challenge:", error)
-    throw new Error("Failed to reject challenge")
+    throw error instanceof Error ? error : new Error("Failed to decline challenge")
   }
 }
 
@@ -526,11 +526,15 @@ export async function cancelChallenge(challengeId: string, challengerId: string)
     }
 
     if (challengeData.hasChallengerPlayed) {
-      throw new Error("Cannot cancel challenge after playing")
+      throw new Error(
+        "Can't cancel — your score is already locked in. Wait for your opponent to play or finish the duel."
+      )
     }
 
     if (challengeData.status !== "pending") {
-      throw new Error("Challenge is not pending")
+      throw new Error(
+        "Can't cancel — this challenge was already accepted. Ask your friend to decline, or play it out."
+      )
     }
 
     // Refund challenger's bet

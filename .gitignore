@@ -23,6 +23,10 @@
 # misc
 .DS_Store
 *.pem
+.cursor/
+
+# stray / local scratch
+dummy
 
 # debug
 npm-debug.log*

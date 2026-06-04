@@ -388,8 +388,8 @@ function ChallengeMessageCard({
     try {
       await rejectChallenge(challengeId)
       toast.success("Challenge declined")
-    } catch (error: any) {
-      toast.error("Failed to decline challenge")
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Failed to decline challenge")
     } finally {
       setActionLoading(false)
     }
@@ -401,8 +401,8 @@ function ChallengeMessageCard({
     try {
       await cancelChallenge(challengeId, user.uid)
       toast.success("Challenge cancelled")
-    } catch (error: any) {
-      toast.error("Failed to cancel challenge")
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Failed to cancel challenge")
     } finally {
       setActionLoading(false)
     }
@@ -490,7 +490,18 @@ function ChallengeMessageCard({
                         {challengerPlayed ? "Score Locked" : "Take Quiz"}
                       </Button>
                     </Link>
-                    <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={handleCancel} disabled={actionLoading}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:bg-destructive/10"
+                      onClick={handleCancel}
+                      disabled={actionLoading || challengerPlayed}
+                      title={
+                        challengerPlayed
+                          ? "Can't cancel after your score is locked in"
+                          : "Cancel challenge"
+                      }
+                    >
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
