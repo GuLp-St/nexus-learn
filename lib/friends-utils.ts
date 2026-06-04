@@ -1,7 +1,6 @@
 import { db } from "./firebase"
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp, collection, query, where, getDocs, limit } from "firebase/firestore"
 import { getUserXP } from "./leaderboard-utils"
-import { getUserCourses } from "./course-utils"
 import { getLevelProgress } from "./level-utils"
 
 export interface FriendInfo {
@@ -194,10 +193,6 @@ export async function getFriends(userId: string): Promise<FriendInfo[]> {
       // Fallback values if XP data not found
       const xp = xpData?.xp || 0
       const levelProgress = getLevelProgress(xp)
-      
-      // Get current course (most recently accessed course)
-      const courses = await getUserCourses(friendId)
-      const currentCourse = courses.length > 0 ? courses[0].title : undefined
 
       // Check online status (will be enhanced with presence system)
       const { getUserPresence } = await import("./presence-utils")
@@ -210,7 +205,6 @@ export async function getFriends(userId: string): Promise<FriendInfo[]> {
         avatarUrl: friendData.avatarUrl || undefined,
         xp: xp,
         level: levelProgress.currentLevel,
-        currentCourse,
         isOnline,
       } as FriendInfo
     })

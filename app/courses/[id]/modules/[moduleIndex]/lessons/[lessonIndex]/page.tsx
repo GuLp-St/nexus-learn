@@ -16,6 +16,12 @@ import { db } from "@/lib/firebase"
 import { doc, getDoc, updateDoc, setDoc, arrayUnion, serverTimestamp } from "firebase/firestore"
 import { CourseData, LessonStream, LessonStreamBlock, TextBlock } from "@/lib/gemini"
 import { generateLessonStreamWithImages } from "@/lib/lesson-stream-actions"
+import {
+  getUserLessonStream,
+  saveUserLessonStream,
+  getLegacyLessonStreamFromCourse,
+} from "@/lib/lesson-stream-store"
+import { mergeLessonFactsIntoCourseModule } from "@/lib/lesson-stream-course-context"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { getCourseWithProgress, updateUserProgress, CourseWithProgress, ensureUserProgress, getLessonStreamProgress } from "@/lib/course-utils"
 import { useActivityTracking } from "@/hooks/use-activity-tracking"
@@ -154,11 +160,24 @@ export default function LessonPage() {
         savedBlockIndex = streamProgress.currentBlockIndex
         setCompletedInteractions(streamProgress.completedInteractions || {})
 
-        // Check if stream already exists in course document
-        if (lessonData.stream && lessonData.stream.blocks && Array.isArray(lessonData.stream.blocks) && lessonData.stream.blocks.length > 0) {
-          const stream = lessonData.stream as LessonStream
-          const validatedBlockIndex = Math.min(savedBlockIndex, stream.blocks.length - 1)
-          setLessonStream(stream)
+        let existingStream = await getUserLessonStream(
+          user.uid,
+          courseId,
+          moduleIndex,
+          lessonIndex
+        )
+
+        if (!existingStream) {
+          const legacy = getLegacyLessonStreamFromCourse(lesson)
+          if (legacy && courseData.createdBy === user.uid) {
+            await saveUserLessonStream(user.uid, courseId, moduleIndex, lessonIndex, legacy)
+            existingStream = legacy
+          }
+        }
+
+        if (existingStream) {
+          const validatedBlockIndex = Math.min(savedBlockIndex, existingStream.blocks.length - 1)
+          setLessonStream(existingStream)
           setCurrentBlockIndex(Math.max(0, validatedBlockIndex))
           setLoading(false)
           return
@@ -174,46 +193,37 @@ export default function LessonPage() {
           lesson.title,
           courseData.title,
           module.title,
-          sourceContext ? { keyPoints: sourceContext.keyPoints || [], references: sourceContext.references || [] } : undefined
+          sourceContext
+            ? {
+                sourceMaterialId:
+                  sourceContext.sourceMaterialId ||
+                  (courseData as { sourceMaterialId?: string }).sourceMaterialId,
+                keyPoints: sourceContext.keyPoints || [],
+                references: sourceContext.references || [],
+                lessonSummary: sourceContext.lessonSummary,
+                moduleSummary: sourceContext.moduleSummary,
+                processedImages: sourceContext.processedImages || [],
+              }
+            : undefined
         )
 
-        // Save facts to module's accumulatedContext
-        const courseRef = doc(db, "courses", courseId)
-        const courseDoc = await getDoc(courseRef)
-        const courseDataForUpdate = courseDoc.data()
-        
-        const updatedModules = JSON.parse(JSON.stringify(courseDataForUpdate?.modules || []))
-        if (updatedModules[moduleIndex]) {
-          // Initialize accumulatedContext if not exists
-          if (!updatedModules[moduleIndex].accumulatedContext) {
-            updatedModules[moduleIndex].accumulatedContext = []
-          }
-          
-          // Add facts with source information
-          const lessonId = `${courseId}-${moduleIndex}-${lessonIndex}`
-          generatedStream.facts.forEach((fact) => {
-            const factEntry = {
-              id: fact.id,
-              text: fact.text,
-              sourceLessonId: lessonId,
-              sourceLessonTitle: lesson.title,
-            }
-            // Check if fact already exists (avoid duplicates)
-            const exists = updatedModules[moduleIndex].accumulatedContext.some(
-              (f: any) => f.id === fact.id
-            )
-            if (!exists) {
-              updatedModules[moduleIndex].accumulatedContext.push(factEntry)
-            }
-          })
-          
-          // Save stream to lesson
-          updatedModules[moduleIndex].lessons[lessonIndex].stream = generatedStream
-          
-          await updateDoc(courseRef, {
-            modules: updatedModules,
-          })
-        }
+        await saveUserLessonStream(
+          user.uid,
+          courseId,
+          moduleIndex,
+          lessonIndex,
+          generatedStream
+        )
+
+        await mergeLessonFactsIntoCourseModule(
+          courseId,
+          user.uid,
+          courseData.createdBy,
+          moduleIndex,
+          lessonIndex,
+          lesson.title,
+          generatedStream
+        )
 
         // Validate saved block index
         const validatedBlockIndex = Math.min(savedBlockIndex, generatedStream.blocks.length - 1)

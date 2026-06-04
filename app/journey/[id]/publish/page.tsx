@@ -18,9 +18,14 @@ import { CheckCircle2, XCircle, AlertCircle, Trophy } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 
-const PUBLISH_NEXON_COST = 500
-const MIN_LEVEL = 5
-const MIN_QUIZ_SCORE = 80
+import {
+  PUBLISH_MIN_LEVEL,
+  PUBLISH_MIN_QUIZ_SCORE,
+  PUBLISH_NEXON_COST,
+} from "@/lib/course-constants"
+
+const MIN_LEVEL = PUBLISH_MIN_LEVEL
+const MIN_QUIZ_SCORE = PUBLISH_MIN_QUIZ_SCORE
 
 export default function PublishCoursePage() {
   const params = useParams()

@@ -181,6 +181,15 @@
     }
   }
 
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
   @keyframes spin-slow {
     from {
       transform: rotate(0deg);
@@ -218,6 +227,10 @@
 
 .animate-scale-up-center {
   animation: scale-up-center 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
 }
 
 .animate-spin-slow {
@@ -1103,6 +1116,59 @@
 
 .dark .cosmetic-wallpaper-hyperdrive {
   background-color: rgb(0, 0, 0) !important;
+}
+
+/* Challenge quiz juice */
+@keyframes challenge-shake-correct {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-2px, 1px); }
+  50% { transform: translate(2px, -1px); }
+  75% { transform: translate(-1px, -2px); }
+}
+
+@keyframes challenge-shake-wrong {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+@keyframes challenge-ring-expand {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+@keyframes challenge-timer-flash-keyframes {
+  0%, 100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 20px 4px hsl(var(--primary) / 0.45);
+  }
+}
+
+.challenge-shake-correct {
+  animation: challenge-shake-correct 0.35s ease-out;
+}
+
+.challenge-shake-wrong {
+  animation: challenge-shake-wrong 0.4s ease-out;
+}
+
+.challenge-ring-correct,
+.challenge-ring-wrong {
+  animation: challenge-ring-expand 0.55s ease-out forwards;
+}
+
+.challenge-timer-flash {
+  animation: challenge-timer-flash-keyframes 0.12s ease-out;
 }
 
 /* Hide scrollbar utility */

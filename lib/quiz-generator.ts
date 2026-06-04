@@ -3,6 +3,7 @@ import { CourseData, CourseModule } from "./gemini"
 import { v4 as uuidv4 } from "uuid"
 import { hasGeminiApiKeys } from "./gemini-keys"
 import { poolGenerateText } from "./gemini-pool"
+import { MATERIAL_ONLY_RULES, getMaterialContextBlock } from "./material-grounding"
 
 /**
  * Generate quiz questions for a lesson
@@ -15,7 +16,8 @@ export async function generateLessonQuizQuestions(
   courseId: string,
   moduleIndex: number,
   lessonIndex: number,
-  count: number = 3
+  count: number = 3,
+  sourceMaterialId?: string
 ): Promise<QuizQuestion[]> {
   if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
@@ -25,9 +27,14 @@ export async function generateLessonQuizQuestions(
   const objectiveCount = count
   const subjectiveCount = 0
 
+  const materialBlock = sourceMaterialId
+    ? await getMaterialContextBlock(sourceMaterialId, 40_000)
+    : ""
+
   const prompt = `Generate ${count} quiz questions for the lesson "${lessonTitle}" in the module "${moduleTitle}" of the course "${courseTitle}".
 
 Lesson Description: ${lessonDescription}
+${materialBlock ? `\n${MATERIAL_ONLY_RULES}\n${materialBlock}` : ""}
 
 Requirements:
 - Generate ${objectiveCount} objective questions (mix of multiple-choice and true/false)
@@ -205,6 +212,7 @@ export async function generateModuleQuizQuestions(
   courseId: string,
   count: number = 10
 ): Promise<QuizQuestion[]> {
+  const sourceMaterialId = courseData.sourceMaterialId
   const module = courseData.modules[moduleIndex]
   if (!module) {
     throw new Error("Module not found")
@@ -230,7 +238,8 @@ export async function generateModuleQuizQuestions(
           courseId,
           moduleIndex,
           i,
-          questionsPerLesson
+          questionsPerLesson,
+          sourceMaterialId
         )
         allQuestions.push(...lessonQuestions)
       } catch (error) {
@@ -356,6 +365,7 @@ export async function generateCourseQuizQuestions(
   courseId: string,
   count: number = 20
 ): Promise<QuizQuestion[]> {
+  const sourceMaterialId = courseData.sourceMaterialId
   // Collect all facts from all modules' accumulatedContext
   const allFacts: Array<{ id: string; text: string; moduleIndex: number }> = []
   for (let moduleIndex = 0; moduleIndex < courseData.modules.length; moduleIndex++) {
@@ -390,7 +400,8 @@ export async function generateCourseQuizQuestions(
             courseId,
             moduleIndex,
             lessonIndex,
-            questionsPerLesson
+            questionsPerLesson,
+            sourceMaterialId
           )
           allQuestions.push(...lessonQuestions)
         } catch (error) {

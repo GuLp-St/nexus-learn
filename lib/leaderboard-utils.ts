@@ -8,6 +8,7 @@ export interface LeaderboardUser {
   xp: number
   rank: number
   challengeWins?: number
+  challengeWinStreak?: number
   avatarUrl?: string | null
   avatarFrame?: string | null
   avatarSeed?: string | null
@@ -35,6 +36,7 @@ export async function getGlobalLeaderboard(limitCount: number = 5): Promise<Lead
         xp: data.xp || 0,
         rank: index + 1,
         challengeWins: data.challengeWins || 0,
+        challengeWinStreak: data.challengeWinStreak || 0,
         avatarUrl: data.avatarUrl || null,
         avatarFrame: data.cosmetics?.avatarFrame || null,
         avatarSeed: data.avatarSeed || data.cosmetics?.avatarSeed || null,
@@ -132,6 +134,7 @@ export async function getLeaderboardWithUser(
     const userXP = userData.xp || 0
     const userNickname = userData.nickname || "Anonymous"
     const userChallengeWins = userData.challengeWins || 0
+    const userChallengeWinStreak = userData.challengeWinStreak || 0
     const userAvatarUrl = userData.avatarUrl || null
     const userAvatarFrame = userData.cosmetics?.avatarFrame || null
     const userAvatarSeed = userData.avatarSeed || userData.cosmetics?.avatarSeed || null
@@ -153,6 +156,7 @@ export async function getLeaderboardWithUser(
           xp: userXP,
           rank: userRank || limitCount + 1,
           challengeWins: userChallengeWins,
+          challengeWinStreak: userChallengeWinStreak,
           avatarUrl: userAvatarUrl,
           avatarFrame: userAvatarFrame,
           avatarSeed: userAvatarSeed,
@@ -165,6 +169,7 @@ export async function getLeaderboardWithUser(
           xp: userXP,
           rank: userRank || finalLeaderboard.length + 1,
           challengeWins: userChallengeWins,
+          challengeWinStreak: userChallengeWinStreak,
           avatarUrl: userAvatarUrl,
           avatarFrame: userAvatarFrame,
           avatarSeed: userAvatarSeed,
@@ -220,7 +225,8 @@ export async function getFriendsLeaderboard(
     
     // Get challenge wins for user and friends
     const userChallengeWins = userData.challengeWins || 0
-    
+    const userChallengeWinStreak = userData.challengeWinStreak || 0
+
     // Fetch challenge wins and avatars for friends
     const friendsWithWins = await Promise.all(
       friends.map(async (friend) => {
@@ -228,6 +234,7 @@ export async function getFriendsLeaderboard(
         const friendDoc = await getDoc(friendRef)
         const friendData = friendDoc.exists() ? friendDoc.data() : {}
         const friendChallengeWins = friendData.challengeWins || 0
+        const friendChallengeWinStreak = friendData.challengeWinStreak || 0
         const friendAvatarUrl = friendData.avatarUrl || null
         const friendAvatarFrame = friendData.cosmetics?.avatarFrame || null
         const friendAvatarSeed = friendData.avatarSeed || friendData.cosmetics?.avatarSeed || null
@@ -238,6 +245,7 @@ export async function getFriendsLeaderboard(
           xp: friend.xp,
           rank: 0, // Will be set after sorting
           challengeWins: friendChallengeWins,
+          challengeWinStreak: friendChallengeWinStreak,
           avatarUrl: friendAvatarUrl,
           avatarFrame: friendAvatarFrame,
           avatarSeed: friendAvatarSeed,
@@ -253,6 +261,7 @@ export async function getFriendsLeaderboard(
         xp: userXP,
         rank: 0, // Will be set after sorting
         challengeWins: userChallengeWins,
+        challengeWinStreak: userChallengeWinStreak,
         avatarUrl: userAvatarUrl,
         avatarFrame: userAvatarFrame,
         avatarSeed: userAvatarSeed,

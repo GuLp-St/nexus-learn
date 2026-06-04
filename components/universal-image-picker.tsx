@@ -28,12 +28,6 @@ interface UniversalImagePickerProps {
   hidePreview?: boolean
 }
 
-const AI_MODELS = [
-  { id: "@cf/black-forest-labs/flux-1-schnell", name: "Flux Schnell (Default)" },
-  { id: "@cf/bytedance/stable-diffusion-xl-lightning", name: "SDXL Lightning" },
-  { id: "@cf/stabilityai/stable-diffusion-xl-base-1.0", name: "SDXL Base" },
-]
-
 const ACCESS_KEY = process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY
 
 export function UniversalImagePicker({ 
@@ -92,7 +86,6 @@ export function UniversalImagePicker({
   const [aiPrompt, setAiPrompt] = useState("")
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
-  const [selectedModel, setSelectedModel] = useState(AI_MODELS[0].id)
   const [tempAiUrl, setTempAiUrl] = useState<string | null>(null)
 
   // Upload state
@@ -145,7 +138,7 @@ export function UniversalImagePicker({
     setAiError(null)
     try {
       // Use the server action instead of direct client-side call to avoid API key issues
-      const base64Image = await generateAIImageAction(aiPrompt, selectedModel)
+      const base64Image = await generateAIImageAction(aiPrompt)
       if (!base64Image) throw new Error("Failed to generate image")
       
       setTempAiUrl(base64Image)
@@ -423,24 +416,10 @@ export function UniversalImagePicker({
                         <Sparkles className="h-10 w-10 mx-auto text-primary" />
                         <h3 className="text-lg font-semibold">AI Image Generator</h3>
                         <p className="text-sm text-muted-foreground">
-                          Describe the image you want to generate.
+                          Describe the image you want. Uses your Cloudflare model from settings (Firestore config/ai).
                         </p>
                       </div>
                       
-                      <div className="space-y-2">
-                        <Label>Model</Label>
-                        <Select value={selectedModel} onValueChange={setSelectedModel}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {AI_MODELS.map((m) => (
-                              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
                       <div className="space-y-2">
                         <Label htmlFor="prompt">Prompt</Label>
                         <Input

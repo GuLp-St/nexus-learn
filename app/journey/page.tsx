@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { BookOpen, Play, Trash2, Star, Target } from "lucide-react"
+import { BookOpen, Play, Trash2, Star, Target, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -491,8 +491,14 @@ export default function JourneyPage() {
         <div className="p-4 lg:p-8">
           <div className="mx-auto max-w-5xl space-y-8">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-3xl font-bold tracking-tight text-foreground">My Journey</h2>
+              <Button asChild size="lg" className="gap-2 shrink-0">
+                <Link href="/create-course">
+                  <Plus className="h-5 w-5" />
+                  {courses.length === 0 ? "Add a course now!" : "Add more courses!"}
+                </Link>
+              </Button>
             </div>
 
             {/* Stats */}

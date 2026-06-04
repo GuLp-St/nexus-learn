@@ -24,6 +24,7 @@ export interface Notification {
     opponentScore?: number
     xpAwarded?: number
     nexonWon?: number
+    isDraw?: boolean
     // xp_award
     amount?: number
     source?: string

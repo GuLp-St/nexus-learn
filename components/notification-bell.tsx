@@ -101,12 +101,14 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
       case "challenge":
         return `${notification.data.challengerName || "Someone"} challenged you to a quiz!`
       case "challenge_result":
+        if (notification.data.isDraw) {
+          return `Challenge ended in a draw. Bets refunded. (${notification.data.yourScore} vs ${notification.data.opponentScore})`
+        }
         if (notification.data.winnerId === user?.uid) {
           const nexonText = notification.data.nexonWon ? ` and ${notification.data.nexonWon} Nexon` : ""
           return `You won the challenge! +${notification.data.xpAwarded || 0} XP${nexonText}`
-        } else {
-          return `You lost the challenge. Better luck next time!`
         }
+        return `You lost the challenge. Better luck next time!`
       case "xp_award":
         return `You earned ${notification.data.amount || 0} XP${notification.data.source ? ` from ${notification.data.source}` : ""}${
           notification.data.newLevel ? ` (Level ${notification.data.newLevel})` : ""

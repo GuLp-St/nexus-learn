@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, type CSSProperties } from "react"
 import { MessageSquare, Send, X, Loader2, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,8 +12,12 @@ import { generateChatResponse, ChatMessage } from "@/lib/gemini"
 import { trackQuestProgress } from "@/lib/daily-quest-utils"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { usePathname } from "next/navigation"
-
-const CHATBOT_POSITION_KEY = "nexus-chatbot-position"
+import {
+  clampChatbotPixels,
+  getDefaultChatbotPixels,
+  loadChatbotPosition,
+  saveChatbotPosition,
+} from "@/lib/chatbot-position"
 
 export function ChatbotOverlay() {
   const [isOpen, setIsOpen] = useState(false)
@@ -34,27 +38,16 @@ export function ChatbotOverlay() {
   const animationFrameRef = useRef<number | null>(null)
   const tempPositionRef = useRef<{ x: number; y: number } | null>(null)
 
-  // Load saved position from localStorage
+  // Load saved position (viewport-relative %) and reclamp on resize
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem(CHATBOT_POSITION_KEY)
-      if (saved) {
-        try {
-          const { x, y } = JSON.parse(saved)
-          setPosition({ x, y })
-        } catch (e) {
-          // Invalid saved data, use default
-        }
-      }
+    const applyPosition = () => {
+      const saved = loadChatbotPosition()
+      setPosition(saved ?? getDefaultChatbotPixels())
     }
+    applyPosition()
+    window.addEventListener("resize", applyPosition)
+    return () => window.removeEventListener("resize", applyPosition)
   }, [])
-
-  // Save position to localStorage
-  const savePosition = (x: number, y: number) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(CHATBOT_POSITION_KEY, JSON.stringify({ x, y }))
-    }
-  }
 
   // Handle drag start
   const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
@@ -97,13 +90,8 @@ export function ChatbotOverlay() {
       const newX = clientX - dragOffset.x
       const newY = clientY - dragOffset.y
 
-      // Constrain to viewport
       const buttonWidth = buttonRef.current?.offsetWidth || 56
-      const buttonHeight = buttonRef.current?.offsetHeight || 56
-      const maxX = window.innerWidth - buttonWidth
-      const maxY = window.innerHeight - buttonHeight
-      const constrainedX = Math.max(0, Math.min(newX, maxX))
-      const constrainedY = Math.max(0, Math.min(newY, maxY))
+      const { x: constrainedX, y: constrainedY } = clampChatbotPixels(newX, newY, buttonWidth)
 
       // Store in ref for smooth updates
       tempPositionRef.current = { x: constrainedX, y: constrainedY }
@@ -131,11 +119,13 @@ export function ChatbotOverlay() {
       }
       // Save final position to localStorage
       if (tempPositionRef.current) {
-        savePosition(tempPositionRef.current.x, tempPositionRef.current.y)
+        saveChatbotPosition(tempPositionRef.current.x, tempPositionRef.current.y)
         setPosition(tempPositionRef.current)
       } else if (buttonRef.current) {
         const rect = buttonRef.current.getBoundingClientRect()
-        savePosition(rect.left, rect.top)
+        const clamped = clampChatbotPixels(rect.left, rect.top, rect.width)
+        saveChatbotPosition(clamped.x, clamped.y)
+        setPosition(clamped)
       }
       tempPositionRef.current = null
     }
@@ -247,10 +237,22 @@ export function ChatbotOverlay() {
     }
   }
 
-  // Calculate button position (default to middle-right if no saved position)
-  const buttonStyle = position === null
-    ? { top: "50%", transform: "translateY(-50%)", right: "1.5rem" }
-    : { left: `${position.x}px`, top: `${position.y}px`, bottom: "auto", right: "auto" }
+  // Defer viewport-based position until after mount so SSR and first client render match.
+  const buttonStyle: CSSProperties = position
+    ? {
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        bottom: "auto",
+        right: "auto",
+      }
+    : {
+        left: 0,
+        top: 0,
+        bottom: "auto",
+        right: "auto",
+        visibility: "hidden",
+        pointerEvents: "none",
+      }
 
   return (
     <>

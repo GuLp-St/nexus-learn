@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { MatchingInteraction } from "@/lib/gemini"
@@ -17,11 +17,26 @@ export function MatchingInteractionComponent({ interaction, onComplete }: Matchi
   const [matchedPairIndices, setMatchedPairIndices] = useState<Set<number>>(new Set())
   const [completed, setCompleted] = useState(false)
 
-  // Create indexed versions of items to track which specific pair each item belongs to
-  const leftItemsWithIndex = interaction.pairs.map((p, idx) => ({ left: p.left, pairIndex: idx }))
-  const rightItemsWithIndex = interaction.pairs
-    .map((p, idx) => ({ right: p.right, pairIndex: idx }))
-    .sort(() => Math.random() - 0.5)
+  const pairsKey = useMemo(
+    () => interaction.pairs.map((p) => `${p.left}\0${p.right}`).join("\n"),
+    [interaction.pairs]
+  )
+
+  const leftItemsWithIndex = useMemo(
+    () => interaction.pairs.map((p, idx) => ({ left: p.left, pairIndex: idx })),
+    [pairsKey]
+  )
+
+  // Shuffle once per interaction — not on every render (clicking left used to re-run Math.random())
+  const rightItemsWithIndex = useMemo(() => {
+    const items = interaction.pairs.map((p, idx) => ({ right: p.right, pairIndex: idx }))
+    const shuffled = [...items]
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+    }
+    return shuffled
+  }, [pairsKey])
 
   const handleLeftClick = (left: string, pairIndex: number) => {
     if (completed || matchedPairIndices.has(pairIndex)) return

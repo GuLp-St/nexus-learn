@@ -16,6 +16,12 @@ import { db } from "@/lib/firebase"
 import { doc, getDoc, updateDoc, setDoc, arrayUnion, serverTimestamp } from "firebase/firestore"
 import { CourseData, LessonStream, LessonStreamBlock, TextBlock } from "@/lib/gemini"
 import { generateLessonStreamWithImages } from "@/lib/lesson-stream-actions"
+import {
+  getUserLessonStream,
+  saveUserLessonStream,
+  getLegacyLessonStreamFromCourse,
+} from "@/lib/lesson-stream-store"
+import { mergeLessonFactsIntoCourseModule } from "@/lib/lesson-stream-course-context"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { getCourseWithProgress, updateUserProgress, CourseWithProgress, ensureUserProgress, getLessonStreamProgress } from "@/lib/course-utils"
 import { useActivityTracking } from "@/hooks/use-activity-tracking"
@@ -155,15 +161,27 @@ export default function LessonPage() {
         savedBlockIndex = streamProgress.currentBlockIndex
         setCompletedInteractions(streamProgress.completedInteractions || {})
 
-        // Check if stream already exists in course document
-        if (lessonData.stream && lessonData.stream.blocks && Array.isArray(lessonData.stream.blocks) && lessonData.stream.blocks.length > 0) {
-          const stream = lessonData.stream as LessonStream
-          const validatedBlockIndex = Math.min(savedBlockIndex, stream.blocks.length - 1)
-          setLessonStream(stream)
+        let existingStream = await getUserLessonStream(
+          user.uid,
+          courseId,
+          moduleIndex,
+          lessonIndex
+        )
+
+        if (!existingStream) {
+          const legacy = getLegacyLessonStreamFromCourse(lesson)
+          if (legacy && courseData.createdBy === user.uid) {
+            await saveUserLessonStream(user.uid, courseId, moduleIndex, lessonIndex, legacy)
+            existingStream = legacy
+          }
+        }
+
+        if (existingStream) {
+          const validatedBlockIndex = Math.min(savedBlockIndex, existingStream.blocks.length - 1)
+          setLessonStream(existingStream)
           setCurrentBlockIndex(Math.max(0, validatedBlockIndex))
           setLoading(false)
-          
-          // Restore scroll position after block index is set
+
           const scrollKey = `scroll-pos-${courseId}-${moduleIndex}-${lessonIndex}`
           const savedScroll = sessionStorage.getItem(scrollKey)
           if (savedScroll) {
@@ -191,11 +209,18 @@ export default function LessonPage() {
             lesson.title,
             courseData.title,
             module.title,
-            sourceContext ? {
-              keyPoints: sourceContext.keyPoints || [],
-              references: sourceContext.references || [],
-              processedImages: sourceContext.processedImages || [],
-            } : undefined
+            sourceContext
+              ? {
+                  sourceMaterialId:
+                    sourceContext.sourceMaterialId ||
+                    (courseData as { sourceMaterialId?: string }).sourceMaterialId,
+                  keyPoints: sourceContext.keyPoints || [],
+                  references: sourceContext.references || [],
+                  lessonSummary: sourceContext.lessonSummary,
+                  moduleSummary: sourceContext.moduleSummary,
+                  processedImages: sourceContext.processedImages || [],
+                }
+              : undefined
           )
         } catch (err: any) {
           // If timeout or error, wait 2 seconds then check Firestore
@@ -204,15 +229,16 @@ export default function LessonPage() {
             await new Promise(resolve => setTimeout(resolve, 2000))
             
             // Double-check: Try to load from Firestore
-            const courseRef = doc(db, "courses", courseId)
-            const courseDoc = await getDoc(courseRef)
-            const courseDataForUpdate = courseDoc.data()
-            const lessonData = courseDataForUpdate?.modules?.[moduleIndex]?.lessons?.[lessonIndex]
-            
-            if (lessonData?.stream && lessonData.stream.blocks && Array.isArray(lessonData.stream.blocks) && lessonData.stream.blocks.length > 0) {
-              // Found in Firestore - treat as success
-              generatedStream = lessonData.stream as LessonStream
-              console.log("Found stream in Firestore after timeout")
+            const recovered = await getUserLessonStream(
+              user.uid,
+              courseId,
+              moduleIndex,
+              lessonIndex
+            )
+
+            if (recovered) {
+              generatedStream = recovered
+              console.log("Found user lesson stream after timeout")
             } else {
               // Not found - show error
               const elapsed = Date.now() - startTime
@@ -235,43 +261,23 @@ export default function LessonPage() {
         }
 
         if (generatedStream) {
-          // Save facts to module's accumulatedContext
-          const courseRef = doc(db, "courses", courseId)
-          const courseDoc = await getDoc(courseRef)
-          const courseDataForUpdate = courseDoc.data()
-          
-          const updatedModules = JSON.parse(JSON.stringify(courseDataForUpdate?.modules || []))
-          if (updatedModules[moduleIndex]) {
-            // Initialize accumulatedContext if not exists
-            if (!updatedModules[moduleIndex].accumulatedContext) {
-              updatedModules[moduleIndex].accumulatedContext = []
-            }
-            
-            // Add facts with source information
-            const lessonId = `${courseId}-${moduleIndex}-${lessonIndex}`
-            generatedStream.facts.forEach((fact) => {
-              const factEntry = {
-                id: fact.id,
-                text: fact.text,
-                sourceLessonId: lessonId,
-                sourceLessonTitle: lesson.title,
-              }
-              // Check if fact already exists (avoid duplicates)
-              const exists = updatedModules[moduleIndex].accumulatedContext.some(
-                (f: any) => f.id === fact.id
-              )
-              if (!exists) {
-                updatedModules[moduleIndex].accumulatedContext.push(factEntry)
-              }
-            })
-            
-            // Save stream to lesson
-            updatedModules[moduleIndex].lessons[lessonIndex].stream = generatedStream
-            
-            await updateDoc(courseRef, {
-              modules: updatedModules,
-            })
-          }
+          await saveUserLessonStream(
+            user.uid,
+            courseId,
+            moduleIndex,
+            lessonIndex,
+            generatedStream
+          )
+
+          await mergeLessonFactsIntoCourseModule(
+            courseId,
+            user.uid,
+            courseData.createdBy,
+            moduleIndex,
+            lessonIndex,
+            lesson.title,
+            generatedStream
+          )
 
           // Validate saved block index
           const validatedBlockIndex = Math.min(savedBlockIndex, generatedStream.blocks.length - 1)
@@ -813,21 +819,6 @@ export default function LessonPage() {
             <p className="text-sm text-muted-foreground">
               Module {moduleIndex + 1}: {module?.title ? module.title.replace(/^Module\s+\d+:\s*/i, "").trim() : ""}
             </p>
-            {/* Show actual visuals from uploaded materials when available */}
-            {lesson && (lesson as any).sourceContext && (lesson as any).sourceContext.imageUrls && (lesson as any).sourceContext.imageUrls.length > 0 && (
-              <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-3">
-                {(lesson as any).sourceContext.imageUrls.map((url: string, idx: number) => (
-                  <div key={idx} className="relative w-full pb-[56.25%] overflow-hidden rounded-md border bg-muted">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={url}
-                      alt={`Reference visual ${idx + 1}`}
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Progress indicator */}

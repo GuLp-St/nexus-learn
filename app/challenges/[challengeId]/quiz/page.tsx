@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, CheckCircle2, XCircle, ChevronRight, ChevronLeft, Clock } from "lucide-react"
+import { ArrowLeft, CheckCircle2, XCircle, ChevronRight, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -12,250 +12,241 @@ import { Spinner } from "@/components/ui/spinner"
 import Link from "next/link"
 import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
-import { getChallenge, acceptChallenge, recordChallengeResult, getChallengeQuestions, Challenge } from "@/lib/challenge-utils"
-import { QuizQuestion, createQuizAttempt, saveQuizAttemptBasic, abandonQuizAttempt } from "@/lib/quiz-utils"
+import {
+  getChallenge,
+  acceptChallenge,
+  recordChallengeResult,
+  getChallengeQuestions,
+  Challenge,
+} from "@/lib/challenge-utils"
+import {
+  QuizQuestion,
+  createQuizAttempt,
+  saveQuizAttemptBasic,
+} from "@/lib/quiz-utils"
 import { evaluateSubjectiveAnswer, checkObjectiveAnswer } from "@/lib/quiz-generator"
 import { doc, getDoc, deleteDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { useXP } from "@/components/xp-context-provider"
+import { ChallengeReadyRoom } from "@/components/challenge/challenge-ready-room"
+import { ChallengeQuizOverlay } from "@/components/challenge/challenge-quiz-overlay"
+import { useChallengeQuizFx } from "@/hooks/use-challenge-quiz-fx"
+import { calculatePerformanceScore } from "@/lib/challenge-scoring"
+import { cn } from "@/lib/utils"
+
+type Phase = "loading" | "ready" | "playing" | "results"
 
 export default function ChallengeQuizPage() {
+  const [phase, setPhase] = useState<Phase>("loading")
   const [challenge, setChallenge] = useState<Challenge | null>(null)
+  const [courseTitle, setCourseTitle] = useState("")
+  const [friendNickname, setFriendNickname] = useState("Friend")
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState<{ [questionId: string]: string | number | boolean }>({})
-  const [scores, setScores] = useState<{ [questionId: string]: { correct: boolean; feedback?: string; marks?: number } }>({})
-  const [loading, setLoading] = useState(true)
+  const [scores, setScores] = useState<{
+    [questionId: string]: { correct: boolean; feedback?: string; marks?: number }
+  }>({})
+  const [starting, setStarting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [showResults, setShowResults] = useState(false)
   const [finalTime, setFinalTime] = useState<number | null>(null)
+  const [finalPerformance, setFinalPerformance] = useState<number | null>(null)
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [quizStartTime, setQuizStartTime] = useState<number | null>(null)
-  const [elapsedTime, setElapsedTime] = useState<number>(0)
+  const [elapsedTime, setElapsedTime] = useState(0)
+  const [tabSwitchSubmitted, setTabSwitchSubmitted] = useState(false)
+
   const params = useParams()
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
   const { showXPAward } = useXP()
   const challengeId = params.challengeId as string
 
-  // Refs for auto-submission on leave
+  const isChallenger = challenge?.challengerId === user?.uid
+  const isChallenged = challenge?.challengedId === user?.uid
+
+  const fx = useChallengeQuizFx(currentQuestionIndex, questions.length)
+
   const stateRef = useRef({
     answers,
     questions,
     submitting,
-    showResults,
+    phase,
     user,
     attemptId,
     challenge,
-    quizStartTime
+    quizStartTime,
+    comboMultiplier: fx.comboMultiplier,
+    tabSwitchSubmitted,
   })
 
-  // Keep refs in sync
   useEffect(() => {
     stateRef.current = {
       answers,
       questions,
       submitting,
-      showResults,
+      phase,
       user,
       attemptId,
       challenge,
-      quizStartTime
+      quizStartTime,
+      comboMultiplier: fx.comboMultiplier,
+      tabSwitchSubmitted,
     }
-  }, [answers, questions, submitting, showResults, user, attemptId, challenge, quizStartTime])
+  }, [
+    answers,
+    questions,
+    submitting,
+    phase,
+    user,
+    attemptId,
+    challenge,
+    quizStartTime,
+    fx.comboMultiplier,
+    tabSwitchSubmitted,
+  ])
+
+  const loadChallengeMeta = useCallback(async () => {
+    if (!user) return
+
+    const challengeData = await getChallenge(challengeId)
+    if (!challengeData) {
+      router.push("/friends")
+      return
+    }
+
+    const isC = challengeData.challengerId === user.uid
+    const isD = challengeData.challengedId === user.uid
+    if (!isC && !isD) {
+      router.push("/friends")
+      return
+    }
+
+    if (isC && challengeData.hasChallengerPlayed) {
+      router.push("/friends")
+      return
+    }
+    if (isD && challengeData.challengedScore !== null) {
+      router.push("/friends")
+      return
+    }
+    if (
+      challengeData.status === "rejected" ||
+      challengeData.status === "expired" ||
+      challengeData.status === "completed"
+    ) {
+      router.push("/friends")
+      return
+    }
+
+    const courseSnap = await getDoc(doc(db, "courses", challengeData.courseId))
+    setCourseTitle(courseSnap.data()?.title || "Course")
+
+    const opponentId = isC ? challengeData.challengedId : challengeData.challengerId
+    const opponentSnap = await getDoc(doc(db, "users", opponentId))
+    setFriendNickname(opponentSnap.data()?.nickname || "Friend")
+
+    setChallenge(challengeData)
+    setPhase("ready")
+  }, [challengeId, router, user])
 
   useEffect(() => {
     if (authLoading) return
-
     if (!user) {
       router.push("/auth")
       return
     }
+    loadChallengeMeta().catch(() => router.push("/friends"))
+  }, [authLoading, user, loadChallengeMeta, router])
 
-    const loadChallenge = async () => {
-      try {
-        const challengeData = await getChallenge(challengeId)
-        if (!challengeData) {
-          router.push("/friends")
-          return
-        }
-
-        // Verify user is part of this challenge
-        const isChallenger = challengeData.challengerId === user.uid
-        const isChallenged = challengeData.challengedId === user.uid
-
-        if (!isChallenger && !isChallenged) {
-          router.push("/friends")
-          return
-        }
-
-        // Check permissions and status
-        if (isChallenged) {
-          // Challenged user must accept first if not already accepted
-          if (challengeData.status === "pending") {
-            await acceptChallenge(challengeId, user.uid)
-          } else if (challengeData.status !== "accepted") {
-            router.push(`/friends`)
-            return
-          }
-        } else if (isChallenger) {
-          // Challenger can only play if they haven't already
-          if (challengeData.hasChallengerPlayed) {
-            router.push(`/friends`)
-            return
-          }
-        }
-
-        setChallenge(challengeData)
-
-        // Fetch questions (exact same questions for both players)
-        const challengeQuestions = await getChallengeQuestions(
-          challengeData.courseId,
-          challengeData.questionIds
-        )
-
-        if (challengeQuestions.length === 0) {
-          throw new Error("Failed to load challenge questions")
-        }
-
-        setQuestions(challengeQuestions)
-
-        // Create quiz attempt
-        const newAttemptId = await createQuizAttempt(
-          user.uid,
-          challengeData.courseId,
-          challengeData.quizType,
-          challengeData.questionIds,
-          challengeData.moduleIndex,
-          challengeData.lessonIndex,
-          false, // Not a retake
-          true // It IS a challenge!
-        )
-        setAttemptId(newAttemptId)
-        setQuizStartTime(Date.now())
-        setLoading(false)
-      } catch (error) {
-        console.error("Error loading challenge:", error)
-        router.push("/friends")
+  const beginQuiz = async () => {
+    if (!user || !challenge) return
+    setStarting(true)
+    try {
+      let activeChallenge = challenge
+      if (isChallenged && activeChallenge.status === "pending") {
+        await acceptChallenge(challengeId, user.uid)
+        const refreshed = await getChallenge(challengeId)
+        if (!refreshed) throw new Error("Challenge not found after accept")
+        activeChallenge = refreshed
+        setChallenge(refreshed)
+      } else if (
+        isChallenged &&
+        activeChallenge.status !== "accepted" &&
+        activeChallenge.status !== "pending"
+      ) {
+        throw new Error("Challenge is no longer available")
       }
-    }
 
-    if (user) {
-      loadChallenge()
-    }
-  }, [challengeId, router, user, authLoading])
+      const challengeQuestions = await getChallengeQuestions(
+        activeChallenge.courseId,
+        activeChallenge.questionIds
+      )
+      if (challengeQuestions.length === 0) {
+        throw new Error("Failed to load challenge questions")
+      }
 
-  // Timer effect
+      const newAttemptId = await createQuizAttempt(
+        user.uid,
+        activeChallenge.courseId,
+        activeChallenge.quizType,
+        activeChallenge.questionIds,
+        activeChallenge.moduleIndex,
+        activeChallenge.lessonIndex,
+        false,
+        true
+      )
+
+      setQuestions(challengeQuestions)
+      setAttemptId(newAttemptId)
+      setQuizStartTime(Date.now())
+      setPhase("playing")
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Could not start challenge"
+      alert(message)
+    } finally {
+      setStarting(false)
+    }
+  }
+
   useEffect(() => {
-    if (!quizStartTime || showResults) return
-
+    if (phase !== "playing" || !quizStartTime) return
     const interval = setInterval(() => {
       setElapsedTime(Math.floor((Date.now() - quizStartTime) / 1000))
     }, 1000)
-
     return () => clearInterval(interval)
-  }, [quizStartTime, showResults])
+  }, [phase, quizStartTime])
 
-  // Auto-submit on leave
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (!stateRef.current.showResults && stateRef.current.quizStartTime && !stateRef.current.submitting) {
-        // Warn the user that leaving will submit their current progress
-        e.preventDefault()
-        e.returnValue = ""
-      }
-    }
+  const handleSubmit = useCallback(
+    async (isAutoSubmit = false) => {
+      const currentAnswers = isAutoSubmit ? stateRef.current.answers : answers
+      const currentQuestions = isAutoSubmit ? stateRef.current.questions : questions
+      const currentUser = isAutoSubmit ? stateRef.current.user : user
+      const currentAttemptId = isAutoSubmit ? stateRef.current.attemptId : attemptId
+      const currentChallenge = isAutoSubmit ? stateRef.current.challenge : challenge
+      const currentStartTime = isAutoSubmit ? stateRef.current.quizStartTime : quizStartTime
+      const comboMult = isAutoSubmit
+        ? stateRef.current.comboMultiplier
+        : fx.comboMultiplier
 
-    const performAutoSubmit = async () => {
-      const { showResults, submitting, quizStartTime, questions } = stateRef.current
-      if (!showResults && !submitting && quizStartTime && questions.length > 0) {
-        console.log("Auto-submitting challenge quiz due to navigation/leave...")
-        // Call handleSubmit with autoSubmit flag
-        await handleSubmit(true)
-      }
-    }
+      if (!currentUser || !currentAttemptId || !currentChallenge || !currentStartTime) return
+      if (!isAutoSubmit && submitting) return
+      if (isAutoSubmit && stateRef.current.tabSwitchSubmitted) return
 
-    window.addEventListener("beforeunload", handleBeforeUnload)
-    
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload)
-      // Trigger auto-submit when user navigates away within the app
-      performAutoSubmit()
-    }
-  }, [])
+      if (isAutoSubmit) setTabSwitchSubmitted(true)
+      if (!isAutoSubmit) setSubmitting(true)
 
-  // Navigation warning for client-side links (Sidebar, etc.)
-  useEffect(() => {
-    const handleAnchorClick = (e: MouseEvent) => {
-      // Don't warn if quiz is not loaded, is being submitted, or results are already shown
-      if (!stateRef.current.quizStartTime || stateRef.current.showResults || stateRef.current.submitting) {
-        return
-      }
+      try {
+        const newScores: {
+          [questionId: string]: { correct: boolean; feedback?: string; marks?: number }
+        } = {}
 
-      const target = e.target as HTMLElement
-      const anchor = target.closest("a")
-
-      if (anchor) {
-        // Only warn for internal links that would cause navigation away
-        const href = anchor.getAttribute("href")
-        if (href && !href.startsWith("#") && !href.startsWith("javascript:") && !href.includes(challengeId)) {
-          if (!window.confirm("Are you sure you want to leave? Your progress will be automatically submitted.")) {
-            e.preventDefault()
-            e.stopImmediatePropagation()
-          }
-        }
-      }
-    }
-
-    // Use capturing phase to intercept before Next.js Link handles it
-    document.addEventListener("click", handleAnchorClick, true)
-    return () => document.removeEventListener("click", handleAnchorClick, true)
-  }, [challengeId])
-
-  const handleAnswerChange = (questionId: string, answer: string | number | boolean) => {
-    setAnswers({
-      ...answers,
-      [questionId]: answer,
-    })
-  }
-
-  const handleNext = () => {
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1)
-    }
-  }
-
-  const handlePrevious = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(currentQuestionIndex - 1)
-    }
-  }
-
-  const handleSubmit = async (isAutoSubmit = false) => {
-    // Use either current state or ref state for auto-submit
-    const currentAnswers = isAutoSubmit ? stateRef.current.answers : answers
-    const currentQuestions = isAutoSubmit ? stateRef.current.questions : questions
-    const currentUser = isAutoSubmit ? stateRef.current.user : user
-    const currentAttemptId = isAutoSubmit ? stateRef.current.attemptId : attemptId
-    const currentChallenge = isAutoSubmit ? stateRef.current.challenge : challenge
-    const currentStartTime = isAutoSubmit ? stateRef.current.quizStartTime : quizStartTime
-
-    if (!currentUser || !currentAttemptId || !currentChallenge || !currentStartTime) return
-    if (!isAutoSubmit && submitting) return
-
-    if (!isAutoSubmit) setSubmitting(true)
-
-    try {
-      const newScores: { [questionId: string]: { correct: boolean; feedback?: string; marks?: number } } = {}
-
-      for (const question of currentQuestions) {
-        const userAnswer = currentAnswers[question.questionId]
-
-        if (question.type === "objective") {
-          const correct = checkObjectiveAnswer(question, userAnswer)
-          newScores[question.questionId] = { correct }
-        } else {
-          if (userAnswer && typeof userAnswer === "string") {
+        for (const question of currentQuestions) {
+          const userAnswer = currentAnswers[question.questionId]
+          if (question.type === "objective") {
+            const correct = checkObjectiveAnswer(question, userAnswer)
+            newScores[question.questionId] = { correct }
+          } else if (userAnswer && typeof userAnswer === "string") {
             const evaluation = await evaluateSubjectiveAnswer(
               question.question,
               userAnswer,
@@ -270,78 +261,178 @@ export default function ChallengeQuizPage() {
             newScores[question.questionId] = { correct: false, feedback: "No answer provided" }
           }
         }
-      }
 
-      if (!isAutoSubmit) setScores(newScores)
+        if (!isAutoSubmit) setScores(newScores)
+        await saveQuizAttemptBasic(currentAttemptId, currentAnswers, newScores)
 
-      // Save quiz attempt basic data first (so other functions can read it if needed)
-      await saveQuizAttemptBasic(currentAttemptId, currentAnswers, newScores)
+        const totalScore = Object.values(newScores).reduce((sum, s) => {
+          if (s.marks !== undefined) return sum + s.marks
+          return sum + (s.correct ? 1 : 0)
+        }, 0)
 
-      // Calculate score and time
-      const totalScore = Object.values(newScores).reduce((sum, s) => {
-        if (s.marks !== undefined) return sum + s.marks
-        return sum + (s.correct ? 1 : 0)
-      }, 0)
-      
-      const timeTaken = Math.floor((Date.now() - currentStartTime) / 1000) // seconds
-      setFinalTime(timeTaken)
+        const timeTaken = Math.floor((Date.now() - currentStartTime) / 1000)
+        setFinalTime(timeTaken)
+        setFinalPerformance(calculatePerformanceScore(totalScore, comboMult, timeTaken))
 
-      // Record results and check for completion
-      const { isCompleted, winnerId, challengedXPAwardResult } = await recordChallengeResult(
-        challengeId,
-        currentUser.uid,
-        currentAttemptId,
-        totalScore,
-        timeTaken
-      )
+        const { isCompleted, winnerId, isDraw, challengedXPAwardResult } =
+          await recordChallengeResult(
+            challengeId,
+            currentUser.uid,
+            currentAttemptId,
+            totalScore,
+            timeTaken,
+            comboMult
+          )
 
-      // Show XP award if challenge completed and user won
-      if (isCompleted && winnerId === currentUser.uid && challengedXPAwardResult) {
-        showXPAward(challengedXPAwardResult)
-      }
+        if (isCompleted && !isDraw && winnerId === currentUser.uid && challengedXPAwardResult) {
+          showXPAward(challengedXPAwardResult)
+        }
 
-      // Delete the attempt record from quizAttempts collection as requested
-      try {
-        await deleteDoc(doc(db, "quizAttempts", currentAttemptId))
+        try {
+          await deleteDoc(doc(db, "quizAttempts", currentAttemptId))
+        } catch (error) {
+          console.error("Error deleting challenge attempt record:", error)
+        }
+
+        fx.stopAmbientPulse()
+        if (!isAutoSubmit) {
+          setScores(newScores)
+          setPhase("results")
+        } else {
+          router.push("/friends")
+        }
       } catch (error) {
-        console.error("Error deleting challenge attempt record:", error)
+        console.error("Error submitting challenge quiz:", error)
+        if (!isAutoSubmit) alert("Failed to submit challenge. Please try again.")
+      } finally {
+        if (!isAutoSubmit) setSubmitting(false)
       }
+    },
+    [
+      answers,
+      questions,
+      user,
+      attemptId,
+      challenge,
+      quizStartTime,
+      fx,
+      challengeId,
+      showXPAward,
+      submitting,
+      router,
+    ]
+  )
 
-      // Show local results briefly or redirect
-      if (!isAutoSubmit) setShowResults(true)
-    } catch (error) {
-      console.error("Error submitting challenge quiz:", error)
-      if (!isAutoSubmit) alert("Failed to submit challenge. Please try again.")
-    } finally {
-      if (!isAutoSubmit) setSubmitting(false)
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "hidden") return
+      if (stateRef.current.phase !== "playing") return
+      if (stateRef.current.submitting || stateRef.current.tabSwitchSubmitted) return
+      if (!stateRef.current.quizStartTime) return
+      void handleSubmit(true)
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange)
+  }, [handleSubmit])
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (stateRef.current.phase === "playing" && stateRef.current.quizStartTime) {
+        e.preventDefault()
+        e.returnValue = ""
+      }
+    }
+
+    const performAutoSubmit = () => {
+      if (
+        stateRef.current.phase === "playing" &&
+        !stateRef.current.submitting &&
+        stateRef.current.quizStartTime &&
+        stateRef.current.questions.length > 0
+      ) {
+        void handleSubmit(true)
+      }
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+      performAutoSubmit()
+    }
+  }, [handleSubmit])
+
+  const gradeAnswerForFx = (question: QuizQuestion, answer: string | number | boolean | undefined) => {
+    if (answer === undefined || answer === "") return
+    if (question.type === "objective") {
+      if (checkObjectiveAnswer(question, answer)) fx.onCorrectAnswer()
+      else fx.onWrongAnswer()
     }
   }
 
-  if (loading) {
+  const handleAnswerChange = (question: QuizQuestion, answer: string | number | boolean) => {
+    setAnswers((prev) => ({ ...prev, [question.questionId]: answer }))
+    if (question.type === "objective") {
+      gradeAnswerForFx(question, answer)
+    }
+  }
+
+  const handleNext = async () => {
+    const q = questions[currentQuestionIndex]
+    if (q?.type === "subjective") {
+      const ans = answers[q.questionId]
+      if (ans && typeof ans === "string") {
+        const evaluation = await evaluateSubjectiveAnswer(
+          q.question,
+          ans,
+          q.suggestedAnswer || ""
+        )
+        if (evaluation.correct || (evaluation.score ?? 0) >= 2) fx.onCorrectAnswer()
+        else fx.onWrongAnswer()
+      }
+    }
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(currentQuestionIndex + 1)
+    }
+  }
+
+  const handlePrevious = () => {
+    if (currentQuestionIndex > 0) setCurrentQuestionIndex(currentQuestionIndex - 1)
+  }
+
+  if (authLoading || phase === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="text-center space-y-4">
-          <Spinner className="h-8 w-8 mx-auto" />
-          <p className="text-muted-foreground">Loading challenge...</p>
-        </div>
+        <Spinner className="h-8 w-8" />
       </div>
     )
   }
 
-  if (!challenge || questions.length === 0) {
+  if (!challenge) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="text-center space-y-4">
-          <p className="text-muted-foreground">Challenge not found</p>
-          <Link href="/friends">
-            <Button>Go to Friends</Button>
-          </Link>
-        </div>
+        <Link href="/friends">
+          <Button>Go to Friends</Button>
+        </Link>
       </div>
     )
   }
 
-  if (showResults) {
+  if (phase === "ready") {
+    return (
+      <ChallengeReadyRoom
+        challenge={challenge}
+        isChallenger={!!isChallenger}
+        friendNickname={friendNickname}
+        courseTitle={courseTitle}
+        starting={starting}
+        onStart={beginQuiz}
+        onBack={() => router.push("/friends")}
+      />
+    )
+  }
+
+  if (phase === "results") {
     const totalScore = Object.values(scores).reduce((sum, s) => {
       if (s.marks !== undefined) return sum + s.marks
       return sum + (s.correct ? 1 : 0)
@@ -350,83 +441,32 @@ export default function ChallengeQuizPage() {
       if (q.type === "subjective") return sum + 4
       return sum + 1
     }, 0)
-    const scorePercentage = Math.round((totalScore / maxScore) * 100)
+    const scorePercentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0
 
     return (
       <div className="flex flex-col lg:flex-row min-h-screen bg-background">
         <SidebarNav currentPath="/friends" />
         <main className="flex-1 p-4 lg:p-8">
           <div className="mx-auto max-w-3xl space-y-6">
-            <h1 className="text-3xl font-bold">Quiz Results</h1>
-            
+            <h1 className="text-3xl font-bold">Challenge Results</h1>
             <Card className="bg-primary/5 border-primary/20">
               <CardContent className="p-8 text-center space-y-4">
                 <div className="text-5xl font-bold text-primary">{scorePercentage}%</div>
                 <p className="text-xl text-muted-foreground">
-                  You scored {totalScore} out of {maxScore} points
+                  {totalScore} / {maxScore} points · Combo ×{fx.comboMultiplier.toFixed(1)}
                 </p>
-                <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                  <Clock className="h-5 w-5" />
-                  <span>Time taken: {Math.floor((finalTime || elapsedTime) / 60)}:{((finalTime || elapsedTime) % 60).toString().padStart(2, "0")}</span>
-                </div>
-                <Button 
-                  className="mt-4" 
-                  onClick={() => router.push(`/friends`)}
-                >
-                  Continue to Social
-                </Button>
+                {finalPerformance != null && (
+                  <p className="text-sm text-muted-foreground">
+                    Competitive score: <strong>{finalPerformance.toLocaleString()}</strong>
+                  </p>
+                )}
+                <p className="text-muted-foreground">
+                  Time: {Math.floor((finalTime || elapsedTime) / 60)}:
+                  {((finalTime || elapsedTime) % 60).toString().padStart(2, "0")}
+                </p>
+                <Button onClick={() => router.push("/friends")}>Back to Social</Button>
               </CardContent>
             </Card>
-
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold">Question Review</h2>
-              {questions.map((q, idx) => {
-                const score = scores[q.questionId]
-                const answer = answers[q.questionId]
-                return (
-                  <Card key={q.questionId} className={score?.correct ? "border-green-500/50" : "border-red-500/50"}>
-                    <CardContent className="p-4 space-y-2">
-                      <div className="flex items-start justify-between gap-4">
-                        <p className="font-medium">
-                          {idx + 1}. {q.question}
-                        </p>
-                        {score?.correct ? (
-                          <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
-                        ) : (
-                          <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                        )}
-                      </div>
-                      
-                      <div className="text-sm space-y-1">
-                        <p>
-                          <span className="text-muted-foreground">Your Answer: </span>
-                          <span className={score?.correct ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
-                            {String(answer || "No answer")}
-                          </span>
-                        </p>
-                        {!score?.correct && q.type === "objective" && (
-                          <p>
-                            <span className="text-muted-foreground">Correct Answer: </span>
-                            <span className="text-green-600 dark:text-green-400">
-                              {q.objectiveType === "multiple-choice" && q.options && typeof q.correctAnswer === "number"
-                                ? q.options[q.correctAnswer]
-                                : String(q.correctAnswer)}
-                            </span>
-                          </p>
-                        )}
-                        {q.type === "subjective" && (
-                          <>
-                            <p className="text-muted-foreground mt-2">Feedback:</p>
-                            <p className="p-2 bg-muted rounded italic">{score?.feedback || "No feedback provided."}</p>
-                            <p className="font-semibold mt-1 text-primary">Points: {score?.marks || 0}/4</p>
-                          </>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
           </div>
         </main>
       </div>
@@ -434,16 +474,28 @@ export default function ChallengeQuizPage() {
   }
 
   const currentQuestion = questions[currentQuestionIndex]
-  const totalQuestions = questions.length
-  const progress = ((currentQuestionIndex + 1) / totalQuestions) * 100
+  const progress = ((currentQuestionIndex + 1) / questions.length) * 100
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-screen bg-background">
+    <div
+      className={cn(
+        "flex flex-col lg:flex-row min-h-screen bg-background relative",
+        fx.answerFx === "correct" && "challenge-shake-correct",
+        fx.answerFx === "wrong" && "challenge-shake-wrong"
+      )}
+    >
+      <ChallengeQuizOverlay
+        answerFx={fx.answerFx}
+        comboStreak={fx.comboStreak}
+        comboMultiplier={fx.comboMultiplier}
+        comboTimeLeft={fx.comboTimeLeft}
+        timerPulse={fx.timerPulse}
+        elapsedTime={elapsedTime}
+      />
       <SidebarNav currentPath="/friends" />
       <main className="flex-1">
         <div className="p-4 lg:p-8">
           <div className="mx-auto max-w-3xl space-y-6">
-            {/* Header */}
             <div className="flex items-center gap-4">
               <Link href="/friends">
                 <Button variant="ghost" size="icon">
@@ -453,20 +505,11 @@ export default function ChallengeQuizPage() {
               <div className="flex-1">
                 <h1 className="text-2xl font-bold">Challenge Quiz</h1>
                 <p className="text-sm text-muted-foreground">
-                  Question {currentQuestionIndex + 1} of {totalQuestions}
+                  Question {currentQuestionIndex + 1} of {questions.length}
                 </p>
               </div>
-              {quizStartTime && (
-                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10">
-                  <Clock className="h-5 w-5 text-primary" />
-                  <span className="font-mono font-semibold text-lg">
-                    {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, "0")}
-                  </span>
-                </div>
-              )}
             </div>
 
-            {/* Progress Bar */}
             <div className="w-full bg-muted rounded-full h-2">
               <div
                 className="bg-primary h-2 rounded-full transition-all"
@@ -474,39 +517,40 @@ export default function ChallengeQuizPage() {
               />
             </div>
 
-            {/* Question Card */}
             <Card>
               <CardContent className="p-6 space-y-6">
-                <div className="space-y-4">
-                  <h2 className="text-xl font-semibold">{currentQuestion.question}</h2>
+                <h2 className="text-xl font-semibold">{currentQuestion.question}</h2>
 
-                  {currentQuestion.type === "objective" && currentQuestion.options && (
-                    <RadioGroup
-                      value={answers[currentQuestion.questionId]?.toString() || ""}
-                      onValueChange={(value) => handleAnswerChange(currentQuestion.questionId, value)}
-                    >
-                      {currentQuestion.options.map((option, idx) => (
-                        <div key={idx} className="flex items-center space-x-2">
-                          <RadioGroupItem value={option} id={`option-${idx}`} />
-                          <Label htmlFor={`option-${idx}`} className="cursor-pointer flex-1">
-                            {option}
-                          </Label>
-                        </div>
-                      ))}
-                    </RadioGroup>
-                  )}
+                {currentQuestion.type === "objective" && currentQuestion.options && (
+                  <RadioGroup
+                    value={answers[currentQuestion.questionId]?.toString() || ""}
+                    onValueChange={(value) => handleAnswerChange(currentQuestion, value)}
+                  >
+                    {currentQuestion.options.map((option, idx) => (
+                      <div key={idx} className="flex items-center space-x-2">
+                        <RadioGroupItem value={option} id={`option-${idx}`} />
+                        <Label htmlFor={`option-${idx}`} className="cursor-pointer flex-1">
+                          {option}
+                        </Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                )}
 
-                  {currentQuestion.type === "subjective" && (
-                    <Textarea
-                      value={answers[currentQuestion.questionId]?.toString() || ""}
-                      onChange={(e) => handleAnswerChange(currentQuestion.questionId, e.target.value)}
-                      placeholder="Type your answer here..."
-                      className="min-h-32"
-                    />
-                  )}
-                </div>
+                {currentQuestion.type === "subjective" && (
+                  <Textarea
+                    value={answers[currentQuestion.questionId]?.toString() || ""}
+                    onChange={(e) =>
+                      setAnswers((prev) => ({
+                        ...prev,
+                        [currentQuestion.questionId]: e.target.value,
+                      }))
+                    }
+                    placeholder="Type your answer here..."
+                    className="min-h-32"
+                  />
+                )}
 
-                {/* Navigation */}
                 <div className="flex justify-between">
                   <Button
                     variant="outline"
@@ -516,7 +560,7 @@ export default function ChallengeQuizPage() {
                     <ChevronLeft className="h-4 w-4 mr-2" />
                     Previous
                   </Button>
-                  {currentQuestionIndex === totalQuestions - 1 ? (
+                  {currentQuestionIndex === questions.length - 1 ? (
                     <Button onClick={() => handleSubmit(false)} disabled={submitting}>
                       {submitting ? "Submitting..." : "Submit Challenge"}
                     </Button>
@@ -535,4 +579,3 @@ export default function ChallengeQuizPage() {
     </div>
   )
 }
-

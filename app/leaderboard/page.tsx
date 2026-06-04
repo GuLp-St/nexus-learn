@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Medal, Trophy, UserPlus } from "lucide-react"
+import { Medal, Trophy, UserPlus, Flame } from "lucide-react"
+import { WinStreakFlame } from "@/components/challenge/win-streak-flame"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import SidebarNav from "@/components/sidebar-nav"
@@ -359,6 +360,13 @@ export default function LeaderboardPage() {
                               </p>
                               <p className="text-xs text-muted-foreground">Wins</p>
                             </div>
+                            <div className="text-right min-w-[72px]">
+                              <WinStreakFlame
+                                streak={leaderboardUser.challengeWinStreak || 0}
+                                className={isMe ? "justify-end" : ""}
+                              />
+                              <p className="text-xs text-muted-foreground">Streak</p>
+                            </div>
                           </div>
                         </div>
                       )
@@ -370,7 +378,7 @@ export default function LeaderboardPage() {
 
             {/* Stats Section */}
             {!loading && user && (
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <Card>
                   <CardContent className="p-6 text-center">
                     <Trophy className="mx-auto mb-2 h-8 w-8 text-primary" />
@@ -408,6 +416,20 @@ export default function LeaderboardPage() {
                       })()}
                     </p>
                     <p className="text-sm text-muted-foreground">Challenge Wins</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-6 text-center">
+                    <Flame className="mx-auto mb-2 h-8 w-8 text-orange-500" />
+                    <div className="flex justify-center">
+                      <WinStreakFlame
+                        streak={
+                          leaderboardUsers.find((u) => u.userId === user.uid)?.challengeWinStreak || 0
+                        }
+                        showZero
+                      />
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">Win Streak</p>
                   </CardContent>
                 </Card>
               </div>

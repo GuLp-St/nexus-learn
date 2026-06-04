@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { FillBlankInteraction } from "@/lib/gemini"
+import { normalizeFillBlankInteraction } from "@/lib/lesson-stream-normalize"
 import { CheckCircle2, XCircle } from "lucide-react"
 
 interface FillBlankInteractionProps {
@@ -15,15 +16,20 @@ export function FillBlankInteractionComponent({ interaction, onComplete }: FillB
   const [selected, setSelected] = useState<string | null>(null)
   const [showResult, setShowResult] = useState(false)
 
+  const normalized = useMemo(
+    () => normalizeFillBlankInteraction(interaction),
+    [interaction]
+  )
+
   const handleSelect = (option: string) => {
     if (showResult) return
     setSelected(option)
-    const isCorrect = option === interaction.correctAnswer
+    const isCorrect = option === normalized.correctAnswer
     setShowResult(true)
     onComplete(isCorrect)
   }
 
-  const contentWithBlank = interaction.content.replace(/\[\s*BLANK\s*\]/gi, "_____")
+  const contentWithBlank = normalized.content.replace(/\[\s*BLANK\s*\]/gi, "_____")
 
   return (
     <Card className="my-6 border-2">
@@ -44,9 +50,9 @@ export function FillBlankInteractionComponent({ interaction, onComplete }: FillB
 
           {!showResult ? (
             <div className="flex flex-wrap gap-2">
-              {interaction.options.map((option) => (
+              {normalized.options.map((option, optionIndex) => (
                 <Button
-                  key={option}
+                  key={`${optionIndex}-${option}`}
                   variant="outline"
                   onClick={() => handleSelect(option)}
                   className="min-w-[100px] whitespace-normal break-words h-auto py-2"
@@ -58,7 +64,7 @@ export function FillBlankInteractionComponent({ interaction, onComplete }: FillB
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-center gap-2">
-                {selected === interaction.correctAnswer ? (
+                {selected === normalized.correctAnswer ? (
                   <>
                     <CheckCircle2 className="h-6 w-6 text-green-500" />
                     <span className="text-green-600 font-semibold">Correct!</span>
@@ -72,7 +78,7 @@ export function FillBlankInteractionComponent({ interaction, onComplete }: FillB
               </div>
               <div className="bg-muted p-4 rounded-lg">
                 <p className="text-sm break-words">
-                  Correct answer: <strong className="break-words">{interaction.correctAnswer}</strong>
+                  Correct answer: <strong className="break-words">{normalized.correctAnswer}</strong>
                 </p>
               </div>
               <Button

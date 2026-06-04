@@ -107,27 +107,25 @@ export function DailyQuestCard() {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-primary" />
-              Daily Quests
-            </CardTitle>
-            <CardDescription className="mt-1">
-              Complete quests to earn XP & Nexon
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-            {quests.refreshTokens > 0 ? (
-              <>
-                <span>{quests.refreshTokens}</span>
-                <RotateCcw className="h-4 w-4" />
-              </>
-            ) : (
-              <QuestRefreshCountdown lastReset={quests.lastRefreshTokenReset} />
-            )}
-          </div>
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="flex items-center gap-2 flex-wrap">
+            <Trophy className="h-5 w-5 text-primary shrink-0" />
+            Daily Quests
+            <span className="flex items-center gap-1 text-sm font-normal text-muted-foreground">
+              {quests.refreshTokens > 0 ? (
+                <>
+                  <span>{quests.refreshTokens}</span>
+                  <RotateCcw className="h-4 w-4" />
+                </>
+              ) : (
+                <QuestRefreshCountdown lastReset={quests.lastRefreshTokenReset} />
+              )}
+            </span>
+          </CardTitle>
         </div>
+        <CardDescription>
+          Complete quests to earn XP & Nexon
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 flex-1">
         {quests.quests.map((quest) => (

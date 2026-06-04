@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Search } from "lucide-react"
+import { Plus } from "lucide-react"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
 import { useChatContext } from "@/context/ChatContext"
@@ -18,12 +19,21 @@ export default function LearningDashboard() {
   const router = useRouter()
   const [dailyQuests, setDailyQuests] = useState<any>(null)
   const [communityActivities, setCommunityActivities] = useState<any[]>([])
+  const [courseCount, setCourseCount] = useState(0)
 
   useEffect(() => {
     if (!loading && !user) {
       router.push("/auth")
     }
   }, [user, loading, router])
+
+  useEffect(() => {
+    if (user) {
+      import("@/lib/course-utils").then(({ getUserCourses }) => {
+        getUserCourses(user.uid).then((courses) => setCourseCount(courses.length))
+      })
+    }
+  }, [user])
 
   // Load daily quests
   useEffect(() => {
@@ -117,15 +127,13 @@ export default function LearningDashboard() {
               <h2 className="text-balance text-3xl font-bold tracking-tight text-foreground lg:text-4xl">
                 What do you want to learn today?
               </h2>
-              <div className="relative mx-auto max-w-2xl">
-                <Link href="/create-course" className="block">
-                  <div className="relative cursor-pointer">
-                    <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                    <div className="h-14 rounded-md border border-input bg-background pl-12 pr-4 text-base text-muted-foreground shadow-sm transition-colors hover:border-primary flex items-center">
-                      Search for courses, topics, or skills...
-                    </div>
-                  </div>
-                </Link>
+              <div className="flex justify-center">
+                <Button asChild size="lg" className="gap-2 h-14 px-8 text-base">
+                  <Link href="/create-course">
+                    <Plus className="h-5 w-5" />
+                    {courseCount === 0 ? "Add a course now!" : "Add more courses!"}
+                  </Link>
+                </Button>
               </div>
             </div>
 

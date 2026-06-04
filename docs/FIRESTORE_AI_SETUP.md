@@ -8,8 +8,21 @@ config (collection)
     ├── geminiApiKeys: string[]          ← Gemini only needs keys
     ├── geminiModel: string
     ├── cloudflareAccounts: array       ← Each item is { accountId, apiToken }
-    └── cloudflareImageModel: string
+    ├── cloudflareImageModel: string       ← active model (any Workers AI id)
+    └── cloudflareImageModelFallback: string (optional)
 ```
+
+### Switch image models without redeploying
+
+Set `cloudflareImageModel` in `config/ai` to any model id, for example:
+
+| Model | Value |
+|-------|--------|
+| Leonardo Phoenix (text) | `@cf/leonardo/phoenix-1.0` |
+| FLUX schnell (cheap) | `@cf/black-forest-labs/flux-1-schnell` |
+| Google Nano Banana 2 | `google/nano-banana-2` |
+
+Changes apply within ~10 seconds (config cache). Optional `cloudflareImageModelFallback` runs only if the primary model fails.
 
 ### `cloudflareAccounts` (important)
 

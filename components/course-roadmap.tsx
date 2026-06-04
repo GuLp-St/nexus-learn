@@ -38,15 +38,29 @@ const FINAL_NODE_SIZE = 56
 const FINAL_CARD_MIN_HEIGHT = MODULE_CARD_HEIGHT + 80
 const LESSON_SPACING = 100
 
-// Module colors
-const MODULE_COLORS = [
-  { fill: "#10b981", stroke: "#059669", name: "Emerald" },
-  { fill: "#3b82f6", stroke: "#2563eb", name: "Blue" },
-  { fill: "#8b5cf6", stroke: "#7c3aed", name: "Purple" },
-  { fill: "#f59e0b", stroke: "#d97706", name: "Amber" },
-  { fill: "#ef4444", stroke: "#dc2626", name: "Red" },
-  { fill: "#ec4899", stroke: "#db2777", name: "Pink" },
-]
+/** First unlocked, incomplete lesson the user should take next. */
+function getNextLessonPosition(
+  course: CourseWithProgress,
+  completedLessons: Set<string>,
+  moduleUnlocked: (moduleIndex: number) => boolean
+): { moduleIndex: number; lessonIndex: number } | null {
+  for (let moduleIndex = 0; moduleIndex < course.modules.length; moduleIndex++) {
+    if (!moduleUnlocked(moduleIndex)) continue
+    const module = course.modules[moduleIndex]
+    for (let lessonIndex = 0; lessonIndex < module.lessons.length; lessonIndex++) {
+      const lessonId = `${moduleIndex}-${lessonIndex}`
+      const prevLessonId =
+        lessonIndex > 0 ? `${moduleIndex}-${lessonIndex - 1}` : null
+      const isLockedLesson = prevLessonId
+        ? !completedLessons.has(prevLessonId)
+        : false
+      if (!isLockedLesson && !completedLessons.has(lessonId)) {
+        return { moduleIndex, lessonIndex }
+      }
+    }
+  }
+  return null
+}
 
 // Calculate grade from percentage
 function getGradeFromScore(score: number): string {
@@ -118,6 +132,7 @@ interface ModuleLevelCardProps {
   isActive: boolean
   previousModulePassed: boolean
   currentLessonIndex?: number
+  nextLesson?: { moduleIndex: number; lessonIndex: number } | null
   incompleteAttempt: (QuizAttempt & { courseTitle?: string }) | null
   onRefresh?: () => void
 }
@@ -131,6 +146,7 @@ function ModuleLevelCard({
   isActive,
   previousModulePassed,
   currentLessonIndex,
+  nextLesson,
   incompleteAttempt,
   onRefresh,
 }: ModuleLevelCardProps) {
@@ -138,7 +154,6 @@ function ModuleLevelCard({
   const { user } = useAuth()
   const { showXPAward } = useXP()
   const cardRef = useRef<HTMLDivElement>(null)
-  const moduleColor = MODULE_COLORS[moduleIndex % MODULE_COLORS.length]
   const [selectedLesson, setSelectedLesson] = useState<{ index: number; lesson: any } | null>(null)
   const [showQuizModal, setShowQuizModal] = useState(false)
   const [showConflictModal, setShowConflictModal] = useState(false)
@@ -427,7 +442,8 @@ function ModuleLevelCard({
           <motion.path
             d={wavePath}
             fill="none"
-            stroke={moduleColor.stroke}
+            stroke="var(--primary)"
+            strokeOpacity={0.85}
             strokeWidth="0.5"
             strokeDasharray="2,1"
             strokeLinecap="round"
@@ -447,22 +463,23 @@ function ModuleLevelCard({
             const lessonId = `${moduleIndex}-${lessonIndex}`
             const isCompleted = completedLessons.has(lessonId)
             const isCurrent = moduleIndex === lastModule && lessonIndex === lastLesson
+            const isNext =
+              nextLesson?.moduleIndex === moduleIndex &&
+              nextLesson?.lessonIndex === lessonIndex &&
+              !isCompleted
             const prevLessonId = lessonIndex > 0 ? `${moduleIndex}-${lessonIndex - 1}` : null
             const isLockedLesson = prevLessonId ? !completedLessons.has(prevLessonId) : false
             
-            let nodeColor = moduleColor.fill
-            let borderColor = moduleColor.stroke
-            
-            if (isLockedLesson || isLocked) {
-              nodeColor = "#6b7280"
-              borderColor = "#4b5563"
-            } else if (isCompleted) {
-              nodeColor = "#10b981"
-              borderColor = "#059669"
-            } else if (isCurrent) {
-              nodeColor = "#fbbf24"
-              borderColor = "#f59e0b"
-            }
+            const nodeTone =
+              isLockedLesson || isLocked
+                ? "locked"
+                : isNext
+                  ? "next"
+                  : isCompleted
+                    ? "completed"
+                    : isCurrent
+                      ? "current"
+                      : "available"
             
             return (
               <div
@@ -480,12 +497,48 @@ function ModuleLevelCard({
               >
                 {/* Node circle wrapper with pulsing ring - relative container with flex centering */}
                 <div className="relative flex items-center justify-center">
-                  {/* Pulsing ring for current/unlocked (not completed) - perfectly centered */}
-                  {isCurrent && !isCompleted && (
+                  {/* Pulsing ring for the next lesson to take */}
+                  {isNext && !isLockedLesson && !isLocked && (
+                    <>
+                      <motion.div
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-primary pointer-events-none z-0"
+                        style={{
+                          width: `${LESSON_NODE_SIZE + 14}px`,
+                          height: `${LESSON_NODE_SIZE + 14}px`,
+                        }}
+                        animate={{
+                          scale: [1, 1.45, 1],
+                          opacity: [0.85, 0.15, 0.85],
+                        }}
+                        transition={{
+                          duration: 1.5,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                        }}
+                      />
+                      <motion.div
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary/40 pointer-events-none z-0"
+                        style={{
+                          width: `${LESSON_NODE_SIZE + 22}px`,
+                          height: `${LESSON_NODE_SIZE + 22}px`,
+                        }}
+                        animate={{
+                          scale: [1, 1.2, 1],
+                          opacity: [0.4, 0, 0.4],
+                        }}
+                        transition={{
+                          duration: 1.5,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                          delay: 0.2,
+                        }}
+                      />
+                    </>
+                  )}
+                  {isCurrent && !isCompleted && !isNext && (
                     <motion.div
-                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 pointer-events-none z-0"
+                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary/60 pointer-events-none z-0"
                       style={{
-                        borderColor: nodeColor,
                         width: `${LESSON_NODE_SIZE + 8}px`,
                         height: `${LESSON_NODE_SIZE + 8}px`,
                       }}
@@ -503,28 +556,46 @@ function ModuleLevelCard({
                   
                   {/* Node circle - sits on top of ring */}
                   <div
-                    className="relative z-10 rounded-full border-2 shadow-lg flex items-center justify-center transition-transform group-hover:scale-110"
+                    className={`relative z-10 rounded-full border-2 shadow-lg flex items-center justify-center transition-transform group-hover:scale-110 ${
+                      nodeTone === "locked"
+                        ? "bg-muted-foreground border-muted-foreground/80"
+                        : nodeTone === "next"
+                          ? "bg-primary border-primary ring-2 ring-primary ring-offset-2 ring-offset-background scale-110"
+                          : nodeTone === "completed"
+                            ? "bg-primary border-primary"
+                            : nodeTone === "current"
+                              ? "bg-primary/70 border-primary"
+                              : "bg-primary/35 border-primary/55"
+                    }`}
                     style={{
                       width: `${LESSON_NODE_SIZE}px`,
                       height: `${LESSON_NODE_SIZE}px`,
-                      backgroundColor: nodeColor,
-                      borderColor: borderColor,
                     }}
                   >
                   {isLockedLesson || isLocked ? (
-                    <Lock className="h-4 w-4 text-white" />
+                    <Lock className="h-4 w-4 text-primary-foreground" />
                   ) : isCompleted ? (
-                    <CheckCircle2 className="h-5 w-5 text-white" />
+                    <CheckCircle2 className="h-5 w-5 text-primary-foreground" />
+                  ) : isNext ? (
+                    <Play className="h-4 w-4 text-primary-foreground fill-primary-foreground" />
                   ) : isCurrent ? (
-                    <Play className="h-4 w-4 text-orange-900" />
+                    <Play className="h-4 w-4 text-primary-foreground fill-primary-foreground" />
                   ) : (
-                    <BookOpen className="h-4 w-4 text-white" />
+                    <BookOpen className="h-4 w-4 text-primary-foreground/90" />
                   )}
                   </div>
                 </div>
+
+                {isNext && !isLockedLesson && !isLocked && (
+                  <div className="absolute left-1/2 top-full mt-2 z-20 -translate-x-1/2 pointer-events-none">
+                    <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary-foreground shadow-md">
+                      Next
+                    </span>
+                  </div>
+                )}
                 
-                {/* Avatar on current node */}
-                {isCurrent && user && isActive && (
+                {/* Avatar on next (or current) node */}
+                {user && isActive && (isNext || isCurrent) && !isCompleted && (
                   <motion.div
                     className="absolute -top-10 left-1/2 -translate-x-1/2 z-30"
                     animate={{
@@ -598,8 +669,8 @@ function ModuleLevelCard({
                     >
                       <polygon
                         points={`${QUIZ_NODE_SIZE / 2},${QUIZ_NODE_SIZE * 0.1} ${QUIZ_NODE_SIZE * 0.9},${QUIZ_NODE_SIZE * 0.3} ${QUIZ_NODE_SIZE * 0.9},${QUIZ_NODE_SIZE * 0.7} ${QUIZ_NODE_SIZE / 2},${QUIZ_NODE_SIZE * 0.9} ${QUIZ_NODE_SIZE * 0.1},${QUIZ_NODE_SIZE * 0.7} ${QUIZ_NODE_SIZE * 0.1},${QUIZ_NODE_SIZE * 0.3}`}
-                        fill={isModulePassed ? moduleColor.fill : "#ef4444"}
-                        stroke={isModulePassed ? moduleColor.stroke : "#dc2626"}
+                        fill={isModulePassed ? "var(--primary)" : "#ef4444"}
+                        stroke={isModulePassed ? "var(--primary)" : "#dc2626"}
                         strokeWidth="3"
                       />
                     </svg>
@@ -622,7 +693,7 @@ function ModuleLevelCard({
                       <div
                         className="absolute -top-2 -right-2 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center text-xs font-bold shadow-lg z-10"
                         style={{
-                          backgroundColor: bestScore >= 95 ? "#fbbf24" : bestScore >= 85 ? "#3b82f6" : "#10b981",
+                          backgroundColor: bestScore >= 95 ? "#fbbf24" : bestScore >= 85 ? "#3b82f6" : "var(--primary)",
                           color: "#ffffff",
                         }}
                       >
@@ -929,7 +1000,7 @@ function ModuleLevelCard({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {selectedLesson && completedLessons.has(`${moduleIndex}-${selectedLesson.index}`) && (
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <CheckCircle2 className="h-5 w-5 text-primary" />
               )}
               {selectedLesson?.lesson.title || "Lesson"}
             </DialogTitle>
@@ -1528,6 +1599,15 @@ export function CourseRoadmap({ course }: CourseRoadmapProps) {
   }
   
   const allModulesPassed = modulePassStatus.every((passed) => passed)
+
+  const completedLessonSet = new Set(course.userProgress.completedLessons || [])
+  const isModuleUnlocked = (moduleIndex: number) =>
+    moduleIndex === 0 || modulePassStatus[moduleIndex - 1]
+  const nextLesson = getNextLessonPosition(
+    course,
+    completedLessonSet,
+    isModuleUnlocked
+  )
   
   // Find active module
   const lastModule = course.userProgress.lastAccessedModule ?? 0
@@ -1551,11 +1631,12 @@ export function CourseRoadmap({ course }: CourseRoadmapProps) {
         const previousModulePassed = moduleIndex === 0 || modulePassStatus[moduleIndex - 1]
         const isLocked = !previousModulePassed
         const isActive = moduleIndex === lastModule
+        const isNextModule = nextLesson?.moduleIndex === moduleIndex
         
         return (
           <div
             key={moduleIndex}
-            ref={isActive ? activeCardRef : null}
+            ref={isNextModule || (isActive && !nextLesson) ? activeCardRef : null}
           >
             <ModuleLevelCard
               moduleIndex={moduleIndex}
@@ -1566,6 +1647,7 @@ export function CourseRoadmap({ course }: CourseRoadmapProps) {
               isActive={isActive}
               previousModulePassed={previousModulePassed}
               currentLessonIndex={isActive ? lastLesson : undefined}
+              nextLesson={nextLesson}
               incompleteAttempt={incompleteAttempt}
               onRefresh={loadData}
             />

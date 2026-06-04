@@ -96,13 +96,8 @@ export async function getUserPresence(userId: string): Promise<UserPresence | nu
       const heartbeatTime = lastHeartbeat.toMillis()
       const timeSinceHeartbeat = now - heartbeatTime
       
-      // Consider offline if no heartbeat in last 90 seconds
+      // Stale heartbeat — report offline without writing (only the owner may update presence)
       if (timeSinceHeartbeat > 90000) {
-        // Auto-update to offline
-        await updateDoc(presenceRef, {
-          isOnline: false,
-          lastSeen: serverTimestamp(),
-        })
         return {
           isOnline: false,
           lastSeen: data.lastSeen as Timestamp | null,
@@ -148,12 +143,6 @@ export function subscribeToUserPresence(
         const timeSinceHeartbeat = now - heartbeatTime
 
         if (timeSinceHeartbeat > 90000) {
-          // Auto-update to offline
-          updateDoc(presenceRef, {
-            isOnline: false,
-            lastSeen: serverTimestamp(),
-          }).catch(console.error)
-          
           callback({
             isOnline: false,
             lastSeen: data.lastSeen as Timestamp | null,

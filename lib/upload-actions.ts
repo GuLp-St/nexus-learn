@@ -1,7 +1,8 @@
 "use server"
 
 import { UTApi } from "uploadthing/server";
-import { generateAIImage } from "./cloudflare-ai-utils";
+import { generateAIImage, type GenerateAIImageOptions } from "./cloudflare-ai-utils";
+import { COURSE_COVER_HEIGHT, COURSE_COVER_WIDTH } from "./image-constants";
 
 const utapi = new UTApi({
   token: process.env.UPLOADTHING_TOKEN,
@@ -16,10 +17,15 @@ export type UploadedImageResult = { ufsUrl: string; key: string }
 export async function generateAndUploadImage(
   prompt: string,
   fileName: string = "generated-image.png",
-  model?: string
+  model?: string,
+  imageOptions?: GenerateAIImageOptions
 ): Promise<UploadedImageResult | null> {
   try {
-    const blob = await generateAIImage(prompt)
+    const blob = await generateAIImage(prompt, model, undefined, {
+      width: COURSE_COVER_WIDTH,
+      height: COURSE_COVER_HEIGHT,
+      ...imageOptions,
+    })
     if (!blob) {
       return null
     }

@@ -10,7 +10,8 @@
       "apiToken": "YOUR_CLOUDFLARE_WORKERS_AI_TOKEN"
     }
   ],
-  "cloudflareImageModel": "@cf/black-forest-labs/flux-1-schnell",
+  "cloudflareImageModel": "@cf/leonardo/phoenix-1.0",
+  "cloudflareImageModelFallback": "@cf/black-forest-labs/flux-1-schnell",
   "updatedAt": "2026-05-22T00:00:00.000Z",
   "notes": "Each Cloudflare entry MUST pair accountId + apiToken. Add another object for a second account/token."
 }

@@ -59,14 +59,9 @@ export function FriendChatModal({
     if (!open || !user) return
 
     // Fetch initial messages and subscribe to real-time updates
-    const unsubscribe = subscribeToChatMessages(
-      user.uid,
-      friendId,
-      (updatedMessages) => {
-        setMessages(updatedMessages)
-      },
-      50
-    )
+    const unsubscribe = subscribeToChatMessages(user.uid, friendId, (updatedMessages) => {
+      setMessages(updatedMessages)
+    }, 50)
 
     // Subscribe to typing status
     const unsubscribeTyping = subscribeToTypingStatus(user.uid, friendId, (isTyping) => {
@@ -559,17 +554,32 @@ function ChallengeMessageCard({
               <div className="flex flex-col items-center justify-center p-3 bg-green-500/10 rounded-lg text-center">
                 <Trophy className="h-6 w-6 text-yellow-500 mb-1" />
                 <p className="text-xs font-bold text-green-600 dark:text-green-400">
-                  {challenge.winnerId === user?.uid ? "YOU WON!" : 
-                   challenge.winnerId === null ? "DRAW!" : "YOU LOST"}
+                  {challenge.isDraw
+                    ? "DRAW — BETS REFUNDED"
+                    : challenge.winnerId === user?.uid
+                      ? "YOU WON!"
+                      : challenge.winnerId === null
+                        ? "DRAW!"
+                        : "YOU LOST"}
                 </p>
                 <div className="mt-2 grid grid-cols-2 gap-4 w-full border-t border-green-500/20 pt-2">
                   <div className="text-[10px]">
                     <p className="text-muted-foreground uppercase">You</p>
                     <p className="font-bold">{isChallenger ? challenge.challengerScore : challenge.challengedScore} pts</p>
+                    {(isChallenger ? challenge.challengerPerformanceScore : challenge.challengedPerformanceScore) != null && (
+                      <p className="text-muted-foreground">
+                        Score {(isChallenger ? challenge.challengerPerformanceScore : challenge.challengedPerformanceScore)?.toLocaleString()}
+                      </p>
+                    )}
                   </div>
                   <div className="text-[10px]">
                     <p className="text-muted-foreground uppercase">{friendNickname}</p>
                     <p className="font-bold">{isChallenger ? challenge.challengedScore : challenge.challengerScore} pts</p>
+                    {(isChallenger ? challenge.challengedPerformanceScore : challenge.challengerPerformanceScore) != null && (
+                      <p className="text-muted-foreground">
+                        Score {(isChallenger ? challenge.challengedPerformanceScore : challenge.challengedPerformanceScore)?.toLocaleString()}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

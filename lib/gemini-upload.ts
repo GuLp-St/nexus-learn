@@ -1,15 +1,26 @@
 import { getGeminiModelName } from "./gemini-model"
 import { hasGeminiApiKeys } from "./gemini-keys"
 import { mapParallelWithKeys, poolGenerateContent } from "./gemini-pool"
+import { MATERIAL_ONLY_RULES } from "./material-grounding"
 
 export interface LessonDetail {
   title: string
+  /** Short summary for this lesson (shown in editor; drives generation). */
+  summary?: string
   keyPoints: string[]
   references: string[]
+  /** 1-based PDF page numbers this lesson should use in teaching blocks. */
+  materialPages?: number[]
+  /** Source upload filename when multiple files were provided. */
+  sourceFileName?: string
+  /** @deprecated Use materialPages — kept for older analyses */
+  primaryImageIndex?: number
 }
 
 export interface ModuleDetail {
   title: string
+  /** Module-level summary (drives course generation — not the course display summary). */
+  summary?: string
   lessons: LessonDetail[]
 }
 
@@ -197,9 +208,17 @@ Guidelines:
  * Aggregate analysis: take per-file summaries/key points and derive a full course structure.
  * This function only uses text (no inline images) to keep the request light.
  */
+export type AnalyzeCourseOptions = {
+  toneInstruction?: string
+  difficulty?: "beginner" | "intermediate" | "expert"
+  /** Include truncated raw text in aggregation for fuller session context */
+  includeFullText?: boolean
+}
+
 export async function analyzeCourseFromFiles(
   files: FileProcessedData[],
-  onProgress?: (processed: number, total: number) => void
+  onProgress?: (processed: number, total: number) => void,
+  options?: AnalyzeCourseOptions
 ): Promise<CourseMaterialAnalysis> {
   if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
@@ -251,10 +270,30 @@ ${visualsText}`
     })
     .join("\n\n------------------------\n\n")
 
+  const styleBlock =
+    options?.toneInstruction?.trim() || options?.difficulty
+      ? `
+Teaching style:
+${options.toneInstruction?.trim() ? `- Tone: ${options.toneInstruction.trim()}` : ""}
+${options.difficulty ? `- Target difficulty: ${options.difficulty}` : ""}
+`
+      : ""
+
+  const fullTextBlock =
+    options?.includeFullText !== false
+      ? files
+          .map(
+            (f) =>
+              `\n--- RAW TEXT (${f.fileName}, truncated) ---\n${f.text.slice(0, 50_000)}`
+          )
+          .join("\n")
+      : ""
+
   // Step 3: single coherent aggregation (one key, full combined context from step 1+2)
   const systemInstruction = `You are an expert academic course designer.
 
 Task: You will receive summarized important information from MULTIPLE uploaded files (summaries, key points, and visual descriptions). Based on ALL of this combined information, design a complete course.
+${styleBlock}
 
 Instructions:
 1. Read all file summaries, key points, and visual descriptions carefully.
@@ -283,11 +322,15 @@ Output Requirements:
   "modules": [
     {
       "title": "Module 1 Title",
+      "summary": "2-4 sentence summary of what this module covers (from the materials only)",
       "lessons": [
         {
           "title": "Lesson 1 Title",
-          "keyPoints": ["Key concept 1", "Key concept 2", "Key concept 3"],
-          "references": ["Reference to Image Index X", "Reference to specific section"]
+          "summary": "1-3 sentence summary of this lesson (from the materials only)",
+          "keyPoints": ["Key concept 1", "Key concept 2"],
+          "references": ["See PDF page 12", "Image Index 12"],
+          "materialPages": [12, 45],
+          "sourceFileName": "lecture.pdf"
         }
       ]
     }
@@ -302,15 +345,22 @@ Guidelines:
 - tags should be relevant keywords like ["biology", "cell", "diagram"] or ["chemistry", "molecule", "structure"]
 - Create 3-7 modules that logically organize the content across all files
 - Each module should have 2-5 lessons
-- Each lesson should have 3-7 keyPoints that capture the essential concepts, derived from the key points of all files
+- Each module MUST have a "summary" field (2-4 sentences, material-only)
+- Each lesson MUST have a "summary" field (1-3 sentences, material-only) plus 2-5 keyPoints derived from the material
+- ${MATERIAL_ONLY_RULES}
 - references should link lessons to specific Image Index numbers (e.g., "See Image Index 3") or specific sections mentioned in the input
+- EVERY lesson MUST include "materialPages": a unique array of 1-based PDF page numbers for THAT lesson only (e.g. [12, 45]). Different lessons should use different pages when the material spans multiple sections. Do not assign the same page to every lesson unless they truly teach the same slide.
+- Use "sourceFileName" when multiple files were uploaded and pages belong to a specific file.
+- In references, cite pages as "PDF page N" or "Image Index N" (image index equals page number for PDF pages).
+- For DOCX/PPTX embedded images, use imageIndex from the visualDescriptions list instead of materialPages.
 - Module and lesson titles should be clear and descriptive
 - If there are no images, visualDescriptions should be an empty array
 - suggestedModules array should contain just the module titles`
 
   const parts: any[] = []
-  if (combinedText.trim()) {
-    parts.push({ text: combinedText })
+  const aggregationInput = [combinedText, fullTextBlock].filter(Boolean).join("\n\n")
+  if (aggregationInput.trim()) {
+    parts.push({ text: aggregationInput })
   }
 
   try {
@@ -368,11 +418,22 @@ Guidelines:
     if (analysis.modules && Array.isArray(analysis.modules)) {
       analysis.modules = analysis.modules.map((module) => ({
         title: module.title || "Untitled Module",
+        summary: module.summary || "",
         lessons: Array.isArray(module.lessons)
           ? module.lessons.map((lesson) => ({
               title: lesson.title || "Untitled Lesson",
+              summary: lesson.summary || "",
               keyPoints: Array.isArray(lesson.keyPoints) ? lesson.keyPoints : [],
               references: Array.isArray(lesson.references) ? lesson.references : [],
+              materialPages: Array.isArray(lesson.materialPages)
+                ? [...new Set(lesson.materialPages.filter((p: unknown) => typeof p === "number" && p >= 1))]
+                : [],
+              ...(typeof lesson.sourceFileName === "string" && lesson.sourceFileName
+                ? { sourceFileName: lesson.sourceFileName }
+                : {}),
+              ...(typeof lesson.primaryImageIndex === "number" && lesson.primaryImageIndex >= 1
+                ? { primaryImageIndex: lesson.primaryImageIndex }
+                : {}),
             }))
           : [],
       }))

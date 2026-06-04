@@ -2,6 +2,7 @@ import { db } from "./firebase"
 import { doc, getDoc, setDoc, updateDoc, query, where, getDocs, collection, serverTimestamp, Timestamp, orderBy, limit, increment, onSnapshot } from "firebase/firestore"
 import { awardXP, XPAwardResult } from "./xp-utils"
 import { QuizQuestion } from "./quiz-utils"
+import { calculatePerformanceScore, filterObjectiveQuestions } from "./challenge-scoring"
 
 export interface Challenge {
   id?: string
@@ -13,12 +14,17 @@ export interface Challenge {
   lessonIndex: number | null // Always null now, kept for backward compatibility
   questionIds: string[] // Empty initially, populated when quiz is generated
   challengerAttemptId: string | null // null until challenger plays
-  challengerScore: number | null // null until challenger plays
+  challengerScore: number | null // null until challenger plays (raw points)
   challengerTime: number | null // null until challenger plays
+  challengerComboMultiplier?: number | null
+  challengerPerformanceScore?: number | null
   status: "pending" | "accepted" | "completed" | "rejected" | "expired"
   challengedAttemptId: string | null
   challengedScore: number | null
   challengedTime: number | null
+  challengedComboMultiplier?: number | null
+  challengedPerformanceScore?: number | null
+  isDraw?: boolean
   winnerId: string | null
   betAmount: number // Nexon bet amount (both users bet the same amount)
   expirationHours: number // Custom expiration chosen by challenger
@@ -31,24 +37,69 @@ export interface Challenge {
 }
 
 /**
- * Determine the winner of a challenge
- * Higher score wins, or faster time if scores are tied
+ * Determine winner by competitive performance score, then time; true draw refunds bets.
  */
 function determineWinner(
   challengerId: string,
   challengedId: string,
-  challengerScore: number,
-  challengedScore: number,
+  challengerPerformance: number,
+  challengedPerformance: number,
   challengerTime: number,
   challengedTime: number
-): string | null {
-  if (challengerScore > challengedScore) return challengerId
-  if (challengedScore > challengerScore) return challengedId
-  if (challengerScore === challengedScore) {
-    // Tie: winner is whoever took less time
-    return challengerTime < challengedTime ? challengerId : challengedId
+): { winnerId: string | null; isDraw: boolean } {
+  if (challengerPerformance > challengedPerformance) {
+    return { winnerId: challengerId, isDraw: false }
   }
-  return null
+  if (challengedPerformance > challengerPerformance) {
+    return { winnerId: challengedId, isDraw: false }
+  }
+  if (challengerTime < challengedTime) {
+    return { winnerId: challengerId, isDraw: false }
+  }
+  if (challengedTime < challengerTime) {
+    return { winnerId: challengedId, isDraw: false }
+  }
+  return { winnerId: null, isDraw: true }
+}
+
+async function refundChallengeBets(
+  challengerId: string,
+  challengedId: string,
+  betAmount: number,
+  challengeId: string,
+  reason: string
+): Promise<void> {
+  if (betAmount <= 0) return
+  const { awardNexon } = await import("./nexon-utils")
+  await awardNexon(challengerId, betAmount, reason, "Challenge draw — bet refunded", {
+    challengeId,
+    silent: true,
+  })
+  await awardNexon(challengedId, betAmount, reason, "Challenge draw — bet refunded", {
+    challengeId,
+    silent: true,
+  })
+}
+
+async function applyWinStreak(userId: string, won: boolean): Promise<number> {
+  const userRef = doc(db, "users", userId)
+  const userSnap = await getDoc(userRef)
+  if (!userSnap.exists()) return 0
+
+  const current = userSnap.data().challengeWinStreak || 0
+  const best = userSnap.data().challengeWinStreakBest || 0
+
+  if (won) {
+    const next = current + 1
+    await updateDoc(userRef, {
+      challengeWinStreak: next,
+      challengeWinStreakBest: Math.max(best, next),
+    })
+    return next
+  }
+
+  await updateDoc(userRef, { challengeWinStreak: 0 })
+  return 0
 }
 
 /**
@@ -102,10 +153,15 @@ export async function createChallenge(
     const courseData = { id: courseSnap.id, ...courseSnap.data() } as any
     
     let generatedQuestions: QuizQuestion[] = []
+    const questionTarget = quizType === "module" ? 10 : 20
     if (quizType === "module" && moduleIndex !== null) {
-      generatedQuestions = await generateModuleQuizQuestions(courseData, moduleIndex, courseId, 10)
+      generatedQuestions = await generateModuleQuizQuestions(courseData, moduleIndex, courseId, questionTarget)
     } else {
-      generatedQuestions = await generateCourseQuizQuestions(courseData, courseId, 20)
+      generatedQuestions = await generateCourseQuizQuestions(courseData, courseId, questionTarget)
+    }
+
+    if (betAmount > 0) {
+      generatedQuestions = filterObjectiveQuestions(generatedQuestions, questionTarget)
     }
 
     // Save questions to Firestore so they are permanent and accessible by both players
@@ -206,10 +262,12 @@ export async function recordChallengeResult(
   userId: string,
   attemptId: string,
   score: number,
-  timeTaken: number
+  timeTaken: number,
+  comboMultiplier: number = 1
 ): Promise<{ 
   isCompleted: boolean; 
   winnerId: string | null; 
+  isDraw?: boolean;
   challengerXP: number; 
   challengedXP: number; 
   challengedXPAwardResult?: XPAwardResult 
@@ -230,19 +288,24 @@ export async function recordChallengeResult(
       throw new Error("User is not part of this challenge")
     }
 
-    // Prepare updates
-    const updates: any = {}
+    const performanceScore = calculatePerformanceScore(score, comboMultiplier, timeTaken)
+
+    const updates: Record<string, unknown> = {}
     if (isChallenger) {
       if (challengeData.hasChallengerPlayed) throw new Error("Challenger already played")
       updates.challengerAttemptId = attemptId
       updates.challengerScore = score
       updates.challengerTime = timeTaken
+      updates.challengerComboMultiplier = comboMultiplier
+      updates.challengerPerformanceScore = performanceScore
       updates.hasChallengerPlayed = true
     } else {
       if (challengeData.challengedScore !== null) throw new Error("Challenged user already played")
       updates.challengedAttemptId = attemptId
       updates.challengedScore = score
       updates.challengedTime = timeTaken
+      updates.challengedComboMultiplier = comboMultiplier
+      updates.challengedPerformanceScore = performanceScore
     }
 
     // Update the challenge doc with this player's results
@@ -268,29 +331,44 @@ export async function recordChallengeResult(
     const finalChallengedScore = isChallenger ? (challengeData.challengedScore || 0) : score
     const finalChallengerTime = isChallenger ? timeTaken : (challengeData.challengerTime || 0)
     const finalChallengedTime = isChallenger ? (challengeData.challengedTime || 0) : timeTaken
+    const finalChallengerPerf = isChallenger
+      ? performanceScore
+      : (challengeData.challengerPerformanceScore || 0)
+    const finalChallengedPerf = isChallenger
+      ? (challengeData.challengedPerformanceScore || 0)
+      : performanceScore
 
-    // Determine winner
-    const winnerId = determineWinner(
+    const { winnerId, isDraw } = determineWinner(
       challengeData.challengerId,
       challengeData.challengedId,
-      finalChallengerScore,
-      finalChallengedScore,
+      finalChallengerPerf,
+      finalChallengedPerf,
       finalChallengerTime,
       finalChallengedTime
     )
 
-    // Award Nexon to winner
-    if (challengeData.betAmount > 0 && winnerId) {
-      const totalWinnings = challengeData.betAmount * 2
+    if (challengeData.betAmount > 0) {
       const { awardNexon } = await import("./nexon-utils")
-      await awardNexon(winnerId, totalWinnings, "Challenge Win", `Won challenge and took all bets`, { challengeId, betAmount: totalWinnings }).catch(err => {
-        console.error("Error awarding Nexon:", err)
-      })
+      if (isDraw) {
+        await refundChallengeBets(
+          challengeData.challengerId,
+          challengeData.challengedId,
+          challengeData.betAmount,
+          challengeId,
+          "Challenge Draw - Refund"
+        )
+      } else if (winnerId) {
+        const totalWinnings = challengeData.betAmount * 2
+        await awardNexon(winnerId, totalWinnings, "Challenge Win", `Won challenge and took all bets`, {
+          challengeId,
+          betAmount: totalWinnings,
+        }).catch((err) => console.error("Error awarding Nexon:", err))
+      }
     }
 
-    // Finalize challenge status
     await updateDoc(challengeRef, {
       winnerId,
+      isDraw,
       status: "completed",
       completedAt: serverTimestamp(),
     })
@@ -317,28 +395,50 @@ export async function recordChallengeResult(
       nexonWon: (winnerId && challengeData.betAmount > 0) ? challengeData.betAmount * 2 : 0
     }
 
+    const challengerXpPreview = isDraw
+      ? 0
+      : winnerId === challengeData.challengerId
+        ? await calculateChallengeXP(challengeData.questionIds, finalChallengerScore, maxScore)
+        : 0
+    const challengedXpPreview = isDraw
+      ? 0
+      : winnerId === challengeData.challengedId
+        ? await calculateChallengeXP(challengeData.questionIds, finalChallengedScore, maxScore)
+        : 0
+
     await createNotification(challengeData.challengerId, "challenge_result", {
       ...commonNotifData,
       yourScore: finalChallengerScore,
       opponentScore: finalChallengedScore,
-      xpAwarded: winnerId === challengeData.challengerId ? await calculateChallengeXP(challengeData.questionIds, finalChallengerScore, maxScore) : 0,
-    }).catch(err => console.error("Error notification:", err))
+      isDraw,
+      xpAwarded: challengerXpPreview,
+    }).catch((err) => console.error("Error notification:", err))
 
     await createNotification(challengeData.challengedId, "challenge_result", {
       ...commonNotifData,
       yourScore: finalChallengedScore,
       opponentScore: finalChallengerScore,
-      xpAwarded: winnerId === challengeData.challengedId ? await calculateChallengeXP(challengeData.questionIds, finalChallengedScore, maxScore) : 0,
-    }).catch(err => console.error("Error notification:", err))
+      isDraw,
+      xpAwarded: challengedXpPreview,
+    }).catch((err) => console.error("Error notification:", err))
 
-    // Handle Winner Rewards (XP and Activity)
-    if (winnerId) {
+    if (isDraw) {
+      await applyWinStreak(challengeData.challengerId, false)
+      await applyWinStreak(challengeData.challengedId, false)
+    } else if (winnerId) {
       const winnerIsChallenger = winnerId === challengeData.challengerId
+      const loserId = winnerIsChallenger ? challengeData.challengedId : challengeData.challengerId
       const winnerScore = winnerIsChallenger ? finalChallengerScore : finalChallengedScore
       const xp = await calculateChallengeXP(challengeData.questionIds, winnerScore, maxScore)
-      
-      const awardResult = await awardXP(winnerId, xp, "Quiz Challenge Victory", `Won challenge with score ${winnerScore}/${maxScore}`, { challengeId, score: winnerScore, maxScore })
-      
+
+      const awardResult = await awardXP(
+        winnerId,
+        xp,
+        "Quiz Challenge Victory",
+        `Won challenge with score ${winnerScore}/${maxScore}`,
+        { challengeId, score: winnerScore, maxScore }
+      )
+
       if (winnerIsChallenger) {
         challengerXP = xp
       } else {
@@ -346,25 +446,30 @@ export async function recordChallengeResult(
         challengedXPAwardResult = awardResult
       }
 
-      // Quest Event
+      await applyWinStreak(winnerId, true)
+      await applyWinStreak(loserId, false)
+
       const { emitQuestEvent } = await import("./event-bus")
       emitQuestEvent({
         type: "quest.win_challenge",
         userId: winnerId,
-        metadata: { challengeId }
+        metadata: { challengeId },
       })
 
-      // Stats
       await updateDoc(doc(db, "users", winnerId), { challengeWins: increment(1) })
-      recordActivity(winnerId, "challenge_won", { courseId: challengeData.courseId, courseTitle })
+      recordActivity(winnerId, "challenge_won", {
+        courseId: challengeData.courseId,
+        courseTitle,
+      })
     }
 
     return {
       isCompleted: true,
       winnerId,
+      isDraw,
       challengerXP,
       challengedXP,
-      challengedXPAwardResult
+      challengedXPAwardResult,
     }
   } catch (error) {
     console.error("Error recording challenge result:", error)

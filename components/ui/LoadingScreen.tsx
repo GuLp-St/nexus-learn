@@ -25,8 +25,8 @@ export function LoadingScreen() {
         {/* Logo Container */}
         <div className="relative mb-8">
           <img
-            src="/file.svg"
-            alt="Nexus Logo"
+            src="/icon.svg"
+            alt="Nexon"
             className="h-24 w-24 animate-float-pulse object-contain"
           />
           {/* Shadow element */}

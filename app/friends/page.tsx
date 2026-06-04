@@ -15,7 +15,7 @@ import { getFriends, getFriendRequests, acceptFriendRequest, rejectFriendRequest
 import { FriendChatModal } from "@/components/friend-chat-modal"
 import Link from "next/link"
 import { Spinner } from "@/components/ui/spinner"
-import { subscribeToChatMessages, ChatMessage } from "@/lib/chat-utils"
+import { subscribeToFriendUnreadCount } from "@/lib/chat-utils"
 import {
   Dialog,
   DialogContent,
@@ -54,15 +54,14 @@ export default function SocialPage() {
   useEffect(() => {
     if (!user || friends.length === 0) return
 
-    const unsubscribes = friends.map(friend => {
-      return subscribeToChatMessages(user.uid, friend.userId, (messages) => {
-        const unreadCount = messages.filter(m => m.receiverId === user.uid && !m.read).length
-        setUnreadMessagesMap(prev => ({
+    const unsubscribes = friends.map((friend) =>
+      subscribeToFriendUnreadCount(user.uid, friend.userId, (unreadCount) => {
+        setUnreadMessagesMap((prev) => ({
           ...prev,
-          [friend.userId]: unreadCount
+          [friend.userId]: unreadCount,
         }))
       })
-    })
+    )
 
     return () => {
       unsubscribes.forEach(unsub => unsub())

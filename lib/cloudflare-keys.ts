@@ -3,7 +3,8 @@
  *
  * Firestore config/ai (preferred):
  *   cloudflareAccounts: { accountId: string, apiToken: string }[]
- *   cloudflareImageModel: string
+ *   cloudflareImageModel: string — any Workers AI model id (change anytime to test)
+ *   cloudflareImageModelFallback: string (optional) — used when primary fails
  *
  * Legacy (same account for all tokens):
  *   cloudflareAccountId + cloudflareApiTokens[]
@@ -11,6 +12,7 @@
  * Environment:
  *   CLOUDFLARE_ACCOUNTS_JSON=[{"accountId":"...","apiToken":"..."},...]
  *   OR CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN (+ optional CLOUDFLARE_API_TOKENS)
+ *   CLOUDFLARE_IMAGE_MODEL — default / fallback Workers AI model (e.g. flux-1-schnell)
  */
 
 export type CloudflareCredential = {
@@ -21,14 +23,28 @@ export type CloudflareCredential = {
 type ConfigCache = {
   credentials: CloudflareCredential[]
   imageModel: string | null
+  imageModelFallback: string | null
   expiresAt: number
 }
 
 let configCache: ConfigCache | null = null
-const CACHE_MS = 60_000
+/** Short TTL so Firestore model changes apply quickly when testing. */
+const CACHE_MS = 10_000
 
+function parseModelField(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+/** Last-resort model when Firestore and CLOUDFLARE_IMAGE_MODEL are unset. */
 export const DEFAULT_CLOUDFLARE_IMAGE_MODEL =
-  "@cf/black-forest-labs/flux-1-schnell"
+  "@cf/black-forest-labs/flux-2-klein-4b"
+
+function getEnvCloudflareImageModel(): string | null {
+  const value = process.env.CLOUDFLARE_IMAGE_MODEL?.trim()
+  return value || null
+}
 
 function isValidCredential(c: unknown): c is CloudflareCredential {
   if (!c || typeof c !== "object") return false
@@ -134,56 +150,99 @@ function parseAccountsFromEnv(): CloudflareCredential[] {
   return tokens.map((apiToken) => normalizeCredential({ accountId, apiToken }))
 }
 
-export async function getCloudflareCredentials(): Promise<CloudflareCredential[]> {
-  const now = Date.now()
-  if (configCache && configCache.expiresAt > now) {
-    return configCache.credentials
-  }
-
+async function loadFirestoreCloudflareConfig(): Promise<{
+  credentials: CloudflareCredential[]
+  imageModel: string | null
+  imageModelFallback: string | null
+}> {
   let credentials: CloudflareCredential[] = []
   let imageModel: string | null = null
+  let imageModelFallback: string | null = null
 
   try {
     const { db } = await import("./firebase")
     const { doc, getDoc } = await import("firebase/firestore")
 
-    for (const [collection, docId] of [
-      ["config", "ai"],
-      ["config", "cloudflare"],
-      ["settings", "ai"],
-    ] as const) {
-      const snap = await getDoc(doc(db, collection, docId))
-      if (!snap.exists()) continue
-      const data = snap.data() as Record<string, unknown>
-      const fromDb = parseAccountsFromFirestore(data)
-      if (fromDb.length > 0) credentials = fromDb
+    // config/ai is the canonical doc for model + accounts
+    const aiSnap = await getDoc(doc(db, "config", "ai"))
+    if (aiSnap.exists()) {
+      const data = aiSnap.data() as Record<string, unknown>
+      const fromAi = parseAccountsFromFirestore(data)
+      if (fromAi.length > 0) credentials = fromAi
+      imageModel = parseModelField(data.cloudflareImageModel ?? data.cfImageModel)
+      imageModelFallback = parseModelField(
+        data.cloudflareImageModelFallback ?? data.cfImageModelFallback
+      )
+    }
 
-      const dbModel = data.cloudflareImageModel ?? data.cfImageModel
-      if (typeof dbModel === "string" && dbModel.trim()) {
-        imageModel = dbModel.trim()
+    if (credentials.length === 0 || !imageModel) {
+      for (const [collection, docId] of [
+        ["config", "cloudflare"],
+        ["settings", "ai"],
+      ] as const) {
+        const snap = await getDoc(doc(db, collection, docId))
+        if (!snap.exists()) continue
+        const data = snap.data() as Record<string, unknown>
+        if (credentials.length === 0) {
+          const fromDb = parseAccountsFromFirestore(data)
+          if (fromDb.length > 0) credentials = fromDb
+        }
+        if (!imageModel) {
+          imageModel = parseModelField(data.cloudflareImageModel ?? data.cfImageModel)
+        }
+        if (!imageModelFallback) {
+          imageModelFallback = parseModelField(
+            data.cloudflareImageModelFallback ?? data.cfImageModelFallback
+          )
+        }
       }
-      if (credentials.length > 0) break
     }
   } catch (err) {
     console.warn("[Cloudflare] Firestore config read failed:", err)
   }
 
-  if (credentials.length === 0) {
-    credentials = parseAccountsFromEnv()
-  }
+  return { credentials, imageModel, imageModelFallback }
+}
+
+export async function refreshCloudflareConfig(): Promise<void> {
+  const now = Date.now()
+  const { credentials, imageModel, imageModelFallback } =
+    await loadFirestoreCloudflareConfig()
 
   configCache = {
-    credentials,
+    credentials:
+      credentials.length > 0 ? credentials : parseAccountsFromEnv(),
     imageModel,
+    imageModelFallback,
     expiresAt: now + CACHE_MS,
   }
+}
 
-  return credentials
+export async function getCloudflareCredentials(): Promise<CloudflareCredential[]> {
+  const now = Date.now()
+  if (!configCache || configCache.expiresAt <= now) {
+    await refreshCloudflareConfig()
+  }
+  return configCache?.credentials ?? []
 }
 
 export async function getCloudflareImageModel(): Promise<string> {
   await getCloudflareCredentials()
-  return configCache?.imageModel ?? DEFAULT_CLOUDFLARE_IMAGE_MODEL
+  return (
+    configCache?.imageModel ??
+    getEnvCloudflareImageModel() ??
+    DEFAULT_CLOUDFLARE_IMAGE_MODEL
+  )
+}
+
+/** Optional fallback when primary model fails — Firestore field, then env, then hardcoded default. */
+export async function getCloudflareFallbackImageModel(): Promise<string | null> {
+  await getCloudflareCredentials()
+  return (
+    configCache?.imageModelFallback ??
+    getEnvCloudflareImageModel() ??
+    DEFAULT_CLOUDFLARE_IMAGE_MODEL
+  )
 }
 
 /** @deprecated Use getCloudflareCredentials — kept for callers expecting old shape */
@@ -209,3 +268,6 @@ export async function isCloudflareConfigured(): Promise<boolean> {
 export function invalidateCloudflareConfigCache(): void {
   configCache = null
 }
+
+/** Alias for invalidateCloudflareConfigCache — call after editing config/ai in Firestore. */
+export const clearCloudflareConfigCache = invalidateCloudflareConfigCache

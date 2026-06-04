@@ -1,5 +1,12 @@
-// Default fallback ONLY when Firestore has no configuration (or is unreadable).
-const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
+// Fallback order: Firestore config → GEMINI_MODEL env → hardcoded default
+const HARDCODED_DEFAULT_GEMINI_MODEL = "gemini-2.0-flash"
+
+function getEnvGeminiModel(): string | null {
+  const fromEnv =
+    process.env.GEMINI_MODEL?.trim() ||
+    process.env.NEXT_PUBLIC_GEMINI_MODEL?.trim()
+  return fromEnv && fromEnv.length > 0 ? fromEnv : null
+}
 type CacheEntry = { value: string; expiresAt: number }
 
 let cachedModel: CacheEntry | null = null
@@ -70,7 +77,8 @@ export async function getGeminiModelName(): Promise<string> {
     // Ignore and fall back to default.
   }
 
-  cachedModel = { value: DEFAULT_GEMINI_MODEL, expiresAt: now + 60_000 }
-  return DEFAULT_GEMINI_MODEL
+  const fallback = getEnvGeminiModel() ?? HARDCODED_DEFAULT_GEMINI_MODEL
+  cachedModel = { value: fallback, expiresAt: now + 60_000 }
+  return fallback
 }
 

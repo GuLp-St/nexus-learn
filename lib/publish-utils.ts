@@ -5,10 +5,14 @@ import { QuizAttempt, getMostRecentQuizAttempt } from "./quiz-utils"
 import { getCourseWithProgress } from "./course-utils"
 import { spendNexon } from "./nexon-utils"
 import { calculateLevel } from "./level-utils"
+import {
+  PUBLISH_MIN_QUIZ_SCORE,
+  PUBLISH_MIN_LEVEL,
+  PUBLISH_NEXON_COST,
+} from "./course-constants"
 
-const PUBLISH_NEXON_COST = 500
-const MIN_LEVEL = 5
-const MIN_QUIZ_SCORE = 70 // Minimum quiz score percentage to publish
+const MIN_QUIZ_SCORE = PUBLISH_MIN_QUIZ_SCORE
+const MIN_LEVEL = PUBLISH_MIN_LEVEL
 
 export interface PublishRequirements {
   courseCompleted: boolean
@@ -141,6 +145,11 @@ export async function publishCourse(
     courseTitle,
   }).catch((error) => {
     console.error("Error recording course published activity:", error)
+  })
+
+  const { awardCoursePublishXP } = await import("./xp-utils")
+  await awardCoursePublishXP(userId, courseId).catch((error) => {
+    console.error("Error awarding publish XP:", error)
   })
 
   return { success: true }

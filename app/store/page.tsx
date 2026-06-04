@@ -291,9 +291,9 @@ export default function StorePage() {
 
   if (authLoading || loading) {
     return (
-      <div className="flex flex-col min-h-screen bg-background lg:flex-row">
+      <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-background lg:flex-row">
         <SidebarNav currentPath="/store" />
-        <main className="flex-1 flex items-center justify-center">
+        <main className="flex min-h-0 flex-1 items-center justify-center">
           <Spinner />
         </main>
       </div>
@@ -321,35 +321,43 @@ export default function StorePage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-background lg:flex-row">
+    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-background lg:flex-row">
       <SidebarNav currentPath="/store" />
 
-      <main className="flex-1">
-        <div className="p-4 lg:p-8">
-          <div className="mx-auto max-w-6xl space-y-6">
-            {/* Header with Nexon Balance */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-foreground">Store</h1>
-                <p className="text-muted-foreground mt-1">Purchase cosmetics to customize your profile</p>
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <Tabs
+          value={selectedCategory}
+          onValueChange={(v) => setSelectedCategory(v as CosmeticCategory)}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          {/* Fixed store header (main column scrolls below) */}
+          <div className="z-20 shrink-0 border-b border-border bg-background shadow-sm">
+            <div className="mx-auto max-w-6xl space-y-4 px-4 py-4 lg:px-8 lg:py-5">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <h1 className="text-2xl font-bold text-foreground lg:text-3xl">Store</h1>
+                  <p className="text-muted-foreground mt-1 text-sm lg:text-base">
+                    Purchase cosmetics to customize your profile
+                  </p>
+                </div>
+                <Card
+                  className="shrink-0 cursor-pointer border-2 transition-all hover:scale-[1.02] hover:border-primary/50 hover:bg-accent/50 hover:shadow-md group"
+                  onClick={() => setHistoryOpen(true)}
+                >
+                  <CardContent className="p-3 lg:p-4">
+                    <div className="flex items-center gap-2">
+                      <NexonIcon className="h-5 w-5 text-primary group-hover:scale-110 transition-transform lg:h-6 lg:w-6" />
+                      <span className="text-xl font-bold lg:text-2xl">{nexon.toLocaleString()}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 hidden sm:block">Click to view history</p>
+                  </CardContent>
+                </Card>
               </div>
-              <Card 
-                className="cursor-pointer hover:bg-accent/50 transition-all hover:scale-[1.02] hover:shadow-md border-2 hover:border-primary/50 group"
-                onClick={() => setHistoryOpen(true)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <NexonIcon className="h-6 w-6 text-primary group-hover:scale-110 transition-transform" />
-                    <span className="text-2xl font-bold">{nexon.toLocaleString()}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">Click to view history</p>
-                </CardContent>
-              </Card>
-            </div>
 
-            {/* Category Tabs */}
-            <Tabs value={selectedCategory} onValueChange={(v) => setSelectedCategory(v as CosmeticCategory)}>
-              <TabsList ref={tabsListRef} className="flex h-auto w-full items-center justify-start overflow-x-auto overflow-y-hidden bg-muted p-1 text-muted-foreground md:grid md:grid-cols-5 no-scrollbar">
+              <TabsList
+                ref={tabsListRef}
+                className="flex h-auto w-full items-center justify-start overflow-x-auto overflow-y-hidden bg-muted p-1 text-muted-foreground md:grid md:grid-cols-5 no-scrollbar"
+              >
                 <TabsTrigger value="avatar" className="flex items-center gap-2 px-4 py-2 flex-shrink-0 md:flex-shrink">
                   <Sparkles className="h-4 w-4" />
                   Avatars
@@ -371,8 +379,12 @@ export default function StorePage() {
                   Themes
                 </TabsTrigger>
               </TabsList>
+            </div>
+          </div>
 
-              <TabsContent value={selectedCategory} className="mt-6">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div className="mx-auto max-w-6xl px-4 py-6 lg:px-8 lg:py-8">
+              <TabsContent value={selectedCategory} className="mt-0">
                 {categoryCosmetics.length === 0 ? (
                   <div className="text-center py-12">
                     <p className="text-muted-foreground">No cosmetics available in this category.</p>
@@ -530,9 +542,9 @@ export default function StorePage() {
                   </div>
                 )}
               </TabsContent>
-            </Tabs>
+            </div>
           </div>
-        </div>
+        </Tabs>
       </main>
 
       {/* Preview Modal */}

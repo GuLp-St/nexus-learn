@@ -1,6 +1,9 @@
 import { SchemaType, type Tool } from "@google/generative-ai"
 import { hasGeminiApiKeys } from "./gemini-keys"
 import { getPooledModel, poolGenerateText, runWithKeyRetry } from "./gemini-pool"
+import { normalizeLessonStreamBlocks } from "./lesson-stream-normalize"
+import { MATERIAL_ONLY_RULES, getMaterialContextBlock } from "./material-grounding"
+import { resolveLessonMaterialImages } from "./lesson-material-images"
 
 const CHATBOT_TOOLS: Tool[] = [
   {
@@ -121,6 +124,12 @@ export interface CourseData {
   tags?: string[]
   imageUrl?: string
   imageKey?: string
+  imageConfig?: {
+    fit: "cover" | "contain"
+    position: { x: number; y: number }
+    scale: number
+  }
+  sourceMaterialId?: string
 }
 
 export interface DifficultyOption {
@@ -339,7 +348,14 @@ export async function generateCourseSkeleton(
       
       if (materialDoc.exists()) {
         const material = materialDoc.data()
-        
+        const materialStyle =
+          (material.toneInstruction
+            ? `\nTeaching tone: ${material.toneInstruction}`
+            : "") +
+          (material.difficulty
+            ? `\nTarget difficulty: ${material.difficulty}`
+            : "")
+
         // Check if detailed modules structure exists
         if (material.modules && Array.isArray(material.modules) && material.modules.length > 0) {
           storedModules = material.modules
@@ -355,22 +371,26 @@ export async function generateCourseSkeleton(
             return `Module ${idx + 1}: "${mod.title || "Untitled"}"\n${lessonsList}`
           }).join("\n\n")
           
+          const { buildModuleContextBlock } = await import("./material-grounding")
+          const moduleBlock = buildModuleContextBlock(material as import("./material-grounding").StoredCourseMaterial)
+
           sourceMaterialContext = `
 
-Based on the uploaded course materials:
-Summary: ${material.summary || "No summary available"}
-Visual Descriptions: ${Array.isArray(material.visualDescriptions) ? material.visualDescriptions.join("\n- ") : "None"}
+Based on the uploaded course materials (use MODULE summaries below — NOT the display course summary):${materialStyle}
+
+Module & lesson context:
+${moduleBlock}
 
 Detailed Course Structure (MUST follow this exact structure):
 ${modulesStructure}
 
-IMPORTANT: You MUST generate a course structure that matches the modules and lessons listed above exactly. Use the provided module titles, lesson titles, and incorporate the key points and references into your course descriptions. Do not add or remove modules or lessons.`
+IMPORTANT: Match modules and lessons exactly. Descriptions must come from module/lesson summaries and key points only.`
         } else {
           // Fallback to simple suggested modules
           sourceMaterialContext = `
 
 Based on the uploaded course materials:
-Summary: ${material.summary || "No summary available"}
+Summary: ${material.summary || "No summary available"}${materialStyle}
 Visual Descriptions: ${Array.isArray(material.visualDescriptions) ? material.visualDescriptions.join("\n- ") : "None"}
 Suggested Modules: ${Array.isArray(material.suggestedModules) ? material.suggestedModules.join(", ") : "None"}
 
@@ -466,12 +486,17 @@ ${storedModules ? "- IMPORTANT: Use the EXACT module and lesson titles provided 
       // Fetch processedImages from material document
       let processedImages: Array<{ url: string; description: string; tags: string[]; imageIndex: number }> = []
       try {
-        const { db } = await import("./firebase")
-        const { doc, getDoc } = await import("firebase/firestore")
-        const materialDoc = await getDoc(doc(db, "course_materials", sourceMaterialId))
-        if (materialDoc.exists()) {
-          const materialData = materialDoc.data()
-          processedImages = materialData.processedImages || []
+        if (typeof window === "undefined") {
+          const { getCourseMaterialProcessedImages } = await import("./course-material-server")
+          processedImages = await getCourseMaterialProcessedImages(sourceMaterialId)
+        } else {
+          const { db } = await import("./firebase")
+          const { doc, getDoc } = await import("firebase/firestore")
+          const materialDoc = await getDoc(doc(db, "course_materials", sourceMaterialId))
+          if (materialDoc.exists()) {
+            const materialData = materialDoc.data()
+            processedImages = materialData.processedImages || []
+          }
         }
       } catch (error) {
         console.error("Error fetching processedImages:", error)
@@ -483,24 +508,20 @@ ${storedModules ? "- IMPORTANT: Use the EXACT module and lesson titles provided 
           module.lessons.forEach((lesson, lessonIdx) => {
             const storedLesson = storedModule.lessons[lessonIdx]
             if (storedLesson) {
-              // Match images to this lesson based on references and tags
-              const lessonImages = processedImages.filter((img) => {
-                // Check if image tags match lesson key points or references mention the image
-                const refsLower = storedLesson.references?.map((r: string) => r.toLowerCase()) || []
-                const tagsLower = img.tags.map(t => t.toLowerCase())
-                const keyPointsLower = storedLesson.keyPoints?.map((kp: string) => kp.toLowerCase()) || []
-                
-                // Match if references mention image index or tags match key points
-                return refsLower.some((ref: string) => ref.includes(`image index ${img.imageIndex}`) || ref.includes(`index ${img.imageIndex}`)) ||
-                       tagsLower.some(tag => keyPointsLower.some((kp: string) => kp.includes(tag)))
-              })
+              const lessonImages = resolveLessonMaterialImages(
+                storedLesson,
+                processedImages,
+                lessonIdx
+              )
 
               ;(lesson as any).sourceContext = {
                 sourceMaterialId,
                 keyPoints: storedLesson.keyPoints || [],
                 references: storedLesson.references || [],
-                processedImages: lessonImages, // Include relevant images for this lesson
-                imageUrls: lessonImages.map(img => img.url), // For backward compatibility
+                lessonSummary: storedLesson.summary,
+                moduleSummary: storedModule.summary,
+                materialPages: storedLesson.materialPages ?? [],
+                processedImages: lessonImages,
               }
             }
           })
@@ -592,38 +613,78 @@ export async function generateLessonStream(
   lessonTitle: string,
   courseTitle: string,
   moduleTitle: string,
-  sourceContext?: { keyPoints: string[]; references: string[]; processedImages?: Array<{ url: string; description: string; tags: string[]; imageIndex: number }> }
+  sourceContext?: {
+    sourceMaterialId?: string
+    keyPoints: string[]
+    references: string[]
+    lessonSummary?: string
+    moduleSummary?: string
+    processedImages?: Array<{
+      url: string
+      description: string
+      tags: string[]
+      imageIndex: number
+      pageNumber?: number
+    }>
+  }
 ): Promise<LessonStream> {
   if (!(await hasGeminiApiKeys())) {
     throw new Error("Gemini API key is not configured")
   }
 
+  let persistedMaterialBlock = ""
+  if (sourceContext?.sourceMaterialId) {
+    persistedMaterialBlock = await getMaterialContextBlock(
+      sourceContext.sourceMaterialId,
+      80_000
+    )
+  }
+
   // Build source material context if available
   let sourceMaterialContext = ""
-  if (sourceContext && (sourceContext.keyPoints.length > 0 || sourceContext.references.length > 0)) {
+  if (sourceContext && (sourceContext.keyPoints.length > 0 || sourceContext.references.length > 0 || sourceContext.lessonSummary)) {
     const imagesContext = sourceContext.processedImages && sourceContext.processedImages.length > 0
       ? `
 
 Available Images from Course Materials:
-${sourceContext.processedImages.map((img, idx) => `Image ${idx + 1} (Index ${img.imageIndex}): ${img.url}
+${sourceContext.processedImages.map((img, idx) => {
+  const pageLabel = img.pageNumber ? `PDF page ${img.pageNumber}` : `Index ${img.imageIndex}`
+  return `${pageLabel}: ${img.url}
   Description: ${img.description}
-  Tags: ${img.tags.join(", ")}`).join("\n\n")}
+  Tags: ${img.tags.join(", ")}`
+}).join("\n\n")}
 
-IMPORTANT: You MUST include these images in your lesson content using markdown image syntax: ![Description](URL)
-Place images strategically within text blocks where they best illustrate the concepts being explained.`
+IMPORTANT: Use 0–1 uploaded image per text block (markdown ![desc](url)) only where it helps teach that block. Not every text block needs an image.`
       : ""
+
+    const summaryBlock = [
+      sourceContext.moduleSummary
+        ? `Module context: ${sourceContext.moduleSummary}`
+        : "",
+      sourceContext.lessonSummary
+        ? `Lesson focus: ${sourceContext.lessonSummary}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n")
 
     sourceMaterialContext = `
 
-IMPORTANT: This lesson is based on user-uploaded course materials. You MUST incorporate the following information:
+${MATERIAL_ONLY_RULES}
+
+IMPORTANT: This lesson is based on user-uploaded course materials only.
+
+${summaryBlock}
 
 Key Points to Cover:
-${sourceContext.keyPoints.map((kp, idx) => `${idx + 1}. ${kp}`).join("\n")}
+${sourceContext.keyPoints.map((kp, idx) => `${idx + 1}. ${kp}`).join("\n") || "(derive from lesson focus and source material)"}
 
 References to Include:
-${sourceContext.references.map((ref, idx) => `${idx + 1}. ${ref}`).join("\n")}${imagesContext}
+${sourceContext.references.map((ref, idx) => `${idx + 1}. ${ref}`).join("\n") || "(none)"}${imagesContext}
 
-Ensure all key points are thoroughly explained and referenced in your lesson content. Link the references to the concepts being taught.`
+${persistedMaterialBlock ? `\n${persistedMaterialBlock}` : ""}
+
+Ensure all content is grounded in the source material. Do not invent facts.`
   }
 
   const prompt = `Generate a lesson stream for "${lessonTitle}" as part of the course "${courseTitle}", module "${moduleTitle}".${sourceMaterialContext}
@@ -700,15 +761,16 @@ Return ONLY valid JSON without markdown formatting, following this exact structu
 }
 
 Requirements:
-- Visual-first lesson: keep text blocks SHORT (under 120 words each). Use illustrationPrompt on 2-3 text blocks for concepts that benefit from a diagram or scene (educational, clear, no text in image).
-- Start with a text block that introduces the core concept, then an interaction testing it.
-- Repeat 3-4 times (text → interaction → text → interaction...).
-- Randomize interaction types — do NOT use the same order every lesson.
+- Choose lesson depth: use BETWEEN 3 AND 6 text blocks (and the SAME number of interaction blocks). Simpler lessons → 3 pairs (6 blocks). Richer lessons → up to 6 pairs (12 blocks). You decide based on how much the topic needs.
+- Visual-first: keep each text block SHORT (under 120 words).
+- STRICT BLOCK ORDER: alternate text → interaction → text → interaction. First block MUST be "text". Never two text or two interactions in a row.
+- Randomize interaction types — vary swipe, reorder, fill_blank, bug_hunter, matching, chat_sim.
 - Generate exactly 7 facts in the "facts" array.
-- Use all 6 interaction types: swipe, reorder, fill_blank, bug_hunter, matching, chat_sim.
-- Each interaction MUST test the immediately preceding text block.
-- If uploaded material images exist in context, include them with markdown ![desc](url) in the relevant text block AND skip illustrationPrompt for that block.
-- illustrationPrompt must describe a single clear educational visual (diagram, process, example scene) — not the whole lesson.
+- Each interaction tests ONLY the text block immediately before it.
+- Images (0 or 1 per text block, never required on every block):
+  - If uploaded material images are listed: add markdown ![description](url) only on text blocks where a visual clearly helps. Use a different image per block when multiple are provided. Do NOT use illustrationPrompt on blocks that already embed an uploaded image.
+  - If NO uploaded images: add illustrationPrompt on text blocks where an AI diagram would help (0–1 per block, typically 1–3 per lesson). Omit illustrationPrompt on other blocks.
+- illustrationPrompt = one clear educational visual for that specific text block only.
 - Return only the JSON object.`
 
   try {
@@ -740,7 +802,7 @@ Requirements:
       }
 
       const lessonStream = JSON.parse(jsonText) as LessonStream
-      return lessonStream
+      return normalizeLessonStreamBlocks(lessonStream)
     })()
 
     // Race between generation and timeout

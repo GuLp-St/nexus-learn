@@ -2,14 +2,14 @@ import type { LessonStream, TextBlock, LessonStreamBlock } from "./gemini"
 import { generateAIImage, mapParallelCloudflareImages } from "./cloudflare-ai-utils"
 import { uploadGeneratedImage } from "./upload-actions"
 
-const MAX_AI_IMAGES_PER_LESSON = 3
+const MAX_TEXT_BLOCKS = 6
 
 function buildImagePrompt(
   illustrationPrompt: string,
   lessonTitle: string,
   courseTitle: string
 ): string {
-  return `Educational illustration for an online course. Course: "${courseTitle}". Lesson: "${lessonTitle}". Scene: ${illustrationPrompt}. Style: clean, modern, professional, clear labels, no watermark, suitable for students.`
+  return `Educational illustration for an online course. Course: "${courseTitle}". Lesson: "${lessonTitle}". Scene: ${illustrationPrompt}. Style: clean, modern, professional, diagram or scene without readable text or labels, no watermark, suitable for students.`
 }
 
 function isTextBlock(block: LessonStreamBlock): block is TextBlock {
@@ -17,8 +17,7 @@ function isTextBlock(block: LessonStreamBlock): block is TextBlock {
 }
 
 /**
- * After Gemini builds the lesson JSON, generate Cloudflare images for blocks
- * that include illustrationPrompt and inject markdown images into content.
+ * Generate Cloudflare images for each text block that has illustrationPrompt (0–1 per block).
  */
 export async function enrichLessonStreamWithImages(
   stream: LessonStream,
@@ -30,7 +29,7 @@ export async function enrichLessonStreamWithImages(
     if (!isTextBlock(block)) return
     const prompt = block.illustrationPrompt?.trim()
     if (!prompt) return
-    if (targets.length >= MAX_AI_IMAGES_PER_LESSON) return
+    if (targets.length >= MAX_TEXT_BLOCKS) return
     targets.push({ blockIndex, prompt })
   })
 
