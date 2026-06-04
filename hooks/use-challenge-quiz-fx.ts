@@ -11,6 +11,7 @@ export type AnswerFx = "correct" | "wrong" | null
 export function useChallengeQuizFx(questionIndex: number, totalQuestions: number) {
   const [comboStreak, setComboStreak] = useState(0)
   const [comboMultiplier, setComboMultiplier] = useState(1)
+  const [peakComboMultiplier, setPeakComboMultiplier] = useState(1)
   const [comboTimeLeft, setComboTimeLeft] = useState(0)
   const [answerFx, setAnswerFx] = useState<AnswerFx>(null)
   const [timerPulse, setTimerPulse] = useState(false)
@@ -78,7 +79,8 @@ export function useChallengeQuizFx(questionIndex: number, totalQuestions: number
     }
   }, [])
 
-  const resetCombo = useCallback(() => {
+  /** Resets active streak timer only; peak multiplier is kept for final scoring. */
+  const resetActiveCombo = useCallback(() => {
     comboDeadlineRef.current = null
     setComboStreak(0)
     setComboMultiplier(1)
@@ -89,7 +91,9 @@ export function useChallengeQuizFx(questionIndex: number, totalQuestions: number
     setAnswerFx("correct")
     setComboStreak((prev) => {
       const next = prev + 1
-      setComboMultiplier(comboMultiplierFromStreak(next))
+      const mult = comboMultiplierFromStreak(next)
+      setComboMultiplier(mult)
+      setPeakComboMultiplier((peak) => Math.max(peak, mult))
       comboDeadlineRef.current = Date.now() + COMBO_TIMEOUT_MS
       setComboTimeLeft(COMBO_TIMEOUT_MS)
       return next
@@ -100,10 +104,10 @@ export function useChallengeQuizFx(questionIndex: number, totalQuestions: number
 
   const onWrongAnswer = useCallback(() => {
     setAnswerFx("wrong")
-    resetCombo()
+    resetActiveCombo()
     playTone(140, 0.22, "sawtooth", 0.06)
     setTimeout(() => setAnswerFx(null), 580)
-  }, [playTone, resetCombo])
+  }, [playTone, resetActiveCombo])
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -113,13 +117,13 @@ export function useChallengeQuizFx(questionIndex: number, totalQuestions: number
       }
       const left = comboDeadlineRef.current - Date.now()
       if (left <= 0) {
-        resetCombo()
+        resetActiveCombo()
         return
       }
       setComboTimeLeft(left)
     }, 50)
     return () => clearInterval(id)
-  }, [resetCombo])
+  }, [resetActiveCombo])
 
   useEffect(() => {
     const progress = totalQuestions > 0 ? (questionIndex + 1) / totalQuestions : 0
@@ -160,12 +164,13 @@ export function useChallengeQuizFx(questionIndex: number, totalQuestions: number
   return {
     comboStreak,
     comboMultiplier,
+    peakComboMultiplier,
     comboTimeLeft,
     answerFx,
     timerPulse,
     onCorrectAnswer,
     onWrongAnswer,
-    resetCombo,
+    resetActiveCombo,
     stopAmbientPulse,
   }
 }

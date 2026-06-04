@@ -263,9 +263,8 @@ export default function ChallengeQuizPage() {
 
       const timeTaken = Math.floor((Date.now() - quizStartTime) / 1000)
       setFinalTime(timeTaken)
-      setFinalPerformance(
-        calculatePerformanceScore(totalScore, fx.comboMultiplier, timeTaken)
-      )
+      const peakCombo = fx.peakComboMultiplier
+      setFinalPerformance(calculatePerformanceScore(totalScore, peakCombo, timeTaken))
 
       const { isCompleted, winnerId, isDraw, challengedXPAwardResult } =
         await recordChallengeResult(
@@ -274,7 +273,7 @@ export default function ChallengeQuizPage() {
           attemptId,
           totalScore,
           timeTaken,
-          fx.comboMultiplier
+          peakCombo
         )
 
       if (isCompleted && !isDraw && winnerId === user.uid && challengedXPAwardResult) {
@@ -517,7 +516,7 @@ export default function ChallengeQuizPage() {
               <CardContent className="p-8 text-center space-y-4">
                 <div className="text-5xl font-bold text-primary">{scorePercentage}%</div>
                 <p className="text-xl text-muted-foreground">
-                  {totalScore} / {maxScore} points · Combo ×{fx.comboMultiplier.toFixed(1)}
+                  {totalScore} / {maxScore} points · Peak combo ×{fx.peakComboMultiplier.toFixed(1)}
                 </p>
                 {finalPerformance != null && (
                   <p className="text-sm text-muted-foreground">
@@ -548,6 +547,7 @@ export default function ChallengeQuizPage() {
         answerFx={fx.answerFx}
         comboStreak={fx.comboStreak}
         comboMultiplier={fx.comboMultiplier}
+        peakComboMultiplier={fx.peakComboMultiplier}
         comboTimeLeft={fx.comboTimeLeft}
         timerPulse={fx.timerPulse}
         elapsedTime={elapsedTime}

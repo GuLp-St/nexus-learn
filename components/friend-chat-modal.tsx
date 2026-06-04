@@ -434,11 +434,38 @@ function ChallengeMessageCard({
   const challengerPlayed = challenge.hasChallengerPlayed
   const challengedPlayed = challenge.challengedScore !== null
 
+  const yourRaw = isChallenger ? challenge.challengerScore : challenge.challengedScore
+  const oppRaw = isChallenger ? challenge.challengedScore : challenge.challengerScore
+  const yourPerf = isChallenger ? challenge.challengerPerformanceScore : challenge.challengedPerformanceScore
+  const oppPerf = isChallenger ? challenge.challengedPerformanceScore : challenge.challengerPerformanceScore
+  const yourTime = isChallenger ? challenge.challengerTime : challenge.challengedTime
+  const oppTime = isChallenger ? challenge.challengedTime : challenge.challengerTime
+
+  const perfTied =
+    yourPerf != null && oppPerf != null && yourPerf === oppPerf
+  const isDrawResult =
+    !!challenge.isDraw || challenge.winnerId === null || perfTied
+  const youWon = !isDrawResult && challenge.winnerId === user?.uid
+  const youLost = isCompleted && !isDrawResult && !youWon
+
+  const formatQuizTime = (sec: number | null | undefined) => {
+    if (sec == null) return "—"
+    return `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, "0")}`
+  }
+
   return (
     <Card className={`overflow-hidden border-2 w-full max-w-[280px] ${
-      isCompleted ? "border-green-500/20 bg-green-500/5" :
-      isExpired || isRejected ? "border-muted bg-muted/5 opacity-70" :
-      isOwnMessage ? "border-primary/20 bg-primary/5" : "border-orange-500/20 bg-orange-500/5"
+      isCompleted
+        ? isDrawResult
+          ? "border-amber-500/30 bg-amber-500/5"
+          : youWon
+            ? "border-green-500/20 bg-green-500/5"
+            : "border-red-500/25 bg-red-500/5"
+        : isExpired || isRejected
+          ? "border-muted bg-muted/5 opacity-70"
+          : isOwnMessage
+            ? "border-primary/20 bg-primary/5"
+            : "border-orange-500/20 bg-orange-500/5"
     }`}>
       <CardContent className="p-4 space-y-3">
         {/* Header & Timer */}
@@ -565,37 +592,71 @@ function ChallengeMessageCard({
 
           {isCompleted && (
             <div className="space-y-2">
-              <div className="flex flex-col items-center justify-center p-3 bg-green-500/10 rounded-lg text-center">
-                <Trophy className="h-6 w-6 text-yellow-500 mb-1" />
-                <p className="text-xs font-bold text-green-600 dark:text-green-400">
-                  {challenge.isDraw
-                    ? "DRAW — BETS REFUNDED"
-                    : challenge.winnerId === user?.uid
+              <div
+                className={`flex flex-col items-center justify-center p-3 rounded-lg text-center ${
+                  isDrawResult
+                    ? "bg-amber-500/10"
+                    : youWon
+                      ? "bg-green-500/10"
+                      : "bg-red-500/10"
+                }`}
+              >
+                <Trophy
+                  className={`h-6 w-6 mb-1 ${
+                    isDrawResult ? "text-amber-500" : youWon ? "text-yellow-500" : "text-red-400"
+                  }`}
+                />
+                <p
+                  className={`text-xs font-bold ${
+                    isDrawResult
+                      ? "text-amber-600 dark:text-amber-400"
+                      : youWon
+                        ? "text-green-600 dark:text-green-400"
+                        : "text-red-600 dark:text-red-400"
+                  }`}
+                >
+                  {isDrawResult
+                    ? challenge.betAmount
+                      ? "DRAW — BETS REFUNDED"
+                      : "DRAW!"
+                    : youWon
                       ? "YOU WON!"
-                      : challenge.winnerId === null
-                        ? "DRAW!"
-                        : "YOU LOST"}
+                      : "YOU LOST"}
                 </p>
-                <div className="mt-2 grid grid-cols-2 gap-4 w-full border-t border-green-500/20 pt-2">
+                {perfTied && !challenge.isDraw && (
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Same competitive rating — counted as a draw
+                  </p>
+                )}
+                <div
+                  className={`mt-2 grid grid-cols-2 gap-4 w-full border-t pt-2 ${
+                    isDrawResult
+                      ? "border-amber-500/20"
+                      : youWon
+                        ? "border-green-500/20"
+                        : "border-red-500/20"
+                  }`}
+                >
                   <div className="text-[10px]">
                     <p className="text-muted-foreground uppercase">You</p>
-                    <p className="font-bold">{isChallenger ? challenge.challengerScore : challenge.challengedScore} pts</p>
-                    {(isChallenger ? challenge.challengerPerformanceScore : challenge.challengedPerformanceScore) != null && (
-                      <p className="text-muted-foreground">
-                        Score {(isChallenger ? challenge.challengerPerformanceScore : challenge.challengedPerformanceScore)?.toLocaleString()}
-                      </p>
+                    <p className="font-bold">{yourRaw ?? 0} correct</p>
+                    {yourPerf != null && (
+                      <p className="text-muted-foreground">Rating {yourPerf.toLocaleString()}</p>
                     )}
+                    <p className="text-muted-foreground">{formatQuizTime(yourTime)}</p>
                   </div>
                   <div className="text-[10px]">
                     <p className="text-muted-foreground uppercase">{friendNickname}</p>
-                    <p className="font-bold">{isChallenger ? challenge.challengedScore : challenge.challengerScore} pts</p>
-                    {(isChallenger ? challenge.challengedPerformanceScore : challenge.challengerPerformanceScore) != null && (
-                      <p className="text-muted-foreground">
-                        Score {(isChallenger ? challenge.challengedPerformanceScore : challenge.challengedPerformanceScore)?.toLocaleString()}
-                      </p>
+                    <p className="font-bold">{oppRaw ?? 0} correct</p>
+                    {oppPerf != null && (
+                      <p className="text-muted-foreground">Rating {oppPerf.toLocaleString()}</p>
                     )}
+                    <p className="text-muted-foreground">{formatQuizTime(oppTime)}</p>
                   </div>
                 </div>
+                <p className="text-[9px] text-muted-foreground mt-2 leading-tight">
+                  Correct answers vs opponent · Rating uses peak combo + speed
+                </p>
               </div>
             </div>
           )}

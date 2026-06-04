@@ -54,12 +54,7 @@ function determineWinner(
   if (challengedPerformance > challengerPerformance) {
     return { winnerId: challengedId, isDraw: false }
   }
-  if (challengerTime < challengedTime) {
-    return { winnerId: challengerId, isDraw: false }
-  }
-  if (challengedTime < challengerTime) {
-    return { winnerId: challengedId, isDraw: false }
-  }
+  // Same competitive score → draw (raw pts / time tie-breakers do not apply)
   return { winnerId: null, isDraw: true }
 }
 
@@ -264,6 +259,7 @@ export async function recordChallengeResult(
   attemptId: string,
   score: number,
   timeTaken: number,
+  /** Peak combo multiplier reached during the run (not current streak at submit). */
   comboMultiplier: number = 1
 ): Promise<{ 
   isCompleted: boolean; 

@@ -2,11 +2,13 @@
 
 import { cn } from "@/lib/utils"
 import type { AnswerFx } from "@/hooks/use-challenge-quiz-fx"
+import { COMBO_TIMEOUT_MS } from "@/lib/challenge-scoring"
 
 interface ChallengeQuizOverlayProps {
   answerFx: AnswerFx
   comboStreak: number
   comboMultiplier: number
+  peakComboMultiplier: number
   comboTimeLeft: number
   timerPulse: boolean
   elapsedTime: number
@@ -16,12 +18,13 @@ export function ChallengeQuizOverlay({
   answerFx,
   comboStreak,
   comboMultiplier,
+  peakComboMultiplier,
   comboTimeLeft,
   timerPulse,
   elapsedTime,
 }: ChallengeQuizOverlayProps) {
   const comboPct =
-    comboTimeLeft > 0 ? Math.min(100, (comboTimeLeft / 4000) * 100) : 0
+    comboTimeLeft > 0 ? Math.min(100, (comboTimeLeft / COMBO_TIMEOUT_MS) * 100) : 0
 
   return (
     <>
@@ -38,12 +41,15 @@ export function ChallengeQuizOverlay({
         />
       )}
 
-      {comboStreak > 0 && (
+      {(comboStreak > 0 || peakComboMultiplier > 1) && (
         <div className="fixed top-20 right-4 z-50 flex flex-col items-end gap-1 animate-in slide-in-from-right-4">
           <div className="rounded-lg bg-primary/90 text-primary-foreground px-3 py-2 shadow-lg border border-primary">
             <p className="text-[10px] uppercase tracking-widest opacity-80">Combo</p>
             <p className="text-2xl font-black tabular-nums">×{comboMultiplier.toFixed(1)}</p>
             <p className="text-xs font-semibold">{comboStreak} streak</p>
+            {peakComboMultiplier > comboMultiplier && (
+              <p className="text-[10px] opacity-80">Peak ×{peakComboMultiplier.toFixed(1)}</p>
+            )}
           </div>
           <div className="h-1.5 w-24 rounded-full bg-muted overflow-hidden">
             <div

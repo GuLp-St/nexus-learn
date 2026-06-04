@@ -2,7 +2,7 @@
 export const COMBO_STEP = 0.1
 export const COMBO_BASE = 1
 export const COMBO_MAX = 2
-export const COMBO_TIMEOUT_MS = 4000
+export const COMBO_TIMEOUT_MS = 10000
 
 export function comboMultiplierFromStreak(streak: number): number {
   if (streak <= 0) return COMBO_BASE
