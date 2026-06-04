@@ -3,6 +3,7 @@ import { doc, getDoc, setDoc, updateDoc, query, where, getDocs, collection, serv
 import { awardXP, XPAwardResult } from "./xp-utils"
 import { QuizQuestion } from "./quiz-utils"
 import { calculatePerformanceScore, filterObjectiveQuestions } from "./challenge-scoring"
+import { fetchQuizQuestionsByIds, saveQuizQuestions } from "./quiz-utils"
 
 export interface Challenge {
   id?: string
@@ -720,40 +721,60 @@ export async function getUserChallenges(userId: string): Promise<Challenge[]> {
 }
 
 /**
- * Get challenge questions by question IDs
- * Fetches questions from quizQuestions collection by filtering by questionId
+ * Load challenge questions by direct doc lookup; regenerate if missing from storage.
  */
-export async function getChallengeQuestions(
-  courseId: string,
-  questionIds: string[]
-): Promise<QuizQuestion[]> {
-  try {
-    const { collection, query, where, getDocs } = await import("firebase/firestore")
-    
-    // Fetch all questions for the course and filter by questionId
-    const questionsQuery = query(
-      collection(db, "quizQuestions"),
-      where("courseId", "==", courseId)
-    )
-    
-    const snapshot = await getDocs(questionsQuery)
-    const questions: QuizQuestion[] = []
-    
-    snapshot.forEach((docSnap) => {
-      const questionData = docSnap.data() as QuizQuestion
-      if (questionIds.includes(questionData.questionId)) {
-        questions.push(questionData)
-      }
-    })
-    
-    // Sort questions to match the order of questionIds
-    return questionIds
-      .map((id) => questions.find((q) => q.questionId === id))
-      .filter((q): q is QuizQuestion => q !== undefined)
-  } catch (error) {
-    console.error("Error getting challenge questions:", error)
-    return []
+export async function getChallengeQuestions(challenge: Challenge): Promise<QuizQuestion[]> {
+  const { courseId, questionIds, quizType, moduleIndex, lessonIndex, betAmount } = challenge
+  if (!questionIds?.length) return []
+
+  let questions = await fetchQuizQuestionsByIds(
+    courseId,
+    questionIds,
+    quizType === "module" ? moduleIndex : null,
+    lessonIndex ?? null
+  )
+
+  if (questions.length === questionIds.length) {
+    return questions
   }
+
+  console.warn(
+    `[challenge] ${questions.length}/${questionIds.length} questions found — regenerating`
+  )
+
+  const courseRef = doc(db, "courses", courseId)
+  const courseSnap = await getDoc(courseRef)
+  if (!courseSnap.exists()) {
+    throw new Error("Course not found")
+  }
+  const courseData = { id: courseSnap.id, ...courseSnap.data() } as any
+
+  const { generateModuleQuizQuestions, generateCourseQuizQuestions } = await import("./quiz-generator")
+  const questionTarget = quizType === "module" ? 10 : 20
+
+  let generated: QuizQuestion[] = []
+  if (quizType === "module" && moduleIndex !== null) {
+    generated = await generateModuleQuizQuestions(courseData, moduleIndex, courseId, questionTarget)
+  } else {
+    generated = await generateCourseQuizQuestions(courseData, courseId, questionTarget)
+  }
+
+  if ((betAmount || 0) > 0) {
+    generated = filterObjectiveQuestions(generated, questionTarget)
+  }
+
+  if (generated.length === 0) {
+    throw new Error("Failed to generate challenge questions")
+  }
+
+  await saveQuizQuestions(generated)
+  const newIds = generated.map((q) => q.questionId)
+
+  if (challenge.id) {
+    await updateDoc(doc(db, "challenges", challenge.id), { questionIds: newIds })
+  }
+
+  return generated
 }
 
 /**

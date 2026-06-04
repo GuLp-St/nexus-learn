@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, CheckCircle2, XCircle, ChevronRight, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -48,13 +48,13 @@ export default function ChallengeQuizPage() {
     [questionId: string]: { correct: boolean; feedback?: string; marks?: number }
   }>({})
   const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [finalTime, setFinalTime] = useState<number | null>(null)
   const [finalPerformance, setFinalPerformance] = useState<number | null>(null)
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [quizStartTime, setQuizStartTime] = useState<number | null>(null)
   const [elapsedTime, setElapsedTime] = useState(0)
-  const [tabSwitchSubmitted, setTabSwitchSubmitted] = useState(false)
 
   const params = useParams()
   const router = useRouter()
@@ -66,45 +66,6 @@ export default function ChallengeQuizPage() {
   const isChallenged = challenge?.challengedId === user?.uid
 
   const fx = useChallengeQuizFx(currentQuestionIndex, questions.length)
-
-  const stateRef = useRef({
-    answers,
-    questions,
-    submitting,
-    phase,
-    user,
-    attemptId,
-    challenge,
-    quizStartTime,
-    comboMultiplier: fx.comboMultiplier,
-    tabSwitchSubmitted,
-  })
-
-  useEffect(() => {
-    stateRef.current = {
-      answers,
-      questions,
-      submitting,
-      phase,
-      user,
-      attemptId,
-      challenge,
-      quizStartTime,
-      comboMultiplier: fx.comboMultiplier,
-      tabSwitchSubmitted,
-    }
-  }, [
-    answers,
-    questions,
-    submitting,
-    phase,
-    user,
-    attemptId,
-    challenge,
-    quizStartTime,
-    fx.comboMultiplier,
-    tabSwitchSubmitted,
-  ])
 
   const loadChallengeMeta = useCallback(async () => {
     if (!user) return
@@ -162,6 +123,7 @@ export default function ChallengeQuizPage() {
   const beginQuiz = async () => {
     if (!user || !challenge) return
     setStarting(true)
+    setStartError(null)
     try {
       let activeChallenge = challenge
       if (isChallenged && activeChallenge.status === "pending") {
@@ -178,10 +140,7 @@ export default function ChallengeQuizPage() {
         throw new Error("Challenge is no longer available")
       }
 
-      const challengeQuestions = await getChallengeQuestions(
-        activeChallenge.courseId,
-        activeChallenge.questionIds
-      )
+      const challengeQuestions = await getChallengeQuestions(activeChallenge)
       if (challengeQuestions.length === 0) {
         throw new Error("Failed to load challenge questions")
       }
@@ -203,7 +162,7 @@ export default function ChallengeQuizPage() {
       setPhase("playing")
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Could not start challenge"
-      alert(message)
+      setStartError(message)
     } finally {
       setStarting(false)
     }
@@ -217,150 +176,89 @@ export default function ChallengeQuizPage() {
     return () => clearInterval(interval)
   }, [phase, quizStartTime])
 
-  const handleSubmit = useCallback(
-    async (isAutoSubmit = false) => {
-      const currentAnswers = isAutoSubmit ? stateRef.current.answers : answers
-      const currentQuestions = isAutoSubmit ? stateRef.current.questions : questions
-      const currentUser = isAutoSubmit ? stateRef.current.user : user
-      const currentAttemptId = isAutoSubmit ? stateRef.current.attemptId : attemptId
-      const currentChallenge = isAutoSubmit ? stateRef.current.challenge : challenge
-      const currentStartTime = isAutoSubmit ? stateRef.current.quizStartTime : quizStartTime
-      const comboMult = isAutoSubmit
-        ? stateRef.current.comboMultiplier
-        : fx.comboMultiplier
+  const handleSubmit = useCallback(async () => {
+    if (!user || !attemptId || !challenge || !quizStartTime || submitting) return
 
-      if (!currentUser || !currentAttemptId || !currentChallenge || !currentStartTime) return
-      if (!isAutoSubmit && submitting) return
-      if (isAutoSubmit && stateRef.current.tabSwitchSubmitted) return
+    setSubmitting(true)
 
-      if (isAutoSubmit) setTabSwitchSubmitted(true)
-      if (!isAutoSubmit) setSubmitting(true)
+    try {
+      const newScores: {
+        [questionId: string]: { correct: boolean; feedback?: string; marks?: number }
+      } = {}
+
+      for (const question of questions) {
+        const userAnswer = answers[question.questionId]
+        if (question.type === "objective") {
+          const correct = checkObjectiveAnswer(question, userAnswer)
+          newScores[question.questionId] = { correct }
+        } else if (userAnswer && typeof userAnswer === "string") {
+          const evaluation = await evaluateSubjectiveAnswer(
+            question.question,
+            userAnswer,
+            question.suggestedAnswer || ""
+          )
+          newScores[question.questionId] = {
+            correct: evaluation.correct,
+            feedback: evaluation.feedback,
+            marks: evaluation.score,
+          }
+        } else {
+          newScores[question.questionId] = { correct: false, feedback: "No answer provided" }
+        }
+      }
+
+      setScores(newScores)
+      await saveQuizAttemptBasic(attemptId, answers, newScores)
+
+      const totalScore = Object.values(newScores).reduce((sum, s) => {
+        if (s.marks !== undefined) return sum + s.marks
+        return sum + (s.correct ? 1 : 0)
+      }, 0)
+
+      const timeTaken = Math.floor((Date.now() - quizStartTime) / 1000)
+      setFinalTime(timeTaken)
+      setFinalPerformance(calculatePerformanceScore(totalScore, fx.comboMultiplier, timeTaken))
+
+      const { isCompleted, winnerId, isDraw, challengedXPAwardResult } =
+        await recordChallengeResult(
+          challengeId,
+          user.uid,
+          attemptId,
+          totalScore,
+          timeTaken,
+          fx.comboMultiplier
+        )
+
+      if (isCompleted && !isDraw && winnerId === user.uid && challengedXPAwardResult) {
+        showXPAward(challengedXPAwardResult)
+      }
 
       try {
-        const newScores: {
-          [questionId: string]: { correct: boolean; feedback?: string; marks?: number }
-        } = {}
-
-        for (const question of currentQuestions) {
-          const userAnswer = currentAnswers[question.questionId]
-          if (question.type === "objective") {
-            const correct = checkObjectiveAnswer(question, userAnswer)
-            newScores[question.questionId] = { correct }
-          } else if (userAnswer && typeof userAnswer === "string") {
-            const evaluation = await evaluateSubjectiveAnswer(
-              question.question,
-              userAnswer,
-              question.suggestedAnswer || ""
-            )
-            newScores[question.questionId] = {
-              correct: evaluation.correct,
-              feedback: evaluation.feedback,
-              marks: evaluation.score,
-            }
-          } else {
-            newScores[question.questionId] = { correct: false, feedback: "No answer provided" }
-          }
-        }
-
-        if (!isAutoSubmit) setScores(newScores)
-        await saveQuizAttemptBasic(currentAttemptId, currentAnswers, newScores)
-
-        const totalScore = Object.values(newScores).reduce((sum, s) => {
-          if (s.marks !== undefined) return sum + s.marks
-          return sum + (s.correct ? 1 : 0)
-        }, 0)
-
-        const timeTaken = Math.floor((Date.now() - currentStartTime) / 1000)
-        setFinalTime(timeTaken)
-        setFinalPerformance(calculatePerformanceScore(totalScore, comboMult, timeTaken))
-
-        const { isCompleted, winnerId, isDraw, challengedXPAwardResult } =
-          await recordChallengeResult(
-            challengeId,
-            currentUser.uid,
-            currentAttemptId,
-            totalScore,
-            timeTaken,
-            comboMult
-          )
-
-        if (isCompleted && !isDraw && winnerId === currentUser.uid && challengedXPAwardResult) {
-          showXPAward(challengedXPAwardResult)
-        }
-
-        try {
-          await deleteDoc(doc(db, "quizAttempts", currentAttemptId))
-        } catch (error) {
-          console.error("Error deleting challenge attempt record:", error)
-        }
-
-        fx.stopAmbientPulse()
-        if (!isAutoSubmit) {
-          setScores(newScores)
-          setPhase("results")
-        } else {
-          router.push("/friends")
-        }
+        await deleteDoc(doc(db, "quizAttempts", attemptId))
       } catch (error) {
-        console.error("Error submitting challenge quiz:", error)
-        if (!isAutoSubmit) alert("Failed to submit challenge. Please try again.")
-      } finally {
-        if (!isAutoSubmit) setSubmitting(false)
+        console.error("Error deleting challenge attempt record:", error)
       }
-    },
-    [
-      answers,
-      questions,
-      user,
-      attemptId,
-      challenge,
-      quizStartTime,
-      fx,
-      challengeId,
-      showXPAward,
-      submitting,
-      router,
-    ]
-  )
 
-  useEffect(() => {
-    const onVisibilityChange = () => {
-      if (document.visibilityState !== "hidden") return
-      if (stateRef.current.phase !== "playing") return
-      if (stateRef.current.submitting || stateRef.current.tabSwitchSubmitted) return
-      if (!stateRef.current.quizStartTime) return
-      void handleSubmit(true)
+      fx.stopAmbientPulse()
+      setPhase("results")
+    } catch (error) {
+      console.error("Error submitting challenge quiz:", error)
+      alert("Failed to submit challenge. Please try again.")
+    } finally {
+      setSubmitting(false)
     }
-
-    document.addEventListener("visibilitychange", onVisibilityChange)
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange)
-  }, [handleSubmit])
-
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (stateRef.current.phase === "playing" && stateRef.current.quizStartTime) {
-        e.preventDefault()
-        e.returnValue = ""
-      }
-    }
-
-    const performAutoSubmit = () => {
-      if (
-        stateRef.current.phase === "playing" &&
-        !stateRef.current.submitting &&
-        stateRef.current.quizStartTime &&
-        stateRef.current.questions.length > 0
-      ) {
-        void handleSubmit(true)
-      }
-    }
-
-    window.addEventListener("beforeunload", handleBeforeUnload)
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload)
-      performAutoSubmit()
-    }
-  }, [handleSubmit])
+  }, [
+    answers,
+    questions,
+    user,
+    attemptId,
+    challenge,
+    quizStartTime,
+    fx,
+    challengeId,
+    showXPAward,
+    submitting,
+  ])
 
   const gradeAnswerForFx = (question: QuizQuestion, answer: string | number | boolean | undefined) => {
     if (answer === undefined || answer === "") return
@@ -426,6 +324,7 @@ export default function ChallengeQuizPage() {
         friendNickname={friendNickname}
         courseTitle={courseTitle}
         starting={starting}
+        startError={startError}
         onStart={beginQuiz}
         onBack={() => router.push("/friends")}
       />
@@ -561,7 +460,7 @@ export default function ChallengeQuizPage() {
                     Previous
                   </Button>
                   {currentQuestionIndex === questions.length - 1 ? (
-                    <Button onClick={() => handleSubmit(false)} disabled={submitting}>
+                    <Button onClick={() => handleSubmit()} disabled={submitting}>
                       {submitting ? "Submitting..." : "Submit Challenge"}
                     </Button>
                   ) : (

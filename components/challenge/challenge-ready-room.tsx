@@ -12,6 +12,7 @@ interface ChallengeReadyRoomProps {
   friendNickname: string
   courseTitle: string
   starting: boolean
+  startError?: string | null
   onStart: () => void
   onBack: () => void
 }
@@ -22,6 +23,7 @@ export function ChallengeReadyRoom({
   friendNickname,
   courseTitle,
   starting,
+  startError,
   onStart,
   onBack,
 }: ChallengeReadyRoomProps) {
@@ -78,6 +80,12 @@ export function ChallengeReadyRoom({
           {needsAccept && bet > 0 && (
             <p className="text-sm text-center text-orange-600 dark:text-orange-400 font-medium">
               Press below to accept and lock in your {bet} Nexon bet.
+            </p>
+          )}
+
+          {startError && (
+            <p className="text-sm text-center text-destructive bg-destructive/10 rounded-lg p-3">
+              {startError}
             </p>
           )}
 

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useTheme } from "@/components/theme-provider"
 import { NotificationBell } from "@/components/notification-bell"
+import { SocialNotificationBadge } from "@/components/social-notification-badge"
 import { useSocialNotifications } from "@/hooks/use-social-notifications"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/components/auth-provider"
@@ -70,18 +71,9 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
           <img src="/icon.svg" alt="Nexon" className="h-7 w-7 shrink-0 object-contain" />
           <h1 className="text-lg font-semibold text-foreground truncate leading-none flex items-center">{title}</h1>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1">
           <NotificationBell size="icon-sm" />
-          <Link href="/friends">
-            <Button variant="ghost" size="icon-sm" className="relative">
-              <Users className="h-5 w-5" />
-              {totalSocialNotifications > 0 && (
-                <Badge variant="destructive" className="absolute -right-1 -top-1 h-4 w-4 rounded-full p-0 text-[8px] flex items-center justify-center">
-                  {totalSocialNotifications}
-                </Badge>
-              )}
-            </Button>
-          </Link>
+          <SocialNotificationBadge size="icon-sm" />
           <Link href="/profile">
             <Button variant="ghost" size="icon-sm">
               <User className="h-4 w-4" />
@@ -110,6 +102,7 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
               <h1 className="text-[1.1rem] font-bold tracking-tighter text-foreground whitespace-nowrap leading-none flex items-center">NexusLearn</h1>
               <div className="hidden lg:flex items-center gap-0">
                 <NotificationBell align="left" size="icon-sm" />
+                <SocialNotificationBadge size="icon-sm" />
                 <Link href="/profile">
                   <Button variant="ghost" size="icon-sm" className="h-8 w-8 ml-1">
                     <User className="h-4 w-4" />

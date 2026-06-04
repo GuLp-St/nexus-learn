@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
@@ -145,6 +145,9 @@ export function FriendChatModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[600px] max-h-[90vh] flex-col p-0 sm:max-w-[500px]">
         <DialogHeader className="border-b px-6 py-4">
+          <DialogDescription className="sr-only">
+            Chat with {friendNickname}. Send messages, quiz challenges, and shared courses.
+          </DialogDescription>
           <div className="flex items-center justify-between w-full pr-8">
             <DialogTitle className="flex items-center gap-3">
               <AvatarWithCosmetics

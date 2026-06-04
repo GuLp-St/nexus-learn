@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { XPAwardResult } from "@/lib/xp-utils"
 import { getLevelProgress } from "@/lib/level-utils"
-import { Trophy } from "lucide-react"
+import { Sparkles } from "lucide-react"
 
 interface XPToastContentProps {
   result: XPAwardResult
@@ -17,9 +17,8 @@ function XPToastContent({ result }: XPToastContentProps) {
   const [currentProgress, setCurrentProgress] = useState(oldProgress.progressPercentage)
 
   useEffect(() => {
-    // Animate from old progress to new progress
     const startTime = Date.now()
-    const duration = 800 // 800ms animation
+    const duration = 800
     const startProgress = oldProgress.progressPercentage
     const endProgress = newProgress.progressPercentage
     const progressDiff = endProgress - startProgress
@@ -27,61 +26,41 @@ function XPToastContent({ result }: XPToastContentProps) {
     const animate = () => {
       const elapsed = Date.now() - startTime
       const progress = Math.min(1, elapsed / duration)
-      
-      // Ease-out animation
       const easeOut = 1 - Math.pow(1 - progress, 3)
-      const current = startProgress + (progressDiff * easeOut)
-      
-      setCurrentProgress(current)
-
-      if (progress < 1) {
-        requestAnimationFrame(animate)
-      }
+      setCurrentProgress(startProgress + progressDiff * easeOut)
+      if (progress < 1) requestAnimationFrame(animate)
     }
 
-    // Start animation after a small delay to ensure toast is rendered
-    const timeout = setTimeout(() => {
-      requestAnimationFrame(animate)
-    }, 50)
-
+    const timeout = setTimeout(() => requestAnimationFrame(animate), 50)
     return () => clearTimeout(timeout)
   }, [oldProgress.progressPercentage, newProgress.progressPercentage])
 
   return (
-    <div className="w-full max-w-sm rounded-lg border bg-background p-4 shadow-lg">
-      <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 rounded-full bg-primary/10 p-2">
-          <Trophy className="h-5 w-5 text-primary" />
+    <div className="w-[min(100vw-2rem,320px)] overflow-hidden rounded-xl border border-primary/20 bg-background shadow-lg">
+      <div className="flex items-center gap-3 p-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15">
+          <Sparkles className="h-5 w-5 text-primary" />
         </div>
-        
-        <div className="flex-1 space-y-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-foreground">+{amount} XP</p>
-              <p className="text-sm font-medium text-foreground">
-                {source || "XP Award"}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="font-semibold text-foreground">Level {newLevel}</p>
-            </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-lg font-bold tabular-nums text-primary">+{amount} XP</p>
+            <p className="shrink-0 text-xs font-semibold text-muted-foreground">
+              Lv {newLevel}
+            </p>
           </div>
-
-          {/* XP to next level */}
-          <p className="text-xs text-muted-foreground">
-            {newProgress.xpProgressToNext} XP to next level
-          </p>
-
-          {/* XP Progress Bar */}
-          <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full bg-primary"
-              style={{
-                width: `${currentProgress}%`,
-                transition: "none", // Disable CSS transition, we animate with JS
-              }}
-            />
-          </div>
+          <p className="truncate text-xs text-muted-foreground">{source || "XP earned"}</p>
+        </div>
+      </div>
+      <div className="border-t border-border/60 bg-muted/30 px-3 py-2">
+        <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
+          <span>Progress</span>
+          <span>{newProgress.xpProgressToNext} XP to next</span>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary"
+            style={{ width: `${currentProgress}%` }}
+          />
         </div>
       </div>
     </div>
@@ -89,11 +68,9 @@ function XPToastContent({ result }: XPToastContentProps) {
 }
 
 export function showXPToast(result: XPAwardResult) {
-  toast.custom(
-    () => <XPToastContent result={result} />,
-    {
-      duration: 3000,
-    }
-  )
+  toast.custom(() => <XPToastContent result={result} />, {
+    duration: 3500,
+    className: "!p-0 !bg-transparent !border-0 !shadow-none",
+    style: { padding: 0, background: "transparent", border: "none", boxShadow: "none" },
+  })
 }
-

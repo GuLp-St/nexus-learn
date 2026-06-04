@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Sparkles } from "lucide-react"
 import { XPAwardResult } from "@/lib/xp-utils"
@@ -98,6 +98,9 @@ export function LevelUpModal({ open, onClose, result }: LevelUpModalProps) {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md border-none bg-transparent p-0 overflow-visible shadow-none">
         <DialogTitle className="sr-only">Level Up!</DialogTitle>
+        <DialogDescription className="sr-only">
+          You reached level {newLevel}. Claim your level-up rewards.
+        </DialogDescription>
           
         <div className="relative flex flex-col items-center justify-center min-h-[400px]">
           {/* Shockwave Effect */}

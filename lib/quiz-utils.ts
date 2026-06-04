@@ -154,7 +154,12 @@ export async function getPerfectQuizHistory(userId: string): Promise<(QuizAttemp
 /**
  * Get document ID for a quiz question based on quiz type
  */
-function getQuestionDocId(courseId: string, moduleIndex: number | null, lessonIndex: number | null, questionId: string): string {
+export function getQuizQuestionDocId(
+  courseId: string,
+  moduleIndex: number | null,
+  lessonIndex: number | null,
+  questionId: string
+): string {
   if (lessonIndex !== null && moduleIndex !== null) {
     return `${courseId}-${moduleIndex}-${lessonIndex}-${questionId}`
   } else if (moduleIndex !== null) {
@@ -232,7 +237,7 @@ export async function saveQuizQuestions(questions: QuizQuestion[]): Promise<void
         return acc
       }, {} as QuizQuestion)
 
-      const docId = getQuestionDocId(
+      const docId = getQuizQuestionDocId(
         cleanedQuestion.courseId,
         cleanedQuestion.moduleIndex ?? null,
         cleanedQuestion.lessonIndex ?? null,
@@ -257,29 +262,34 @@ export async function saveQuizQuestions(questions: QuizQuestion[]): Promise<void
  */
 export async function fetchQuizQuestionsByIds(
   courseId: string,
-  questionIds: string[]
+  questionIds: string[],
+  moduleIndex: number | null = null,
+  lessonIndex: number | null = null
 ): Promise<QuizQuestion[]> {
   try {
-    // Fetch all questions for the course and filter by questionId
-    const questionsQuery = query(
-      collection(db, "quizQuestions"),
-      where("courseId", "==", courseId)
+    const fetched = await Promise.all(
+      questionIds.map(async (questionId) => {
+        const primaryId = getQuizQuestionDocId(courseId, moduleIndex, lessonIndex, questionId)
+        const primarySnap = await getDoc(doc(db, "quizQuestions", primaryId))
+        if (primarySnap.exists()) {
+          return primarySnap.data() as QuizQuestion
+        }
+
+        const courseLevelId = getQuizQuestionDocId(courseId, null, null, questionId)
+        if (courseLevelId !== primaryId) {
+          const courseSnap = await getDoc(doc(db, "quizQuestions", courseLevelId))
+          if (courseSnap.exists()) {
+            return courseSnap.data() as QuizQuestion
+          }
+        }
+
+        return null
+      })
     )
-    
-    const snapshot = await getDocs(questionsQuery)
-    const questions: QuizQuestion[] = []
-    
-    snapshot.forEach((docSnap) => {
-      const questionData = docSnap.data() as QuizQuestion
-      if (questionIds.includes(questionData.questionId)) {
-        questions.push(questionData)
-      }
-    })
-    
-    // Sort questions to match the order of questionIds
+
     return questionIds
-      .map((id) => questions.find((q) => q.questionId === id))
-      .filter((q): q is QuizQuestion => q !== undefined)
+      .map((id, i) => (fetched[i]?.questionId === id ? fetched[i] : null))
+      .filter((q): q is QuizQuestion => q !== null)
   } catch (error) {
     console.error("Error fetching quiz questions by IDs:", error)
     return []
@@ -321,28 +331,33 @@ export async function createQuizAttempt(
   isChallenge: boolean = false // Optional flag
 ): Promise<string> {
   try {
-    // Clean up any existing incomplete attempts for this specific quiz before creating a new one
-    // This prevents "zombie" attempts from blocking other quizzes or showing "Resume" incorrectly
-    const existingIncompleteQuery = query(
-      collection(db, "quizAttempts"),
-      where("userId", "==", userId),
-      where("courseId", "==", courseId),
-      where("quizType", "==", quizType),
-      where("completedAt", "==", null)
-    )
-    const existingIncompleteSnapshot = await getDocs(existingIncompleteQuery)
-    for (const docSnap of existingIncompleteSnapshot.docs) {
-      const data = docSnap.data()
-      // Match module/lesson index if applicable
-      const modMatch = moduleIndex === undefined || moduleIndex === null ? data.moduleIndex === null : Number(data.moduleIndex) === moduleIndex
-      const lesMatch = lessonIndex === undefined || lessonIndex === null ? data.lessonIndex === null : Number(data.lessonIndex) === lessonIndex
-      
-      if (modMatch && lesMatch) {
-        await updateDoc(docSnap.ref, {
-          completedAt: serverTimestamp(),
-          abandoned: true,
-          abandonedReason: "superseded_by_new_attempt"
-        })
+    if (!isChallenge) {
+      const existingIncompleteQuery = query(
+        collection(db, "quizAttempts"),
+        where("userId", "==", userId),
+        where("courseId", "==", courseId),
+        where("quizType", "==", quizType),
+        where("completedAt", "==", null)
+      )
+      const existingIncompleteSnapshot = await getDocs(existingIncompleteQuery)
+      for (const docSnap of existingIncompleteSnapshot.docs) {
+        const data = docSnap.data()
+        const modMatch =
+          moduleIndex === undefined || moduleIndex === null
+            ? data.moduleIndex === null
+            : Number(data.moduleIndex) === moduleIndex
+        const lesMatch =
+          lessonIndex === undefined || lessonIndex === null
+            ? data.lessonIndex === null
+            : Number(data.lessonIndex) === lessonIndex
+
+        if (modMatch && lesMatch) {
+          await updateDoc(docSnap.ref, {
+            completedAt: serverTimestamp(),
+            abandoned: true,
+            abandonedReason: "superseded_by_new_attempt",
+          })
+        }
       }
     }
 

@@ -3,14 +3,12 @@
 import { useState, useEffect } from "react"
 import { Bell, Check, X, Zap, Trophy, UserPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/components/auth-provider"
 import {
   getNotifications,
   subscribeToNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
-  getUnreadNotificationCount,
   Notification,
 } from "@/lib/notification-utils"
 import { useRouter } from "next/navigation"
@@ -29,12 +27,10 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
     if (!user) return
 
     const loadNotifications = async () => {
-      const [notifs, count] = await Promise.all([
-        getNotifications(user.uid, 20),
-        getUnreadNotificationCount(user.uid),
-      ])
-      setNotifications(notifs)
-      setUnreadCount(count)
+      const notifs = await getNotifications(user.uid, 20)
+      const filtered = notifs.filter((n) => n.type !== "xp_award")
+      setNotifications(filtered)
+      setUnreadCount(filtered.filter((n) => !n.read).length)
     }
 
     loadNotifications()
@@ -43,10 +39,9 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
     const unsubscribe = subscribeToNotifications(
       user.uid,
       (updatedNotifications) => {
-        setNotifications(updatedNotifications)
-        // Update unread count
-        const unread = updatedNotifications.filter((n) => !n.read).length
-        setUnreadCount(unread)
+        const filtered = updatedNotifications.filter((n) => n.type !== "xp_award")
+        setNotifications(filtered)
+        setUnreadCount(filtered.filter((n) => !n.read).length)
       },
       20
     )
@@ -69,6 +64,9 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
       router.push(`/challenges/${notification.data.challengeId}/quiz`)
       setIsOpen(false)
     } else if (notification.type === "friend_request" && notification.data.requesterId) {
+      router.push("/friends")
+      setIsOpen(false)
+    } else if (notification.type === "challenge_result") {
       router.push("/friends")
       setIsOpen(false)
     }
@@ -130,12 +128,9 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
-          <Badge
-            variant="destructive"
-            className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
-          >
+          <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold leading-none text-white ring-2 ring-background">
             {unreadCount > 9 ? "9+" : unreadCount}
-          </Badge>
+          </span>
         )}
       </Button>
 
