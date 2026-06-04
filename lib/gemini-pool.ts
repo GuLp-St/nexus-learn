@@ -5,6 +5,7 @@ import {
   type Tool,
 } from "@google/generative-ai"
 import { getGeminiApiKeys } from "./gemini-keys"
+import { recordGeminiKeyUsage } from "./api-key-usage"
 import { getGeminiModelName } from "./gemini-model"
 
 export type ModelOptions = {
@@ -97,10 +98,12 @@ export async function poolGenerateContent(
           : {}),
       })
       const result = await model.generateContent(request)
+      recordGeminiKeyUsage(keyIndex)
       return { response: result.response, keyIndex }
     } catch (error) {
       lastError = error
       if (!isGeminiRateLimitError(error)) throw error
+      recordGeminiKeyUsage(keyIndex, true)
       console.warn(
         `[Gemini Pool] Rate limit on key #${keyIndex + 1}/${keys.length}, trying next...`
       )
@@ -171,10 +174,13 @@ export async function runWithKeyRetry<T>(
   for (let attempt = 0; attempt < keys.length; attempt++) {
     const keyIndex = (startIdx + attempt) % keys.length
     try {
-      return await fn(keyIndex)
+      const result = await fn(keyIndex)
+      recordGeminiKeyUsage(keyIndex)
+      return result
     } catch (error) {
       lastError = error
       if (!isGeminiRateLimitError(error)) throw error
+      recordGeminiKeyUsage(keyIndex, true)
       console.warn(
         `[Gemini Pool] Rate limit on key #${keyIndex + 1}/${keys.length}, retrying...`
       )

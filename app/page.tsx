@@ -64,13 +64,24 @@ export default function LearningDashboard() {
     }
   }, [user])
 
+  const claimableQuestCount =
+    dailyQuests?.quests?.filter((q: { completed: boolean; claimed: boolean }) => q.completed && !q.claimed)
+      .length ?? 0
+
   // Set chatbot context for dashboard page with real-time data
   useEffect(() => {
     if (!loading && user) {
+      const chips: string[] = ["What are my quests today?"]
+      if (claimableQuestCount > 0) {
+        chips.unshift("Which quests can I claim?")
+      }
+      chips.push("How do I earn more Nexon?")
+
       setPageContext({
         title: "Dashboard",
         description: "The user's learning dashboard with daily quests, AI-suggested courses, and community pulse. The user can track their progress, discover new courses, and see community activity.",
-        data: {
+        suggestedChips: chips.slice(0, 4),
+        pageData: {
           userId: user.uid,
           pageType: "dashboard",
           dailyQuests: dailyQuests?.quests?.map((quest: any) => ({
@@ -92,10 +103,11 @@ export default function LearningDashboard() {
             metadata: activity.metadata,
             relativeTime: activity.relativeTime,
           })),
+          claimableQuestCount,
         },
       })
     }
-  }, [loading, user, dailyQuests, communityActivities, setPageContext])
+  }, [loading, user, dailyQuests, communityActivities, claimableQuestCount, setPageContext])
 
   // Show loading state while checking auth
   if (loading) {

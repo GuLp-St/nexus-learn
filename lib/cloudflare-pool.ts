@@ -5,6 +5,7 @@ import {
   DEFAULT_CLOUDFLARE_IMAGE_MODEL,
   type CloudflareCredential,
 } from "./cloudflare-keys"
+import { recordCloudflareKeyUsage } from "./api-key-usage"
 
 let roundRobin = 0
 
@@ -220,7 +221,10 @@ export async function generateCloudflareImagePooled(
 
     try {
       const blob = await requestImage(credential, prompt, imageModel, options)
-      if (blob) return blob
+      if (blob) {
+        recordCloudflareKeyUsage(credIndex)
+        return blob
+      }
 
       if (useFallback) {
         console.warn(
@@ -232,11 +236,15 @@ export async function generateCloudflareImagePooled(
           fallbackModel!,
           options
         )
-        if (fallback) return fallback
+        if (fallback) {
+          recordCloudflareKeyUsage(credIndex)
+          return fallback
+        }
       }
     } catch (error) {
       lastError = error
       if (!isCloudflareRateLimitError(error)) throw error
+      recordCloudflareKeyUsage(credIndex, true)
       console.warn(
         `[Cloudflare] Rate limit on credential ${credIndex + 1}/${credentials.length} (account ${credential.accountId.slice(0, 8)}...), trying next...`
       )

@@ -197,14 +197,14 @@ async function updateQuestProgress(
     const questsRef = doc(db, "dailyQuests", userId)
     
     // Use transaction to prevent race conditions when multiple events occur simultaneously
-    await runTransaction(db, async (transaction) => {
+    const completedQuest = await runTransaction(db, async (transaction): Promise<Quest | null> => {
       const questsDoc = await transaction.get(questsRef)
-      if (!questsDoc.exists()) return
+      if (!questsDoc.exists()) return null
 
       const data = questsDoc.data() as DailyQuests
       const quest = data.quests.find((q) => q.type === questType && !q.completed)
 
-      if (!quest) return
+      if (!quest) return null
 
       // Update progress based on quest type
       let newProgress = quest.progress
@@ -236,9 +236,14 @@ async function updateQuestProgress(
           break
       }
 
+      let newlyCompleted: Quest | null = null
+
       const updatedQuests = data.quests.map((q) => {
         if (q.id === quest.id) {
           const completed = newProgress >= q.target
+          if (completed && !q.completed) {
+            newlyCompleted = { ...q, progress: q.target, completed: true }
+          }
           return {
             ...q,
             progress: Math.min(newProgress, q.target),
@@ -252,7 +257,19 @@ async function updateQuestProgress(
         quests: updatedQuests,
         updatedAt: serverTimestamp(),
       })
+
+      return newlyCompleted
     })
+
+    if (completedQuest != null) {
+      const { createNotification } = await import("./notification-utils")
+      await createNotification(userId, "quest_claimable", {
+        questId: completedQuest.id,
+        questTitle: completedQuest.title,
+        xpReward: completedQuest.xpReward,
+        nexonReward: completedQuest.nexonReward,
+      }).catch((err) => console.error("Quest claimable notification failed:", err))
+    }
   } catch (error) {
     console.error("Error updating quest progress:", error)
   }

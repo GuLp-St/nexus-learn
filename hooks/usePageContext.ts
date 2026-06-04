@@ -3,10 +3,15 @@
 import { useEffect, useRef } from "react"
 import { useChatContext } from "@/context/ChatContext"
 
+import type { ActiveFocus } from "@/lib/page-context-types"
+
 interface UsePageContextOptions {
   title: string
   description: string
-  data?: any
+  data?: unknown
+  pageData?: Record<string, unknown>
+  activeFocus?: ActiveFocus | null
+  suggestedChips?: string[]
 }
 
 /**
@@ -21,29 +26,37 @@ interface UsePageContextOptions {
  * })
  * ```
  */
-export function usePageContext({ title, description, data }: UsePageContextOptions) {
+export function usePageContext({
+  title,
+  description,
+  data,
+  pageData,
+  activeFocus,
+  suggestedChips,
+}: UsePageContextOptions) {
   const { setPageContext } = useChatContext()
-  const prevRef = useRef<{ title: string; description: string; dataString?: string } | undefined>(undefined)
+  const prevRef = useRef<string | undefined>(undefined)
+  const payload = pageData ?? data
 
   useEffect(() => {
-    // Serialize data for comparison to avoid infinite loops from object recreation
-    const dataString = data !== undefined ? JSON.stringify(data) : undefined
-    
-    // Only update if something actually changed
-    const prev = prevRef.current
-    if (
-      !prev ||
-      prev.title !== title ||
-      prev.description !== description ||
-      prev.dataString !== dataString
-    ) {
-      console.log('[usePageContext] Setting context:', { title, description, hasData: !!data })
-      setPageContext({ title, description, data })
-      prevRef.current = { title, description, dataString }
+    const snapshot = JSON.stringify({
+      title,
+      description,
+      payload,
+      activeFocus,
+      suggestedChips,
+    })
+
+    if (prevRef.current !== snapshot) {
+      setPageContext({
+        title,
+        description,
+        pageData: payload as Record<string, unknown> | undefined,
+        activeFocus,
+        suggestedChips,
+      })
+      prevRef.current = snapshot
     }
-    
-    // Note: No cleanup needed - the pathname change in ChatContext handles resetting
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, description, data, setPageContext])
+  }, [title, description, payload, activeFocus, suggestedChips, setPageContext])
 }
 

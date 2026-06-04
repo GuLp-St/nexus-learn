@@ -12,6 +12,7 @@ import { generateChatResponse, ChatMessage } from "@/lib/gemini"
 import { trackQuestProgress } from "@/lib/daily-quest-utils"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { usePathname } from "next/navigation"
+import { resolveSuggestedChips } from "@/lib/chat-page-context"
 import {
   clampChatbotPixels,
   getDefaultChatbotPixels,
@@ -152,35 +153,13 @@ export function ChatbotOverlay() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  // Set hardcoded context-aware chips based on pathname
   useEffect(() => {
     if (!isOpen) {
       setSuggestedChips([])
       return
     }
-
-    // Determine chips based on pathname
-    let chips: string[] = []
-    
-    if (pathname === "/journey") {
-      // Dashboard
-      chips = ["Daily Quests", "My Stats"]
-    } else if (pathname.startsWith("/journey/") && pathname.match(/^\/journey\/[^/]+$/)) {
-      // Course page
-      chips = ["Summarize Course", "What's Next?"]
-    } else if (pathname.includes("/modules/") && pathname.includes("/lessons/")) {
-      // Lesson page
-      chips = ["Summarize", "Explain"]
-    } else if (pathname.includes("/quiz/")) {
-      // Quiz page
-      chips = ["Hint", "Rule Check"]
-    } else {
-      // Default/Other
-      chips = ["Tell me more", "Help me understand"]
-    }
-    
-    setSuggestedChips(chips)
-  }, [isOpen, pathname])
+    setSuggestedChips(resolveSuggestedChips(pageContext, pathname))
+  }, [isOpen, pathname, pageContext])
 
   const sendMessage = async (text?: string) => {
     const messageToSubmit = text || message
@@ -312,9 +291,11 @@ export function ChatbotOverlay() {
               <div className="text-center space-y-2">
                 <p className="text-muted-foreground text-sm font-medium">Nexus is here to help</p>
                 <p className="text-muted-foreground text-xs px-8">
-                  {pageContext
-                    ? pageContext.description
-                    : "Ask me anything about your learning journey!"}
+                  {pageContext?.activeFocus?.content
+                    ? `Focused on: ${pageContext.activeFocus.content.slice(0, 160)}${
+                        pageContext.activeFocus.content.length > 160 ? "…" : ""
+                      }`
+                    : pageContext?.description || "Ask me anything about your learning journey!"}
                 </p>
               </div>
             </div>

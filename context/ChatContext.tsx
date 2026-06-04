@@ -1,33 +1,48 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react"
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from "react"
 import { usePathname } from "next/navigation"
+import type { PageContext } from "@/lib/page-context-types"
+import { normalizePageContext } from "@/lib/page-context-types"
+import { buildPageContext } from "@/lib/chat-page-context"
 
-interface PageContext {
-  title: string
-  description: string
-  data?: any
-}
+export type { PageContext } from "@/lib/page-context-types"
+
+type PageContextInput =
+  | PageContext
+  | (Omit<PageContext, "route"> & { route?: string })
+  | { title: string; description: string; data?: unknown }
 
 interface ChatContextType {
   pageContext: PageContext | null
-  setPageContext: (context: PageContext | null) => void
+  setPageContext: (context: PageContextInput | null) => void
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined)
 
 export function ChatContextProvider({ children }: { children: ReactNode }) {
-  const [pageContext, setPageContext] = useState<PageContext | null>(null)
+  const [pageContext, setPageContextState] = useState<PageContext | null>(null)
   const pathname = usePathname()
   const pathnameRef = useRef<string>(pathname)
+
+  const setPageContext = useCallback(
+    (context: PageContextInput | null) => {
+      if (!context) {
+        setPageContextState(null)
+        return
+      }
+      const normalized = normalizePageContext(context, pathname)
+      if (!normalized) return
+      setPageContextState(buildPageContext(pathname, normalized))
+    },
+    [pathname]
+  )
 
   // Auto-reset context when pathname changes (but allow new page to set it immediately)
   useEffect(() => {
     if (pathnameRef.current !== pathname) {
-      console.log('[ChatContext] Pathname changed, resetting context:', pathnameRef.current, '->', pathname)
       pathnameRef.current = pathname
-      // Reset context - the new page's usePageContext will set it immediately
-      setPageContext(null)
+      setPageContextState(null)
     }
   }, [pathname])
 

@@ -182,21 +182,26 @@ export async function getDailyQuests(userId: string, currentUserId: string) {
 }
 
 /**
- * Get correct answer for hint (only during quiz)
- * This should be used carefully by the AI to provide hints, not direct answers
+ * Zero-knowledge hint context — never returns correctAnswer or answer indices.
  */
-export async function getQuizCorrectAnswer(questionId: string) {
-  // We don't need userId validation here as questionId is specific, 
-  // but we should ensure it's only called in a quiz context.
-  const questionSnap = await getDoc(doc(db, "quizQuestions", questionId))
-  if (!questionSnap.exists()) return null
-  
-  const data = questionSnap.data() as QuizQuestion
-  return {
-    question: data.question,
-    correctAnswer: data.correctAnswer,
-    suggestedAnswer: data.suggestedAnswer,
-    type: data.type
+export async function getQuestionHintContext(questionId: string) {
+  const { buildQuestionHintContext } = await import("./quiz-hint-utils")
+
+  const directSnap = await getDoc(doc(db, "quizQuestions", questionId))
+  if (directSnap.exists()) {
+    return buildQuestionHintContext(directSnap.data() as QuizQuestion)
   }
+
+  const legacyQuery = query(
+    collection(db, "quizQuestions"),
+    where("questionId", "==", questionId),
+    limit(1)
+  )
+  const legacySnap = await getDocs(legacyQuery)
+  if (legacySnap.empty) {
+    return { error: "Question not found", questionId }
+  }
+
+  return buildQuestionHintContext(legacySnap.docs[0].data() as QuizQuestion)
 }
 

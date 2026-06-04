@@ -12,6 +12,8 @@ interface AuthContextType {
   nickname: string | null
   avatarUrl: string | null
   theme: string | null
+  isAdmin: boolean
+  adminLoading: boolean
   loading: boolean
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
@@ -24,6 +26,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [nickname, setNickname] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [theme, setTheme] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [adminLoading, setAdminLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const { showXPAward } = useXP()
   const router = useRouter()
@@ -133,8 +137,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setNickname(data.nickname || null)
             setAvatarUrl(data.avatarUrl || null)
             setTheme(data.cosmetics?.theme || "theme-teal")
+            setIsAdmin(data.role === "admin")
           }
         })
+
+        setAdminLoading(true)
+        user
+          .getIdToken()
+          .then((token) =>
+            fetch("/api/admin/check", {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+          )
+          .then((res) => (res.ok ? res.json() : { isAdmin: false }))
+          .then((data: { isAdmin?: boolean }) => setIsAdmin(!!data.isAdmin))
+          .catch(() => setIsAdmin(false))
+          .finally(() => setAdminLoading(false))
 
         // Initialize presence system (set user online)
         const { initializePresence } = await import("@/lib/presence-utils")
@@ -162,6 +180,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setNickname(null)
         setAvatarUrl(null)
+        setIsAdmin(false)
+        setAdminLoading(false)
       }
       
       setLoading(false)
@@ -198,7 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, nickname, avatarUrl, theme, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, nickname, avatarUrl, theme, isAdmin, adminLoading, loading, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   )

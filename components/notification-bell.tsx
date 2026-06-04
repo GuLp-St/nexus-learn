@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Bell, Check, X, Zap, Trophy, UserPlus } from "lucide-react"
+import { Bell, Zap, Trophy, UserPlus, Trash2, Gift } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/components/auth-provider"
 import {
@@ -9,11 +9,12 @@ import {
   subscribeToNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  clearAllNotifications,
   Notification,
 } from "@/lib/notification-utils"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { formatDateForDisplay } from "@/lib/date-utils"
+import { toast } from "sonner"
 
 export function NotificationBell({ align = "right", size = "icon" }: { align?: "left" | "right", size?: "icon" | "icon-sm" }) {
   const { user } = useAuth()
@@ -21,6 +22,13 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isOpen, setIsOpen] = useState(false)
+  const [clearing, setClearing] = useState(false)
+
+  // Opening the panel marks all notifications as read
+  useEffect(() => {
+    if (!isOpen || !user || unreadCount === 0) return
+    void markAllNotificationsAsRead(user.uid)
+  }, [isOpen, user, unreadCount])
 
   // Fetch notifications and subscribe to updates
   useEffect(() => {
@@ -60,7 +68,10 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
     }
 
     // Handle navigation based on notification type
-    if (notification.type === "challenge" && notification.data.challengeId) {
+    if (notification.type === "quest_claimable") {
+      router.push("/")
+      setIsOpen(false)
+    } else if (notification.type === "challenge" && notification.data.challengeId) {
       router.push(`/challenges/${notification.data.challengeId}/quiz`)
       setIsOpen(false)
     } else if (notification.type === "friend_request" && notification.data.requesterId) {
@@ -72,9 +83,23 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
     }
   }
 
-  const handleMarkAllAsRead = async () => {
-    if (!user) return
-    await markAllNotificationsAsRead(user.uid)
+  const handleClearAll = async () => {
+    if (!user || clearing) return
+    setClearing(true)
+    try {
+      await clearAllNotifications(user.uid)
+      setNotifications([])
+      setUnreadCount(0)
+      toast.success("Notifications cleared")
+    } catch {
+      toast.error("Failed to clear notifications")
+    } finally {
+      setClearing(false)
+    }
+  }
+
+  const togglePanel = () => {
+    setIsOpen((prev) => !prev)
   }
 
   const getNotificationIcon = (type: Notification["type"]) => {
@@ -85,6 +110,8 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
         return <Zap className="h-4 w-4" />
       case "challenge_result":
         return <Trophy className="h-4 w-4" />
+      case "quest_claimable":
+        return <Gift className="h-4 w-4" />
       case "xp_award":
         return <Trophy className="h-4 w-4" />
       default:
@@ -98,6 +125,8 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
         return `${notification.data.requesterName || "Someone"} sent you a friend request`
       case "challenge":
         return `${notification.data.challengerName || "Someone"} challenged you to a quiz!`
+      case "quest_claimable":
+        return `Quest complete: ${notification.data.questTitle || "Daily quest"} — claim your reward on the Dashboard`
       case "challenge_result":
         if (notification.data.isDraw) {
           return `Challenge ended in a draw. Bets refunded. (${notification.data.yourScore} vs ${notification.data.opponentScore})`
@@ -123,7 +152,7 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
       <Button
         variant="ghost"
         size={size}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={togglePanel}
         className="relative"
       >
         <Bell className="h-5 w-5" />
@@ -153,16 +182,6 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
           >
             <div className="flex items-center justify-between border-b p-4">
               <h3 className="font-semibold">Notifications</h3>
-              {unreadCount > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleMarkAllAsRead}
-                  className="text-xs"
-                >
-                  Mark all as read
-                </Button>
-              )}
             </div>
 
             <div className="max-h-96 overflow-y-auto">
@@ -202,11 +221,16 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
 
             {notifications.length > 0 && (
               <div className="border-t p-2">
-                <Link href="/friends">
-                  <Button variant="ghost" size="sm" className="w-full" onClick={() => setIsOpen(false)}>
-                    View all
-                  </Button>
-                </Link>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-xs text-muted-foreground hover:text-destructive"
+                  onClick={handleClearAll}
+                  disabled={clearing}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                  {clearing ? "Clearing…" : "Clear all"}
+                </Button>
               </div>
             )}
           </div>

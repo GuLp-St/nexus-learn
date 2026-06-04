@@ -13,6 +13,10 @@ export interface QuizQuestion {
   question: string
   options?: string[]
   correctAnswer?: string | number | boolean
+  /** Short hint for Nexus — must not reveal the correct option */
+  hint?: string
+  /** Concept background for zero-knowledge hint tool */
+  conceptExplanation?: string
   suggestedAnswer?: string
   rubric?: {
     keywords: string[]

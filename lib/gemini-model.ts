@@ -82,3 +82,7 @@ export async function getGeminiModelName(): Promise<string> {
   return fallback
 }
 
+export function invalidateGeminiModelCache(): void {
+  cachedModel = null
+}
+

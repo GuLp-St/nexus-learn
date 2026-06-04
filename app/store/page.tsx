@@ -71,7 +71,11 @@ export default function StorePage() {
       setPageContext({
         title: "Store",
         description: "Browse and purchase cosmetics including avatars, frames, wallpapers, and name colors using Nexon currency.",
-        data: {
+        suggestedChips:
+          nexon <= 0
+            ? ["How do I earn more Nexon?", "What can I buy here?"]
+            : ["What should I buy?", "How do I earn more Nexon?"],
+        pageData: {
           nexon,
           selectedCategory,
           cosmetics: cosmetics.filter(c => c.category === selectedCategory).map((cosmetic) => ({

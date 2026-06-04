@@ -1,13 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { LayoutDashboard, FileQuestion, Trophy, Menu, X, Library, User, Users, Moon, Sun, ShoppingBag, LogOut, Map } from "lucide-react"
+import { LayoutDashboard, Trophy, Menu, X, User, Users, Moon, Sun, ShoppingBag, LogOut, Map, Shield, Globe, KeyRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useTheme } from "@/components/theme-provider"
 import { NotificationBell } from "@/components/notification-bell"
-import { SocialNotificationBadge } from "@/components/social-notification-badge"
 import { useSocialNotifications } from "@/hooks/use-social-notifications"
+import { useClaimableQuestCount } from "@/hooks/use-claimable-quests"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/components/auth-provider"
 import {
@@ -31,7 +31,8 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const { theme, toggleTheme } = useTheme()
   const { totalSocialNotifications } = useSocialNotifications()
-  const { user, nickname, avatarUrl, signOut } = useAuth()
+  const { user, nickname, avatarUrl, signOut, isAdmin } = useAuth()
+  const claimableQuests = useClaimableQuestCount(user?.uid)
 
   const handleLogout = async () => {
     try {
@@ -46,12 +47,25 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
   }
 
   const navItems = [
-    { icon: LayoutDashboard, label: "Dashboard", href: "/" },
+    {
+      icon: LayoutDashboard,
+      label: "Dashboard",
+      href: "/",
+      badge: claimableQuests > 0 ? claimableQuests : undefined,
+    },
     { icon: Map, label: "Journey", href: "/journey" },
     { icon: Trophy, label: "Leaderboard", href: "/leaderboard" },
     { icon: Users, label: "Social", href: "/friends", badge: totalSocialNotifications > 0 ? totalSocialNotifications : undefined },
     { icon: ShoppingBag, label: "Store", href: "/store" },
   ]
+
+  const adminNavItems = isAdmin
+    ? [
+        { icon: Shield, label: "Users", href: "/admin/users" },
+        { icon: Globe, label: "Community Courses", href: "/admin/courses" },
+        { icon: KeyRound, label: "Keys", href: "/admin/keys" },
+      ]
+    : []
 
   return (
     <>
@@ -73,7 +87,6 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
         </div>
         <div className="ml-auto flex items-center gap-1">
           <NotificationBell size="icon-sm" />
-          <SocialNotificationBadge size="icon-sm" />
           <Link href="/profile">
             <Button variant="ghost" size="icon-sm">
               <User className="h-4 w-4" />
@@ -100,11 +113,10 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
             <div className="flex items-center gap-2">
               <img src="/icon.svg" alt="Nexon" className="h-7 w-7 shrink-0 object-contain" />
               <h1 className="text-[1.1rem] font-bold tracking-tighter text-foreground whitespace-nowrap leading-none flex items-center">NexusLearn</h1>
-              <div className="hidden lg:flex items-center gap-0">
+              <div className="hidden lg:flex items-center gap-0.5 shrink-0">
                 <NotificationBell align="left" size="icon-sm" />
-                <SocialNotificationBadge size="icon-sm" />
                 <Link href="/profile">
-                  <Button variant="ghost" size="icon-sm" className="h-8 w-8 ml-1">
+                  <Button variant="ghost" size="icon-sm" className="h-8 w-8">
                     <User className="h-4 w-4" />
                   </Button>
                 </Link>
@@ -139,6 +151,29 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
                 </button>
               </Link>
             ))}
+            {adminNavItems.length > 0 && (
+              <>
+                <div className="pt-3 pb-1 px-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Admin
+                  </span>
+                </div>
+                {adminNavItems.map((item) => (
+                  <Link key={item.label} href={item.href}>
+                    <button
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                        currentPath === item.href
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      }`}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      <span>{item.label}</span>
+                    </button>
+                  </Link>
+                ))}
+              </>
+            )}
           </nav>
 
           <div className="shrink-0 border-t border-border p-4">

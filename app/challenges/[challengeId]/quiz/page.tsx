@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
+import { useChatContext } from "@/context/ChatContext"
 import {
   getChallenge,
   acceptChallenge,
@@ -66,6 +67,7 @@ export default function ChallengeQuizPage() {
   const params = useParams()
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
+  const { setPageContext } = useChatContext()
   const { showXPAward } = useXP()
   const challengeId = params.challengeId as string
 
@@ -81,6 +83,53 @@ export default function ChallengeQuizPage() {
   useEffect(() => {
     phaseRef.current = phase
   }, [phase])
+
+  useEffect(() => {
+    if (phase !== "playing" || questions.length === 0) {
+      setPageContext(null)
+      return
+    }
+    const q = questions[currentQuestionIndex]
+    const chips = ["Give me a hint"]
+    if (fx.comboStreak >= 3) {
+      chips.push("What happens if I lose my combo?")
+    } else {
+      chips.push("Help me understand this question")
+    }
+    setPageContext({
+      title: `Challenge Quiz vs ${friendNickname}`,
+      description: `1v1 challenge quiz. Peak combo ×${fx.peakComboMultiplier.toFixed(1)}, current streak ${fx.comboStreak}.`,
+      suggestedChips: chips,
+      activeFocus: q
+        ? { type: "quiz-question", id: q.questionId, content: q.question }
+        : null,
+      pageData: {
+        challengeId,
+        currentQuestionIndex,
+        totalQuestions: questions.length,
+        comboStreak: fx.comboStreak,
+        peakComboMultiplier: fx.peakComboMultiplier,
+        currentQuestion: q
+          ? {
+              questionId: q.questionId,
+              question: q.question,
+              type: q.type,
+              options: q.options,
+            }
+          : undefined,
+      },
+    })
+    return () => setPageContext(null)
+  }, [
+    phase,
+    questions,
+    currentQuestionIndex,
+    friendNickname,
+    challengeId,
+    fx.comboStreak,
+    fx.peakComboMultiplier,
+    setPageContext,
+  ])
 
   const loadChallengeMeta = useCallback(async () => {
     if (!user) return

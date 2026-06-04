@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, CheckCircle2, Clock, Sparkles, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -33,6 +33,9 @@ import {
   MatchingInteractionComponent,
   ChatSimInteractionComponent,
 } from "@/components/lesson-interactions"
+import { NexusFocusRegion } from "@/components/nexus-focus-region"
+import { useActiveFocusObserver } from "@/hooks/use-active-focus-observer"
+import { activeFocusFromLessonBlock, textFromLessonBlock } from "@/lib/chat-page-context"
 
 export default function LessonPage() {
   const [course, setCourse] = useState<CourseWithProgress | null>(null)
@@ -48,6 +51,13 @@ export default function LessonPage() {
   const [showCompletion, setShowCompletion] = useState(false)
   const [streak, setStreak] = useState(0)
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const lessonScrollRef = useRef<HTMLElement | null>(null)
+  const observedFocus = useActiveFocusObserver(
+    lessonScrollRef,
+    !loading && !generating && !!lessonStream,
+    `${currentBlockIndex}-${lessonStream?.blocks.length ?? 0}`
+  )
+  const observedFocusId = observedFocus?.id ?? null
   const params = useParams()
   const router = useRouter()
   const { user } = useAuth()
@@ -560,10 +570,22 @@ export default function LessonPage() {
           return course.userProgress?.completedLessons?.includes(lessonId)
         }).length
 
+        const focus =
+          observedFocus ?? activeFocusFromLessonBlock(currentBlock as { type: string; content?: string; question?: string }, currentBlockIndex)
+
+        const chips =
+          currentBlock.type === "text"
+            ? ["Summarize this section", "Explain simply"]
+            : streak >= 3
+              ? ["Explain this activity", "Tips for my streak?"]
+              : ["Explain this activity", "What should I do here?"]
+
         setPageContext({
           title: `Studying: ${course.title} - ${module.title} - ${lesson.title}`,
           description: `The user is currently reading lesson "${lesson.title}" in module "${module.title}" of course "${course.title}".`,
-          data: {
+          activeFocus: focus,
+          suggestedChips: chips,
+          pageData: {
             courseId: course.id,
             courseTitle: course.title,
             courseDescription: course.description,
@@ -712,7 +734,7 @@ export default function LessonPage() {
         })
       }
     }
-  }, [course, lessonStream, currentBlockIndex, moduleIndex, lessonIndex, loading, generating, user, setPageContext])
+  }, [course, lessonStream, currentBlockIndex, moduleIndex, lessonIndex, loading, generating, user, setPageContext, observedFocusId, streak])
 
   if (generating) {
     return <LoadingScreen />
@@ -795,7 +817,7 @@ export default function LessonPage() {
         }
       />
 
-      <main className="flex-1 overflow-y-auto">
+      <main ref={lessonScrollRef} className="flex-1 overflow-y-auto">
         <header className="sticky top-0 z-30 hidden border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:block">
           <div className="mx-auto max-w-4xl px-4 py-4 lg:px-8">
             <div className="flex items-center justify-between">
@@ -843,12 +865,15 @@ export default function LessonPage() {
               if (isPastBlock) {
                 // Show previous blocks (read-only)
                 if (block.type === "text") {
+                  const content = (block as TextBlock).content
                   return (
-                    <Card key={index} className="opacity-60">
-                      <CardContent className="p-6">
-                        <MarkdownRenderer content={(block as TextBlock).content} />
-                      </CardContent>
-                    </Card>
+                    <NexusFocusRegion key={index} id={`block-${index}`} type="text-block" content={content}>
+                      <Card className="opacity-60">
+                        <CardContent className="p-6">
+                          <MarkdownRenderer content={content} />
+                        </CardContent>
+                      </Card>
+                    </NexusFocusRegion>
                   )
                 }
                 // Show completed interactions as read-only (keep them visible)
@@ -860,69 +885,72 @@ export default function LessonPage() {
 
               // Current block
               if (block.type === "text") {
+                const content = (block as TextBlock).content
                 return (
-                  <Card key={index} className="border-2 border-primary">
-                    <CardContent className="p-6">
-                      <MarkdownRenderer content={(block as TextBlock).content} />
-                      {canContinue && (
-                        <div className="mt-4">
-                          <Button onClick={handleContinue} className="w-full">
-                            Continue
-                          </Button>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                  <NexusFocusRegion key={index} id={`block-${index}`} type="text-block" content={content}>
+                    <Card className="border-2 border-primary">
+                      <CardContent className="p-6">
+                        <MarkdownRenderer content={content} />
+                        {canContinue && (
+                          <div className="mt-4">
+                            <Button onClick={handleContinue} className="w-full">
+                              Continue
+                            </Button>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </NexusFocusRegion>
                 )
               }
 
               // Interaction blocks
               const interaction = block as any
+              const focusContent = textFromLessonBlock(interaction)
+              const wrapInteraction = (node: ReactNode) => (
+                <NexusFocusRegion key={index} id={`block-${index}`} type="interaction" content={focusContent}>
+                  {node}
+                </NexusFocusRegion>
+              )
               switch (interaction.type) {
                 case "swipe":
-                  return (
+                  return wrapInteraction(
                     <SwipeInteractionComponent
-                      key={index}
                       interaction={interaction}
                       onComplete={(correct, data) => handleInteractionComplete(index, correct, data)}
                     />
                   )
                 case "reorder":
-                  return (
+                  return wrapInteraction(
                     <ReorderInteractionComponent
-                      key={index}
                       interaction={interaction}
                       onComplete={(correct, data) => handleInteractionComplete(index, correct, data)}
                     />
                   )
                 case "fill_blank":
-                  return (
+                  return wrapInteraction(
                     <FillBlankInteractionComponent
-                      key={index}
                       interaction={interaction}
                       onComplete={(correct, data) => handleInteractionComplete(index, correct, data)}
                     />
                   )
                 case "bug_hunter":
-                  return (
+                  return wrapInteraction(
                     <BugHunterInteractionComponent
-                      key={index}
                       interaction={interaction}
                       onComplete={(correct, data) => handleInteractionComplete(index, correct, data)}
                     />
                   )
                 case "matching":
-                  return (
+                  return wrapInteraction(
                     <MatchingInteractionComponent
-                      key={index}
                       interaction={interaction}
                       onComplete={(correct, data) => handleInteractionComplete(index, correct, data)}
                     />
                   )
                 case "chat_sim":
-                  return (
+                  return wrapInteraction(
                     <ChatSimInteractionComponent
-                      key={index}
                       interaction={interaction}
                       onComplete={(correct, data) => handleInteractionComplete(index, correct, data)}
                     />

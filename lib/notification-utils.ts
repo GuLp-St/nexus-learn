@@ -1,7 +1,29 @@
 import { db } from "./firebase"
-import { collection, doc, setDoc, getDoc, query, where, orderBy, limit, getDocs, updateDoc, serverTimestamp, Timestamp, onSnapshot, Unsubscribe } from "firebase/firestore"
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  writeBatch,
+  serverTimestamp,
+  Timestamp,
+  onSnapshot,
+  Unsubscribe,
+} from "firebase/firestore"
 
-export type NotificationType = "friend_request" | "challenge" | "challenge_result" | "xp_award"
+export type NotificationType =
+  | "friend_request"
+  | "challenge"
+  | "challenge_result"
+  | "xp_award"
+  | "quest_claimable"
 
 export interface Notification {
   id: string
@@ -29,6 +51,11 @@ export interface Notification {
     amount?: number
     source?: string
     newLevel?: number
+    // quest_claimable
+    questId?: string
+    questTitle?: string
+    xpReward?: number
+    nexonReward?: number
   }
   read: boolean
   createdAt: Timestamp
@@ -189,6 +216,33 @@ export async function markAllNotificationsAsRead(userId: string): Promise<void> 
     } else {
       console.error("Error marking all notifications as read:", error)
     }
+  }
+}
+
+/**
+ * Delete all notifications for a user
+ */
+export async function clearAllNotifications(userId: string): Promise<void> {
+  try {
+    const notificationsQuery = query(
+      collection(db, "notifications"),
+      where("userId", "==", userId),
+      limit(500)
+    )
+
+    let snapshot = await getDocs(notificationsQuery)
+
+    while (!snapshot.empty) {
+      const batch = writeBatch(db)
+      snapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref))
+      await batch.commit()
+
+      if (snapshot.size < 500) break
+      snapshot = await getDocs(notificationsQuery)
+    }
+  } catch (error) {
+    console.error("Error clearing notifications:", error)
+    throw new Error("Failed to clear notifications")
   }
 }
 

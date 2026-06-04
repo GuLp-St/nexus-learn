@@ -25,6 +25,10 @@ import { NexonIcon } from "@/components/ui/nexon-icon"
 import { getUserNexon, spendNexon } from "@/lib/nexon-utils"
 import { db } from "@/lib/firebase"
 import { doc, updateDoc } from "firebase/firestore"
+import {
+  getEffectiveModuleQuizScore,
+  isModuleQuizPassed,
+} from "@/lib/progress-display-utils"
 
 interface CourseRoadmapProps {
   course: CourseWithProgress
@@ -171,23 +175,17 @@ function ModuleLevelCard({
   const lastModule = course.userProgress.lastAccessedModule ?? 0
   const lastLesson = course.userProgress.lastAccessedLesson ?? 0
   
-  // Calculate module quiz score
-  const moduleAttempts = quizAttempts.filter(
-    (a) => a.quizType === "module" && a.moduleIndex === moduleIndex
+  const bestScore = getEffectiveModuleQuizScore(
+    course.userProgress?.moduleQuizScores,
+    moduleIndex,
+    quizAttempts
   )
-  const bestAttempt = moduleAttempts
-    .filter((a) => a.completedAt && !(a as any).abandoned)
-    .sort((a, b) => {
-      const aScore = a.maxScore > 0 ? (a.totalScore / a.maxScore) * 100 : 0
-      const bScore = b.maxScore > 0 ? (b.totalScore / b.maxScore) * 100 : 0
-      return bScore - aScore
-    })[0]
-  
-  const bestScore = bestAttempt && bestAttempt.maxScore > 0
-    ? Math.round((bestAttempt.totalScore / bestAttempt.maxScore) * 100)
-    : course.userProgress?.moduleQuizScores?.[moduleIndex.toString()]
-  
-  const isModulePassed = bestScore !== undefined && bestScore >= 50
+
+  const isModulePassed = isModuleQuizPassed(
+    course.userProgress?.moduleQuizScores,
+    moduleIndex,
+    quizAttempts
+  )
   
   // Check if all lessons in this module are completed
   const allLessonsCompleted = module.lessons.every((_, lessonIndex) => {
@@ -462,10 +460,14 @@ function ModuleLevelCard({
             
             const lessonId = `${moduleIndex}-${lessonIndex}`
             const isCompleted = completedLessons.has(lessonId)
-            const isCurrent = moduleIndex === lastModule && lessonIndex === lastLesson
             const isNext =
               nextLesson?.moduleIndex === moduleIndex &&
               nextLesson?.lessonIndex === lessonIndex &&
+              !isCompleted
+            const isCurrent =
+              !isNext &&
+              moduleIndex === lastModule &&
+              lessonIndex === lastLesson &&
               !isCompleted
             const prevLessonId = lessonIndex > 0 ? `${moduleIndex}-${lessonIndex - 1}` : null
             const isLockedLesson = prevLessonId ? !completedLessons.has(prevLessonId) : false
@@ -594,8 +596,8 @@ function ModuleLevelCard({
                   </div>
                 )}
                 
-                {/* Avatar on next (or current) node */}
-                {user && isActive && (isNext || isCurrent) && !isCompleted && (
+                {/* Avatar on the single "next" lesson only (avoids duplicate with stale lastAccessed) */}
+                {user && isActive && isNext && !isCompleted && (
                   <motion.div
                     className="absolute -top-10 left-1/2 -translate-x-1/2 z-30"
                     animate={{
@@ -1578,25 +1580,13 @@ export function CourseRoadmap({ course }: CourseRoadmapProps) {
 
 
   // Calculate module pass status
-  const modulePassStatus: boolean[] = []
-      for (let moduleIndex = 0; moduleIndex < course.modules.length; moduleIndex++) {
-    const moduleAttempts = quizAttempts.filter(
-      (a) => a.quizType === "module" && a.moduleIndex === moduleIndex
+  const modulePassStatus: boolean[] = course.modules.map((_, moduleIndex) =>
+    isModuleQuizPassed(
+      course.userProgress?.moduleQuizScores,
+      moduleIndex,
+      quizAttempts
     )
-          const bestAttempt = moduleAttempts
-      .filter((a) => a.completedAt && !(a as any).abandoned)
-            .sort((a, b) => {
-              const aScore = a.maxScore > 0 ? (a.totalScore / a.maxScore) * 100 : 0
-              const bScore = b.maxScore > 0 ? (b.totalScore / b.maxScore) * 100 : 0
-              return bScore - aScore
-            })[0]
-
-          const bestScore = bestAttempt && bestAttempt.maxScore > 0
-            ? Math.round((bestAttempt.totalScore / bestAttempt.maxScore) * 100)
-            : course.userProgress?.moduleQuizScores?.[moduleIndex.toString()]
-
-    modulePassStatus.push(bestScore !== undefined && bestScore >= 50)
-  }
+  )
   
   const allModulesPassed = modulePassStatus.every((passed) => passed)
 

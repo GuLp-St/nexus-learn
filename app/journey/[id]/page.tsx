@@ -13,6 +13,7 @@ import { useChatContext } from "@/context/ChatContext"
 import { getCourseWithProgress, CourseWithProgress } from "@/lib/course-utils"
 import { useActivityTracking } from "@/hooks/use-activity-tracking"
 import { CourseRoadmap } from "@/components/course-roadmap"
+import { AdminJourneyTools } from "@/components/admin/admin-journey-tools"
 
 
 export default function CourseContentPage() {
@@ -23,6 +24,12 @@ export default function CourseContentPage() {
   const { user } = useAuth()
   const { setPageContext } = useChatContext()
   const courseId = params.id as string
+
+  const refreshCourse = async () => {
+    if (!user) return
+    const updated = await getCourseWithProgress(courseId, user.uid)
+    if (updated) setCourse(updated)
+  }
 
   // Track activity on course page
   useActivityTracking({
@@ -245,6 +252,8 @@ export default function CourseContentPage() {
                 </div>
               </div>
             </div>
+
+            <AdminJourneyTools course={course} onUpdated={refreshCourse} />
 
             {/* Roadmap */}
             <div className="space-y-6">

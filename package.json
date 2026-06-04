@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "setup:ai": "npx tsx scripts/setup-ai-config.ts",
+    "grant-admin": "npx tsx scripts/grant-admin.ts",
     "firebase:login": "firebase login",
     "firebase:deploy": "firebase deploy --only firestore --project learn-nexus",
     "firebase:deploy:rules": "firebase deploy --only firestore:rules --project learn-nexus",

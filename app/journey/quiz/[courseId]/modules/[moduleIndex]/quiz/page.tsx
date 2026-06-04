@@ -74,6 +74,14 @@ export default function ModuleQuizPage() {
 
       const module = course.modules[moduleIndex]
 
+      const currentQ = questions[currentQuestionIndex]
+      const chips: string[] = []
+      if (!showResults && currentQ) {
+        chips.push("Give me a hint", "Help me understand this question")
+      } else if (showResults) {
+        chips.push("Explain what I got wrong", "How can I improve?")
+      }
+
       setPageContext({
         title: showResults && course
           ? `Module Quiz Results: ${course.title} - Module ${moduleIndex + 1} - ${scorePercentage}%`
@@ -83,7 +91,16 @@ export default function ModuleQuizPage() {
         description: showResults
           ? `The user just completed the module quiz for module ${moduleIndex + 1} of "${course.title}" with a score of ${scorePercentage}%.`
           : `The user is taking the module quiz for module ${moduleIndex + 1} of "${course.title}".`,
-        data: {
+        suggestedChips: chips,
+        activeFocus:
+          !showResults && currentQ
+            ? {
+                type: "quiz-question",
+                id: currentQ.questionId,
+                content: currentQ.question,
+              }
+            : null,
+        pageData: {
           courseId: course.id,
           courseTitle: course.title,
           courseDescription: course.description,
@@ -107,7 +124,6 @@ export default function ModuleQuizPage() {
                 type: question.type,
                 options: question.options,
                 userAnswer: userAnswer ?? "",
-                correctAnswer: question.correctAnswer,
                 isCorrect: score?.correct || false,
                 marks: score?.marks || 0,
                 feedback: score?.feedback,

@@ -52,12 +52,16 @@ Return ONLY valid JSON without markdown formatting, following this exact structu
       "objectiveType": "multiple-choice" | "true-false",
       "question": "Question text here",
       "options": ["Option 1", "Option 2", "Option 3", "Option 4"] (for multiple-choice) or ["True", "False"] (for true-false),
-      "correctAnswer": "Option 1" or 0 (for first option) or true/false (for true-false)
+      "correctAnswer": "Option 1" or 0 (for first option) or true/false (for true-false),
+      "hint": "A short nudge that does NOT name the correct option",
+      "conceptExplanation": "Background concept the student should understand (no answer key)"
     },
     {
       "type": "subjective",
       "question": "Question text here",
-      "suggestedAnswer": "A comprehensive answer that demonstrates good understanding of the concept"
+      "suggestedAnswer": "A comprehensive answer that demonstrates good understanding of the concept",
+      "hint": "How to approach the question without giving the full answer",
+      "conceptExplanation": "Key concepts to cover in a good answer"
     }
   ]
 }
@@ -113,6 +117,8 @@ Make sure the questions are educational, clear, and test actual understanding. R
             question: q.question,
             options: q.options || [],
             correctAnswer,
+            hint: q.hint,
+            conceptExplanation: q.conceptExplanation,
           }
         } else {
           return {
@@ -124,6 +130,8 @@ Make sure the questions are educational, clear, and test actual understanding. R
             type: "subjective",
             question: q.question,
             suggestedAnswer: q.suggestedAnswer || "",
+            hint: q.hint,
+            conceptExplanation: q.conceptExplanation,
           }
         }
       })
@@ -341,6 +349,8 @@ Return ONLY valid JSON without markdown formatting, following this exact structu
       options: q.options,
       correctAnswer: q.correctAnswer,
       suggestedAnswer: q.suggestedAnswer,
+      hint: q.hint,
+      conceptExplanation: q.conceptExplanation,
       rubric: q.rubric,
       sourceFactId: q.sourceFactId,
       sourceFactIds: q.sourceFactIds,
@@ -536,6 +546,8 @@ Return ONLY valid JSON without markdown formatting, following this exact structu
         options: q.options,
         correctAnswer: q.correctAnswer,
         suggestedAnswer: q.suggestedAnswer,
+        hint: q.hint,
+        conceptExplanation: q.conceptExplanation,
         rubric: q.rubric,
         sourceFactId: q.sourceFactId,
         sourceFactIds: q.sourceFactIds,
