@@ -122,6 +122,49 @@ export async function testCloudflareCredential(
 
     if (imageModel?.trim()) {
       const model = imageModel.trim()
+
+      if (model.startsWith("google/")) {
+        const runRes = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${account}/ai/run`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model,
+              input: {
+                prompt: "solid blue",
+                aspect_ratio: "1:1",
+                output_format: "png",
+              },
+            }),
+            signal: AbortSignal.timeout(45_000),
+          }
+        )
+
+        if (!runRes.ok) {
+          const errText = await runRes.text()
+          if (runRes.status === 429) {
+            return {
+              ok: true,
+              message: "Credential valid; image model rate limited",
+              detail: errText.slice(0, 200),
+            }
+          }
+          return {
+            ok: false,
+            message: `Image model "${model}" failed`,
+            detail: errText.slice(0, 300),
+          }
+        }
+        return {
+          ok: true,
+          message: `Credential and model "${model}" work`,
+        }
+      }
+
       const runRes = await fetch(
         `https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${model}`,
         {

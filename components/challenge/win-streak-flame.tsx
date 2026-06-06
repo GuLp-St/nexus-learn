@@ -39,10 +39,11 @@ const tierStyles: Record<Exclude<WinStreakTier, "none">, { icon: string; glow: s
 interface WinStreakFlameProps {
   streak: number
   showZero?: boolean
+  compact?: boolean
   className?: string
 }
 
-export function WinStreakFlame({ streak, showZero = false, className }: WinStreakFlameProps) {
+export function WinStreakFlame({ streak, showZero = false, compact = false, className }: WinStreakFlameProps) {
   const tier = getWinStreakTier(streak)
   if (tier === "none" && !showZero) {
     return <span className={cn("text-sm text-muted-foreground", className)}>—</span>
@@ -52,10 +53,22 @@ export function WinStreakFlame({ streak, showZero = false, className }: WinStrea
   }
 
   const style = tierStyles[tier]
+  const iconClass = compact
+    ? tier === "legend"
+      ? "h-5 w-5"
+      : tier === "big"
+        ? "h-4 w-4"
+        : "h-3.5 w-3.5"
+    : style.icon
+  const glowClass = compact
+    ? tier === "legend"
+      ? "text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]"
+      : style.glow.replace(/18px|14px|10px|6px/, "6px")
+    : style.glow
   return (
-    <span className={cn("inline-flex items-center gap-1 font-bold", className)}>
-      <Flame className={cn(style.icon, style.glow, style.animate)} />
-      <span className={tier === "legend" ? "text-lg" : tier === "big" ? "text-base" : "text-sm"}>
+    <span className={cn("inline-flex items-center gap-0.5 font-bold", className)}>
+      <Flame className={cn(iconClass, glowClass, compact ? "animate-pulse" : style.animate)} />
+      <span className={compact ? "text-sm" : tier === "legend" ? "text-lg" : tier === "big" ? "text-base" : "text-sm"}>
         {streak}
       </span>
     </span>

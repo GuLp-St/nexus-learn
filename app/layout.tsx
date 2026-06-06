@@ -12,6 +12,7 @@ import { XPContextProvider } from "@/components/xp-context-provider"
 import { QuestInitializer } from "@/components/quest-initializer"
 import { NexonToastHandler } from "@/components/nexon-toast-handler"
 import { LevelUpModalWrapper } from "@/components/level-up-modal-wrapper"
+import { ImpersonationBanner } from "@/components/impersonation-banner"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
@@ -76,6 +77,7 @@ export default function RootLayout({
                 <QuestInitializer />
                 <NexonToastHandler />
                 <LevelUpModalWrapper />
+                <ImpersonationBanner />
                 {children}
                 <ChatbotOverlay />
               </ChatContextProvider>

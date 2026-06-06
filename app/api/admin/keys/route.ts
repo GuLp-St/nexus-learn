@@ -9,7 +9,7 @@ import { invalidateCloudflareConfigCache } from "@/lib/cloudflare-keys"
 
 export const runtime = "nodejs"
 
-type CloudflareAccount = { accountId: string; apiToken: string }
+type CloudflareAccount = { accountId: string; apiToken: string; note?: string }
 
 function maskSecret(value: string): string {
   if (value.length <= 8) return "••••••••"
@@ -20,6 +20,12 @@ function parseGeminiKeys(data: Record<string, unknown>): string[] {
   const raw = data.geminiApiKeys
   if (!Array.isArray(raw)) return []
   return raw.filter((k): k is string => typeof k === "string" && k.trim().length > 0)
+}
+
+function parseGeminiKeyNotes(data: Record<string, unknown>): string[] {
+  const raw = data.geminiKeyNotes
+  if (!Array.isArray(raw)) return []
+  return raw.map((n) => (typeof n === "string" ? n : ""))
 }
 
 function parseCloudflareAccounts(data: Record<string, unknown>): CloudflareAccount[] {
@@ -38,6 +44,7 @@ function parseCloudflareAccounts(data: Record<string, unknown>): CloudflareAccou
     .map((a) => ({
       accountId: a.accountId.trim(),
       apiToken: a.apiToken.trim(),
+      note: typeof a.note === "string" ? a.note : "",
     }))
 }
 
@@ -61,6 +68,7 @@ export async function GET(request: NextRequest) {
     const data = snap.exists ? snap.data()! : {}
 
     const geminiKeys = parseGeminiKeys(data)
+    const geminiKeyNotes = parseGeminiKeyNotes(data)
     const cloudflareAccounts = parseCloudflareAccounts(data)
     const today = new Date().toISOString().slice(0, 10)
 
@@ -83,6 +91,7 @@ export async function GET(request: NextRequest) {
         keys: geminiKeys.map((key, index) => ({
           index,
           masked: maskSecret(key),
+          note: geminiKeyNotes[index] ?? "",
           ...usageForIndex(geminiUsage, index, today),
         })),
         model: data.geminiModel ?? null,
@@ -95,6 +104,7 @@ export async function GET(request: NextRequest) {
           index,
           maskedAccountId: maskSecret(acc.accountId),
           maskedToken: maskSecret(acc.apiToken),
+          note: acc.note ?? "",
           ...usageForIndex(cloudflareUsage, index, today),
         })),
         imageModel: data.cloudflareImageModel ?? null,
@@ -143,9 +153,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Credential already exists" }, { status: 400 })
       }
 
+      const note = typeof body.note === "string" ? body.note.trim() : ""
+
       await ref.set(
         {
-          cloudflareAccounts: [...existing, { accountId, apiToken }],
+          cloudflareAccounts: [...existing, { accountId, apiToken, note }],
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true }
@@ -191,6 +203,8 @@ export async function PATCH(request: NextRequest) {
 
     const db = getAdminFirestore()
     const ref = db.collection("config").doc("ai")
+    const snap = await ref.get()
+    const data = snap.exists ? snap.data()! : {}
     const updates: Record<string, unknown> = {
       updatedAt: FieldValue.serverTimestamp(),
     }
@@ -198,10 +212,23 @@ export async function PATCH(request: NextRequest) {
     if (provider === "gemini") {
       if (typeof body.geminiModel === "string") {
         updates.geminiModel = body.geminiModel.trim() || null
+        await ref.set(updates, { merge: true })
+        invalidateGeminiModelCache()
+        return NextResponse.json({ success: true })
       }
-      await ref.set(updates, { merge: true })
-      invalidateGeminiModelCache()
-      return NextResponse.json({ success: true })
+      if (typeof body.index === "number" && typeof body.note === "string") {
+        const existing = parseGeminiKeys(data)
+        if (body.index < 0 || body.index >= existing.length) {
+          return NextResponse.json({ error: "Index out of range" }, { status: 400 })
+        }
+        const notes = parseGeminiKeyNotes(data)
+        while (notes.length < existing.length) notes.push("")
+        notes[body.index] = body.note.trim()
+        updates.geminiKeyNotes = notes
+        await ref.set(updates, { merge: true })
+        return NextResponse.json({ success: true })
+      }
+      return NextResponse.json({ error: "Nothing to update" }, { status: 400 })
     }
 
     if (provider === "cloudflare") {
@@ -211,6 +238,19 @@ export async function PATCH(request: NextRequest) {
       if (typeof body.cloudflareImageModelFallback === "string") {
         updates.cloudflareImageModelFallback =
           body.cloudflareImageModelFallback.trim() || null
+      }
+      if (typeof body.index === "number" && typeof body.note === "string") {
+        const existing = parseCloudflareAccounts(data)
+        if (body.index < 0 || body.index >= existing.length) {
+          return NextResponse.json({ error: "Index out of range" }, { status: 400 })
+        }
+        const updated = existing.map((acc, i) =>
+          i === body.index ? { ...acc, note: body.note.trim() } : acc
+        )
+        updates.cloudflareAccounts = updated
+      }
+      if (Object.keys(updates).length <= 1) {
+        return NextResponse.json({ error: "Nothing to update" }, { status: 400 })
       }
       await ref.set(updates, { merge: true })
       invalidateCloudflareConfigCache()
@@ -264,9 +304,11 @@ export async function DELETE(request: NextRequest) {
     }
 
     const updated = existing.filter((_, i) => i !== index)
+    const notes = parseGeminiKeyNotes(data).filter((_, i) => i !== index)
     await ref.set(
       {
         geminiApiKeys: updated,
+        geminiKeyNotes: notes,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }

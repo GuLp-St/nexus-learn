@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Globe, Trash2, EyeOff, Pencil } from "lucide-react"
 import SidebarNav from "@/components/sidebar-nav"
 import { AdminGuard } from "@/components/admin/admin-guard"
+import { UniversalImagePicker } from "@/components/universal-image-picker"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,6 +21,12 @@ import {
 import { adminJson } from "@/lib/admin-api-client"
 import { toast } from "sonner"
 
+type ImageConfig = {
+  fit: "cover" | "contain"
+  position: { x: number; y: number }
+  scale: number
+}
+
 type PublicCourse = {
   id: string
   title: string
@@ -28,10 +35,17 @@ type PublicCourse = {
   tags: string[]
   imageUrl: string | null
   imageKey: string | null
+  imageConfig: ImageConfig | null
   averageRating: number
   ratingCount: number
   addedCount: number
   publishedAt: number | null
+}
+
+const DEFAULT_IMAGE_CONFIG: ImageConfig = {
+  fit: "cover",
+  position: { x: 50, y: 50 },
+  scale: 1,
 }
 
 export default function AdminCoursesPage() {
@@ -42,6 +56,8 @@ export default function AdminCoursesPage() {
   const [editDesc, setEditDesc] = useState("")
   const [editTags, setEditTags] = useState("")
   const [editImageUrl, setEditImageUrl] = useState("")
+  const [editImageKey, setEditImageKey] = useState<string | undefined>()
+  const [editImageConfig, setEditImageConfig] = useState<ImageConfig>(DEFAULT_IMAGE_CONFIG)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -67,6 +83,8 @@ export default function AdminCoursesPage() {
     setEditDesc(c.description)
     setEditTags((c.tags ?? []).join(", "))
     setEditImageUrl(c.imageUrl ?? "")
+    setEditImageKey(c.imageKey ?? undefined)
+    setEditImageConfig(c.imageConfig ?? DEFAULT_IMAGE_CONFIG)
   }
 
   const unpublish = async (courseId: string) => {
@@ -95,6 +113,8 @@ export default function AdminCoursesPage() {
           description: editDesc,
           tags: editTags,
           imageUrl: editImageUrl,
+          imageKey: editImageKey ?? null,
+          imageConfig: editImageConfig,
         },
       })
       toast.success("Course updated")
@@ -126,14 +146,14 @@ export default function AdminCoursesPage() {
 
   return (
     <AdminGuard>
-      <div className="flex min-h-screen bg-background">
+      <div className="flex flex-col min-h-screen bg-background lg:flex-row">
         <SidebarNav currentPath="/admin/courses" title="Admin — Courses" />
         <main className="flex-1 overflow-auto p-4 lg:p-8">
           <div className="mx-auto max-w-4xl space-y-6">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Community courses</h1>
               <p className="text-muted-foreground text-sm mt-1">
-                Edit title, description, tags, cover image, unpublish, or delete.
+                Edit metadata, tags, cover (upload / AI / Unsplash), unpublish, or delete.
               </p>
             </div>
 
@@ -151,12 +171,16 @@ export default function AdminCoursesPage() {
                     key={c.id}
                     className="rounded-lg border border-border p-4 space-y-2"
                   >
-                    <div className="flex gap-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
                       {c.imageUrl ? (
                         <img
                           src={c.imageUrl}
                           alt=""
                           className="h-20 w-32 rounded-md object-cover shrink-0 border border-border"
+                          style={{
+                            objectFit: c.imageConfig?.fit ?? "cover",
+                            transform: `scale(${c.imageConfig?.scale ?? 1})`,
+                          }}
                         />
                       ) : (
                         <div className="h-20 w-32 rounded-md bg-muted shrink-0 flex items-center justify-center text-xs text-muted-foreground">
@@ -216,11 +240,11 @@ export default function AdminCoursesPage() {
       </div>
 
       <Dialog open={!!editCourse} onOpenChange={(o) => !o && setEditCourse(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit community course</DialogTitle>
             <DialogDescription>
-              Tags are comma-separated. Cover URL is shown in the community library.
+              Tags are comma-separated. Upload, generate AI, or pick from Unsplash for the cover.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -253,21 +277,24 @@ export default function AdminCoursesPage() {
               />
             </div>
             <div>
-              <Label htmlFor="course-cover">Cover image URL</Label>
-              <Input
-                id="course-cover"
-                placeholder="https://…"
-                value={editImageUrl}
-                onChange={(e) => setEditImageUrl(e.target.value)}
-                className="mt-1 font-mono text-sm"
-              />
-              {editImageUrl && (
-                <img
-                  src={editImageUrl}
-                  alt="Cover preview"
-                  className="mt-2 h-24 w-full rounded-md object-cover border border-border"
+              <Label>Cover image</Label>
+              <div className="mt-2">
+                <UniversalImagePicker
+                  value={editImageUrl}
+                  imageKey={editImageKey}
+                  initialKey={editCourse?.imageKey ?? undefined}
+                  routeSlug="courseImage"
+                  allowedModes={["upload", "ai", "unsplash"]}
+                  initialObjectFit={editImageConfig.fit}
+                  initialPosition={editImageConfig.position}
+                  initialScale={editImageConfig.scale}
+                  onChange={(url, key, config) => {
+                    setEditImageUrl(url)
+                    if (key) setEditImageKey(key)
+                    if (config) setEditImageConfig(config)
+                  }}
                 />
-              )}
+              </div>
             </div>
           </div>
           <DialogFooter>

@@ -281,24 +281,25 @@ export default function LeaderboardPage() {
                       return (
                         <div
                           key={leaderboardUser.userId}
-                          className={`flex items-center gap-4 p-4 transition-colors sm:gap-6 sm:p-5 ${
+                          className={`flex flex-col gap-2 p-3 transition-colors sm:flex-row sm:items-center sm:gap-4 sm:p-5 lg:gap-6 ${
                             isMe ? "bg-primary/10" : "hover:bg-accent/50"
                           }`}
                         >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
                           {/* Rank */}
-                          <div className="flex w-12 items-center justify-center">
+                          <div className="flex w-10 sm:w-12 items-center justify-center shrink-0">
                             {getRankIcon(leaderboardUser.rank) || (
                               <span className="text-xl font-bold text-muted-foreground">#{leaderboardUser.rank}</span>
                             )}
                           </div>
 
                           {/* Avatar */}
-                          <div className="relative h-16 w-16 flex items-center justify-center">
+                          <div className="relative h-12 w-12 sm:h-16 sm:w-16 flex items-center justify-center shrink-0">
                             {/* Glitch ring (full circle) or regular SVG ring */}
                             {leaderboardUser.avatarFrame === "frame-nexus-glitch" ? (
                               <div className="glitch-ring-full" />
                             ) : (
-                              <svg className="absolute inset-0 h-16 w-16 -rotate-90 transform" viewBox="0 0 64 64">
+                              <svg className="absolute inset-0 h-12 w-12 sm:h-16 sm:w-16 -rotate-90 transform" viewBox="0 0 64 64">
                                 <circle
                                   cx="32"
                                   cy="32"
@@ -319,11 +320,11 @@ export default function LeaderboardPage() {
                               refreshKey={0}
                               avatarSeed={leaderboardUser.avatarSeed}
                             />
-                            {renderStructuralXPFrame(leaderboardUser.avatarFrame, 64)}
+                            {renderStructuralXPFrame(leaderboardUser.avatarFrame, 48)}
                           </div>
 
                           {/* Username */}
-                          <div className="flex-1">
+                          <div className="flex-1 min-w-0">
                             {isMe ? (
                               <p className="font-semibold text-primary">You</p>
                             ) : (
@@ -339,31 +340,33 @@ export default function LeaderboardPage() {
                             )}
                             {isMe && <p className="text-xs text-primary">My Rank</p>}
                           </div>
+                          </div>
 
                           {/* XP Points and Challenge Wins */}
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center justify-around sm:justify-end gap-3 sm:gap-4 shrink-0 pl-0 sm:pl-0">
                             <div 
-                              className="text-right cursor-pointer hover:opacity-80 transition-opacity"
+                              className="text-center sm:text-right cursor-pointer hover:opacity-80 transition-opacity min-w-[3.5rem]"
                               onClick={() => {
                                 setSelectedUserId(leaderboardUser.userId)
                                 setXpHistoryOpen(true)
                               }}
                             >
-                              <p className={`text-lg font-bold ${isMe ? "text-primary" : "text-foreground"}`}>
+                              <p className={`text-base sm:text-lg font-bold ${isMe ? "text-primary" : "text-foreground"}`}>
                                 {leaderboardUser.xp.toLocaleString()}
                               </p>
                               <p className="text-xs text-muted-foreground">XP</p>
                             </div>
-                            <div className="text-right">
-                              <p className={`text-lg font-bold ${isMe ? "text-primary" : "text-foreground"}`}>
+                            <div className="text-center sm:text-right min-w-[3rem]">
+                              <p className={`text-base sm:text-lg font-bold ${isMe ? "text-primary" : "text-foreground"}`}>
                                 {leaderboardUser.challengeWins || 0}
                               </p>
                               <p className="text-xs text-muted-foreground">Wins</p>
                             </div>
-                            <div className="text-right min-w-[72px]">
+                            <div className="text-center sm:text-right min-w-[3.5rem] overflow-visible">
                               <WinStreakFlame
                                 streak={leaderboardUser.challengeWinStreak || 0}
-                                className={isMe ? "justify-end" : ""}
+                                compact
+                                className={isMe ? "justify-center sm:justify-end" : "justify-center sm:justify-end"}
                               />
                               <p className="text-xs text-muted-foreground">Streak</p>
                             </div>

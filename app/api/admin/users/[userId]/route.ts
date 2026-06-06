@@ -21,6 +21,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const data = userSnap.data()!
+
+    const questSnap = await db.collection("dailyQuests").doc(userId).get()
+    const questData = questSnap.exists ? questSnap.data() : null
+
     const progressSnap = await db
       .collection("userCourseProgress")
       .where("userId", "==", userId)
@@ -66,6 +70,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
         role: data.role ?? null,
         level: data.level ?? null,
         createdAt: data.createdAt?.toMillis?.() ?? null,
+        questRefreshTokens:
+          typeof questData?.refreshTokens === "number" ? questData.refreshTokens : null,
       },
       courses,
     })
@@ -97,6 +103,27 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
     if (typeof body.nickname === "string" && body.nickname.trim()) {
       updates.nickname = body.nickname.trim()
+    }
+    if (typeof body.questRefreshTokens === "number") {
+      const tokens = Math.max(0, Math.min(3, Math.floor(body.questRefreshTokens)))
+      const questRef = db.collection("dailyQuests").doc(userId)
+      const questSnap = await questRef.get()
+      if (questSnap.exists) {
+        await questRef.update({
+          refreshTokens: tokens,
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+      } else {
+        const today = new Date().toISOString().slice(0, 10)
+        await questRef.set({
+          userId,
+          quests: [],
+          lastResetDate: today,
+          refreshTokens: tokens,
+          lastRefreshTokenReset: today,
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+      }
     }
     if (body.role === "admin" || body.role === "user" || body.role === null) {
       if (body.role === "admin") {

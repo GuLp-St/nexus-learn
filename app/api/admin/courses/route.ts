@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
         tags: data.tags ?? [],
         imageUrl: data.imageUrl ?? null,
         imageKey: data.imageKey ?? null,
+        imageConfig: data.imageConfig ?? null,
         averageRating: data.averageRating ?? 0,
         ratingCount: data.ratingCount ?? 0,
         addedCount: data.addedCount ?? 0,
@@ -100,6 +101,21 @@ export async function PATCH(request: NextRequest) {
       }
       if (typeof body.imageKey === "string") {
         updates.imageKey = body.imageKey.trim() || null
+      }
+      if (body.imageConfig && typeof body.imageConfig === "object") {
+        const cfg = body.imageConfig as {
+          fit?: string
+          position?: { x?: number; y?: number }
+          scale?: number
+        }
+        updates.imageConfig = {
+          fit: cfg.fit === "contain" ? "contain" : "cover",
+          position: {
+            x: typeof cfg.position?.x === "number" ? cfg.position.x : 50,
+            y: typeof cfg.position?.y === "number" ? cfg.position.y : 50,
+          },
+          scale: typeof cfg.scale === "number" ? cfg.scale : 1,
+        }
       }
       await courseRef.update(updates)
       return NextResponse.json({ success: true })

@@ -398,14 +398,14 @@ function ModuleLevelCard({
       {/* Content wrapper with blur when locked */}
       <div className={`${isLocked ? "blur-sm opacity-60 pointer-events-none" : ""} pb-4`}>
         {/* Module Header */}
-        <div className="mb-4 flex items-center justify-between">
-          <div>
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h3 className="text-xl font-bold text-foreground">Module {moduleIndex + 1}</h3>
-            <p className="text-sm text-muted-foreground">{module.title}</p>
+            <p className="text-sm text-muted-foreground truncate">{module.title}</p>
           </div>
           {bestScore !== undefined && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Best Score:</span>
+            <div className="flex items-center gap-2 shrink-0 text-sm sm:text-base">
+              <span className="text-muted-foreground">Best Score:</span>
               <span
                 className={`text-lg font-bold ${
                   bestScore >= 95 ? "text-yellow-500" : bestScore >= 85 ? "text-blue-500" : "text-green-500"

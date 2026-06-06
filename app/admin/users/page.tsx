@@ -1,12 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Search, Shield, Trash2, UserCog, Zap, Coins, BookOpen } from "lucide-react"
+import { Search, Shield, Trash2, UserCog, Zap, Coins, BookOpen, VenetianMask, RefreshCw } from "lucide-react"
 import {
   AdminCourseProgressControls,
   type AdminCourseProgress,
 } from "@/components/admin/admin-course-progress-controls"
 import { AdminUserExtrasPanel } from "@/components/admin/admin-user-extras-panel"
+import { startImpersonation } from "@/lib/admin-impersonation-client"
 import SidebarNav from "@/components/sidebar-nav"
 import { AdminGuard } from "@/components/admin/admin-guard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -46,8 +47,10 @@ export default function AdminUsersPage() {
   const [courses, setCourses] = useState<UserCourse[]>([])
   const [editXp, setEditXp] = useState("")
   const [editNexon, setEditNexon] = useState("")
+  const [editQuestTokens, setEditQuestTokens] = useState("3")
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [impersonating, setImpersonating] = useState(false)
 
   const loadUsers = useCallback(async () => {
     setLoading(true)
@@ -70,11 +73,17 @@ export default function AdminUsersPage() {
     setSelectedId(userId)
     setDetailLoading(true)
     try {
-      const data = await adminJson<{ user: UserRow; courses: UserCourse[] }>(
+      const data = await adminJson<{
+        user: UserRow & { questRefreshTokens?: number | null }
+        courses: UserCourse[]
+      }>(
         `/api/admin/users/${userId}`
       )
       setEditXp(String(data.user.xp))
       setEditNexon(String(data.user.nexon))
+      setEditQuestTokens(
+        data.user.questRefreshTokens != null ? String(data.user.questRefreshTokens) : "3"
+      )
       setCourses(data.courses)
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, ...data.user } : u))
@@ -97,10 +106,32 @@ export default function AdminUsersPage() {
           nexon: parseInt(editNexon, 10),
         },
       })
-      toast.success("User updated")
+      toast.success("Balances updated")
       await loadDetail(selectedId)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Update failed")
+      toast.error(e instanceof Error ? e.message : "Failed to save")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveQuestTokens = async () => {
+    if (!selectedId) return
+    const tokens = parseInt(editQuestTokens, 10)
+    if (Number.isNaN(tokens) || tokens < 0 || tokens > 3) {
+      toast.error("Quest refresh tokens must be 0–3")
+      return
+    }
+    setSaving(true)
+    try {
+      await adminJson(`/api/admin/users/${selectedId}`, {
+        method: "PATCH",
+        body: { questRefreshTokens: tokens },
+      })
+      toast.success("Quest refresh tokens updated")
+      await loadDetail(selectedId)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save")
     } finally {
       setSaving(false)
     }
@@ -126,6 +157,17 @@ export default function AdminUsersPage() {
     }
   }
 
+  const handleImpersonate = async () => {
+    if (!selectedId) return
+    setImpersonating(true)
+    try {
+      await startImpersonation(selectedId)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impersonation failed")
+      setImpersonating(false)
+    }
+  }
+
   const deleteUser = async () => {
     if (!selectedId) return
     setSaving(true)
@@ -146,7 +188,7 @@ export default function AdminUsersPage() {
 
   return (
     <AdminGuard>
-      <div className="flex min-h-screen bg-background">
+      <div className="flex flex-col min-h-screen bg-background lg:flex-row">
         <SidebarNav currentPath="/admin/users" title="Admin — Users" />
         <main className="flex-1 overflow-auto p-4 lg:p-8">
           <div className="mx-auto max-w-6xl space-y-6">
@@ -231,7 +273,7 @@ export default function AdminUsersPage() {
                     <div className="space-y-6">
                       <p className="text-xs font-mono text-muted-foreground break-all">{selected.id}</p>
 
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                           <Label htmlFor="admin-xp" className="flex items-center gap-1">
                             <Zap className="h-3.5 w-3.5" /> XP
@@ -258,6 +300,26 @@ export default function AdminUsersPage() {
                         </div>
                       </div>
 
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                        <div className="flex-1">
+                          <Label htmlFor="admin-quest-tokens" className="flex items-center gap-1">
+                            <RefreshCw className="h-3.5 w-3.5" /> Quest refresh tokens (0–3)
+                          </Label>
+                          <Input
+                            id="admin-quest-tokens"
+                            type="number"
+                            min={0}
+                            max={3}
+                            value={editQuestTokens}
+                            onChange={(e) => setEditQuestTokens(e.target.value)}
+                            className="mt-1"
+                          />
+                        </div>
+                        <Button variant="outline" onClick={saveQuestTokens} disabled={saving}>
+                          Save tokens
+                        </Button>
+                      </div>
+
                       <div className="flex flex-wrap gap-2">
                         <Button onClick={saveBalances} disabled={saving}>
                           <Coins className="h-4 w-4 mr-2" />
@@ -267,6 +329,16 @@ export default function AdminUsersPage() {
                           <Shield className="h-4 w-4 mr-2" />
                           {selected.role === "admin" ? "Remove admin" : "Make admin"}
                         </Button>
+                        {selected.role !== "admin" && (
+                          <Button
+                            variant="outline"
+                            onClick={handleImpersonate}
+                            disabled={saving || impersonating}
+                          >
+                            <VenetianMask className="h-4 w-4 mr-2" />
+                            {impersonating ? "Starting…" : "Impersonate"}
+                          </Button>
+                        )}
                         <Button
                           variant="destructive"
                           onClick={() => setDeleteOpen(true)}

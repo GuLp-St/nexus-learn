@@ -1,4 +1,5 @@
 import { auth } from "./firebase"
+import { getImpersonationAdminToken } from "./impersonation-client"
 
 export class AdminApiError extends Error {
   status: number
@@ -21,7 +22,9 @@ export async function adminFetch(path: string, init?: AdminFetchInit): Promise<R
     throw new AdminApiError("Not signed in", 401)
   }
 
-  const token = await user.getIdToken()
+  // Use stored admin token while impersonating (current user is the target, not admin)
+  const impersonationToken = getImpersonationAdminToken()
+  const token = impersonationToken ?? (await user.getIdToken())
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     ...(init?.headers as Record<string, string> | undefined),
@@ -45,10 +48,14 @@ export async function adminJson<T>(path: string, init?: AdminFetchInit): Promise
   const res = await adminFetch(path, init)
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new AdminApiError(
-      (data as { error?: string }).error || res.statusText || "Request failed",
-      res.status
-    )
+    const errMsg = (data as { error?: string }).error
+    const fallback =
+      res.status === 401
+        ? "Not authorized — sign in again as admin"
+        : res.status === 403
+          ? "Admin access required"
+          : res.statusText || "Request failed"
+    throw new AdminApiError(errMsg || fallback, res.status)
   }
   return data as T
 }

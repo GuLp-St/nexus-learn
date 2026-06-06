@@ -10,6 +10,7 @@ import { useSocialNotifications } from "@/hooks/use-social-notifications"
 import { useClaimableQuestCount } from "@/hooks/use-claimable-quests"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/components/auth-provider"
+import { HoldToLogoutButton } from "@/components/hold-to-logout-button"
 import {
   Dialog,
   DialogContent,
@@ -76,12 +77,13 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
 
       {/* Mobile Header */}
       <header className="sticky top-0 z-30 flex h-16 w-full items-center border-b border-border bg-background px-4 lg:hidden shrink-0">
-        {leftAction || (
-          <Button variant="ghost" size="icon-sm" onClick={() => setSidebarOpen(true)}>
+        <div className="flex items-center shrink-0">
+          {leftAction}
+          <Button variant="ghost" size="icon-sm" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" />
           </Button>
-        )}
-        <div className="ml-3 flex items-center gap-2 overflow-hidden">
+        </div>
+        <div className="ml-2 flex items-center gap-2 overflow-hidden min-w-0 flex-1">
           <img src="/icon.svg" alt="Nexon" className="h-7 w-7 shrink-0 object-contain" />
           <h1 className="text-lg font-semibold text-foreground truncate leading-none flex items-center">{title}</h1>
         </div>
@@ -195,15 +197,13 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
           <DialogHeader>
             <DialogTitle>Confirm Logout</DialogTitle>
             <DialogDescription>
-              Are you sure you want to log out of your account? Your current session will be ended.
+              Press and hold the button below for 3 seconds to end your session.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="ghost" onClick={() => setLogoutDialogOpen(false)} disabled={isLoggingOut}>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <HoldToLogoutButton disabled={isLoggingOut} onConfirm={handleLogout} />
+            <Button variant="ghost" onClick={() => setLogoutDialogOpen(false)} disabled={isLoggingOut} className="w-full">
               Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleLogout} disabled={isLoggingOut}>
-              {isLoggingOut ? "Logging out..." : "Log Out"}
             </Button>
           </DialogFooter>
         </DialogContent>

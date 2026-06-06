@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/components/auth-provider"
+import { resetCosmeticTheme } from "@/lib/cosmetic-theme-reset"
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState<"signin" | "signup">("signin")
@@ -20,6 +21,13 @@ export default function AuthPage() {
   const [error, setError] = useState("")
   const router = useRouter()
   const { user, loading } = useAuth()
+
+  // Reset cosmetic theme on auth page (no user theme on sign-in/register)
+  useEffect(() => {
+    if (!loading && !user) {
+      resetCosmeticTheme()
+    }
+  }, [user, loading])
 
   // Redirect if already logged in
   useEffect(() => {

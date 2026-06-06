@@ -353,14 +353,14 @@ export default function CreateCourseUnified() {
   const uploadPreset = DIFFICULTY_STRUCTURE[uploadDifficulty]
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex flex-col min-h-screen bg-background lg:flex-row">
       <SidebarNav title="Create Course" />
 
       <main className="flex-1 min-w-0">
         <div className="p-4 lg:p-8">
           <div className="mx-auto max-w-4xl space-y-6">
             <div className="space-y-2">
-              <h1 className="text-3xl font-bold tracking-tight">Create Your Course</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Create Your Course</h1>
               <p className="text-muted-foreground">
                 Generate from a topic, upload your materials, or browse the community library — all
                 in one place.

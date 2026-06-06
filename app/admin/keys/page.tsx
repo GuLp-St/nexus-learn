@@ -15,6 +15,7 @@ import { toast } from "sonner"
 type KeyStat = {
   index: number
   masked: string
+  note?: string
   todayRequests: number
   todayRateLimits: number
 }
@@ -23,6 +24,7 @@ type CloudflareStat = {
   index: number
   maskedAccountId: string
   maskedToken: string
+  note?: string
   todayRequests: number
   todayRateLimits: number
 }
@@ -59,6 +61,7 @@ export default function AdminKeysPage() {
   const [geminiModel, setGeminiModel] = useState("")
   const [cfAccountId, setCfAccountId] = useState("")
   const [cfApiToken, setCfApiToken] = useState("")
+  const [cfNote, setCfNote] = useState("")
   const [cfImageModel, setCfImageModel] = useState("")
   const [cfImageModelFallback, setCfImageModelFallback] = useState("")
   const [adding, setAdding] = useState(false)
@@ -298,10 +301,12 @@ export default function AdminKeysPage() {
           provider: "cloudflare",
           accountId: cfAccountId.trim(),
           apiToken: cfApiToken.trim(),
+          note: cfNote.trim(),
         },
       })
       setCfAccountId("")
       setCfApiToken("")
+      setCfNote("")
       setCfNewTest("idle")
       setCfNewTestMsg(null)
       toast.success("Cloudflare credential added")
@@ -310,6 +315,30 @@ export default function AdminKeysPage() {
       toast.error(e instanceof Error ? e.message : "Failed to add credential")
     } finally {
       setAdding(false)
+    }
+  }
+
+  const saveGeminiNote = async (index: number, note: string) => {
+    try {
+      await adminJson("/api/admin/keys", {
+        method: "PATCH",
+        body: { provider: "gemini", index, note },
+      })
+      await load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save note")
+    }
+  }
+
+  const saveCloudflareNote = async (index: number, note: string) => {
+    try {
+      await adminJson("/api/admin/keys", {
+        method: "PATCH",
+        body: { provider: "cloudflare", index, note },
+      })
+      await load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save note")
     }
   }
 
@@ -408,7 +437,7 @@ export default function AdminKeysPage() {
     requests: number
     rateLimits: number
   }) => (
-    <div className="flex gap-2 mt-1.5">
+    <div className="flex flex-wrap gap-2 mt-1.5">
       <Badge variant="secondary" className="text-xs">
         <Activity className="h-3 w-3 mr-1" />
         {requests} req today
@@ -423,10 +452,10 @@ export default function AdminKeysPage() {
 
   return (
     <AdminGuard>
-      <div className="flex min-h-screen bg-background">
+      <div className="flex flex-col min-h-screen bg-background lg:flex-row">
         <SidebarNav currentPath="/admin/keys" title="Admin — Keys" />
-        <main className="flex-1 overflow-auto p-4 lg:p-8">
-          <div className="mx-auto max-w-2xl space-y-6">
+        <main className="flex-1 min-w-0 overflow-auto p-4 lg:p-8">
+          <div className="mx-auto w-full max-w-2xl space-y-6">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">API keys</h1>
               <p className="text-muted-foreground text-sm mt-1">
@@ -501,7 +530,7 @@ export default function AdminKeysPage() {
                 {data?.gemini.keys.map((k) => (
                   <div
                     key={k.index}
-                    className="flex items-center justify-between gap-4 rounded-lg border border-border p-3"
+                    className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-start sm:justify-between"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-mono text-sm">{k.masked}</p>
@@ -509,8 +538,18 @@ export default function AdminKeysPage() {
                         requests={k.todayRequests}
                         rateLimits={k.todayRateLimits}
                       />
+                      <Input
+                        placeholder="Admin note (optional)"
+                        defaultValue={k.note ?? ""}
+                        className="mt-2 h-8 text-xs"
+                        onBlur={(e) => {
+                          if (e.target.value !== (k.note ?? "")) {
+                            saveGeminiNote(k.index, e.target.value)
+                          }
+                        }}
+                      />
                     </div>
-                    <div className="flex gap-1 shrink-0">
+                    <div className="flex gap-1 shrink-0 self-end sm:self-start">
                       <Button
                         variant="outline"
                         size="icon-sm"
@@ -601,7 +640,7 @@ export default function AdminKeysPage() {
                 {data?.cloudflare.accounts.map((acc) => (
                   <div
                     key={acc.index}
-                    className="flex items-center justify-between gap-4 rounded-lg border border-border p-3"
+                    className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-start sm:justify-between"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-mono text-sm">Account: {acc.maskedAccountId}</p>
@@ -612,8 +651,18 @@ export default function AdminKeysPage() {
                         requests={acc.todayRequests}
                         rateLimits={acc.todayRateLimits}
                       />
+                      <Input
+                        placeholder="Admin note (optional)"
+                        defaultValue={acc.note ?? ""}
+                        className="mt-2 h-8 text-xs"
+                        onBlur={(e) => {
+                          if (e.target.value !== (acc.note ?? "")) {
+                            saveCloudflareNote(acc.index, e.target.value)
+                          }
+                        }}
+                      />
                     </div>
-                    <div className="flex gap-1 shrink-0">
+                    <div className="flex gap-1 shrink-0 self-end sm:self-start">
                       <Button
                         variant="outline"
                         size="icon-sm"
@@ -659,7 +708,13 @@ export default function AdminKeysPage() {
                     onChange={(e) => setCfApiToken(e.target.value)}
                     className="font-mono"
                   />
-                  <div className="flex gap-2">
+                  <Input
+                    placeholder="Admin note (optional)"
+                    value={cfNote}
+                    onChange={(e) => setCfNote(e.target.value)}
+                    className="text-sm"
+                  />
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
                       variant="outline"

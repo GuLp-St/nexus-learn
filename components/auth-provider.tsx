@@ -6,6 +6,8 @@ import { User, onAuthStateChanged, signOut as firebaseSignOut } from "firebase/a
 import { auth, db } from "@/lib/firebase"
 import { doc, getDoc, onSnapshot } from "firebase/firestore"
 import { useXP } from "./xp-context-provider"
+import { isImpersonating } from "@/lib/impersonation-client"
+import { resetCosmeticTheme } from "@/lib/cosmetic-theme-reset"
 
 interface AuthContextType {
   user: User | null
@@ -52,6 +54,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTheme("theme-teal")
     }
   }
+
+  // Reset cosmetic theme when logged out
+  useEffect(() => {
+    if (!theme) {
+      resetCosmeticTheme()
+    }
+  }, [theme])
 
   // Handle Cosmetic Theme Injection
   useEffect(() => {
@@ -137,22 +146,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setNickname(data.nickname || null)
             setAvatarUrl(data.avatarUrl || null)
             setTheme(data.cosmetics?.theme || "theme-teal")
-            setIsAdmin(data.role === "admin")
+            setIsAdmin(data.role === "admin" && !isImpersonating())
           }
         })
 
         setAdminLoading(true)
-        user
-          .getIdToken()
-          .then((token) =>
-            fetch("/api/admin/check", {
-              headers: { Authorization: `Bearer ${token}` },
-            })
-          )
-          .then((res) => (res.ok ? res.json() : { isAdmin: false }))
-          .then((data: { isAdmin?: boolean }) => setIsAdmin(!!data.isAdmin))
-          .catch(() => setIsAdmin(false))
-          .finally(() => setAdminLoading(false))
+        if (isImpersonating()) {
+          setIsAdmin(false)
+          setAdminLoading(false)
+        } else {
+          user
+            .getIdToken()
+            .then((token) =>
+              fetch("/api/admin/check", {
+                headers: { Authorization: `Bearer ${token}` },
+              })
+            )
+            .then((res) => (res.ok ? res.json() : { isAdmin: false }))
+            .then((data: { isAdmin?: boolean }) => setIsAdmin(!!data.isAdmin))
+            .catch(() => setIsAdmin(false))
+            .finally(() => setAdminLoading(false))
+        }
 
         // Initialize presence system (set user online)
         const { initializePresence } = await import("@/lib/presence-utils")
@@ -180,8 +194,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setNickname(null)
         setAvatarUrl(null)
+        setTheme(null)
         setIsAdmin(false)
         setAdminLoading(false)
+        resetCosmeticTheme()
       }
       
       setLoading(false)
@@ -208,6 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNickname(null)
     setAvatarUrl(null)
     setTheme(null)
+    resetCosmeticTheme()
     router.push("/auth")
   }
 
