@@ -45,6 +45,11 @@ export function AISuggestedCourseCard() {
   const handleAction = async (suggestion: CourseSuggestion, index: number) => {
     if (!user || actionId) return
     
+    if (suggestion.type === "ai") {
+      router.push(`/create-course?mode=ai&topic=${encodeURIComponent(suggestion.title)}`)
+      return
+    }
+
     const id = suggestion.course?.id || `ai-${index}`
     setActionId(id)
 
@@ -176,6 +181,7 @@ export function AISuggestedCourseCard() {
                   className="h-8 w-8 shrink-0 hover:bg-primary hover:text-primary-foreground"
                   onClick={() => handleAction(suggestion, index)}
                   disabled={!!actionId}
+                  title={suggestion.type === "ai" ? "Create course from this topic" : "Add to library"}
                 >
                   <Plus className="h-4 w-4" />
                 </Button>

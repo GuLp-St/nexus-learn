@@ -25,6 +25,9 @@ export async function copyCourseToUserLibrary(userId: string, courseId: string):
     return courseId
   }
 
+  const { assertCanAddLibraryCourse } = await import("./course-limit-utils")
+  await assertCanAddLibraryCourse(userId)
+
   // Check if user already added this course (in courseAdditions collection)
   const additionsQuery = query(
     collection(db, "courseAdditions"),

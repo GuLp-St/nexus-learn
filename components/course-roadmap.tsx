@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Lock, CheckCircle2, Play, BookOpen, GraduationCap, Castle, Flag, XCircle, RotateCcw, Eye, Gift, FileQuestion, Clock } from "lucide-react"
+import { Lock, CheckCircle2, Play, BookOpen, GraduationCap, Castle, Flag, XCircle, RotateCcw, Eye, Gift, FileQuestion, Clock, Gem, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { CourseWithProgress } from "@/lib/course-utils"
@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { getAvailableTiers, hasClaimedReward, claimReward, type RewardTier } from "@/lib/reward-utils"
+import { getAvailableTiers, hasClaimedReward, claimReward, getTierRewardPreview, type RewardTier } from "@/lib/reward-utils"
 import { useXP } from "@/components/xp-context-provider"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 import { getUserNexon, spendNexon } from "@/lib/nexon-utils"
@@ -275,6 +275,12 @@ function ModuleLevelCard({
       const result = await claimReward(user.uid, course.id, "moduleQuiz", moduleIndex.toString(), tier, xpMultiplier)
       if (result.xpAwarded) {
         showXPAward(result.xpAwarded)
+      }
+      if (result.styleShardsAwarded) {
+        toast.success(`+${result.styleShardsAwarded} Style Shard${result.styleShardsAwarded > 1 ? "s" : ""}!`)
+      }
+      if (result.nexusCacheAwarded) {
+        toast.success("Nexus Cache earned! Open it in the Store.")
       }
       // Reload rewards to update UI
       const allTiers: RewardTier[] = [">50%", ">70%", ">90%", "100%"]
@@ -677,7 +683,7 @@ function ModuleLevelCard({
                       />
                     </svg>
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <GraduationCap className="h-5 w-5 text-white" />
+                      <GraduationCap className="h-5 w-5 text-primary-foreground" />
                     </div>
                     {/* Cooldown timer overlay */}
                     {cooldownRemaining > 0 && (
@@ -693,11 +699,13 @@ function ModuleLevelCard({
                     )}
                     {bestScore !== undefined && (
                       <div
-                        className="absolute -top-2 -right-2 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center text-xs font-bold shadow-lg z-10"
-                        style={{
-                          backgroundColor: bestScore >= 95 ? "#fbbf24" : bestScore >= 85 ? "#3b82f6" : "var(--primary)",
-                          color: "#ffffff",
-                        }}
+                        className={`absolute -top-2 -right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold shadow-lg z-10 ${
+                          bestScore >= 95
+                            ? "border-white bg-amber-400 text-black"
+                            : bestScore >= 85
+                              ? "border-white bg-blue-500 text-white"
+                              : "border-background bg-primary text-primary-foreground"
+                        }`}
                       >
                         {getGradeFromScore(bestScore)}
                       </div>
@@ -749,11 +757,8 @@ function ModuleLevelCard({
                 <div className="space-y-2">
                   {quizRewardTiers.map(({ tier, claimed, canClaim }) => {
                     const tierThreshold = tier === ">50%" ? 50 : tier === ">70%" ? 70 : tier === ">90%" ? 90 : 100
-                    const xpAmount = tier === ">50%" ? 10 : tier === ">70%" ? 20 : tier === ">90%" ? 30 : 50
-                    const nexonAmount = tier === "100%" ? 25 : 0
                     const xpMultiplier = course.difficulty === "expert" ? 1.5 : course.difficulty === "intermediate" ? 1.25 : 1.0
-                    const finalXP = Math.round(xpAmount * xpMultiplier)
-                    const finalNexon = Math.round(nexonAmount * xpMultiplier)
+                    const rewards = getTierRewardPreview("moduleQuiz", tier, xpMultiplier)
                     const currentScore = bestScore || 0
                     const isUnlocked = currentScore >= tierThreshold
                     
@@ -772,14 +777,26 @@ function ModuleLevelCard({
                                 <span className="text-xs text-muted-foreground">({currentScore}% reached)</span>
                               )}
                             </div>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-xs font-medium text-foreground">+{finalXP} XP</span>
-                              {finalNexon > 0 && (
+                            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                              {rewards.xp > 0 && (
+                                <span className="text-xs font-medium text-foreground">+{rewards.xp} XP</span>
+                              )}
+                              {rewards.nexon > 0 && (
                                 <div className="flex items-center gap-1 text-xs font-medium text-foreground">
-                                  <span>+{finalNexon}</span>
+                                  <span>+{rewards.nexon}</span>
                                   <NexonIcon className="h-3 w-3" />
                                 </div>
                               )}
+                              {rewards.styleShards > 0 && (
+                                <div className="flex items-center gap-1 text-xs font-medium text-violet-600">
+                                  <span>+{rewards.styleShards}</span>
+                                  <Gem className="h-3 w-3" />
+                                  <span>Style Shard</span>
+                                </div>
+                              )}
+                              {tier === ">50%" || tier === ">70%" ? (
+                                <span className="text-[10px] text-muted-foreground">XP only</span>
+                              ) : null}
                             </div>
                           </div>
                         </div>
@@ -1176,6 +1193,12 @@ function FinalExamCard({ course, quizAttempts, isLocked, allModulesPassed, incom
       if (result.xpAwarded) {
         showXPAward(result.xpAwarded)
       }
+      if (result.styleShardsAwarded) {
+        toast.success(`+${result.styleShardsAwarded} Style Shard${result.styleShardsAwarded > 1 ? "s" : ""}!`)
+      }
+      if (result.nexusCacheAwarded) {
+        toast.success("Nexus Cache earned! Open it in the Store.")
+      }
       // Reload rewards to update UI
       const allTiers: RewardTier[] = [">50%", ">70%", ">90%", "100%"]
       const results: Array<{ tier: RewardTier; claimed: boolean; canClaim: boolean }> = []
@@ -1294,11 +1317,8 @@ function FinalExamCard({ course, quizAttempts, isLocked, allModulesPassed, incom
                 <div className="space-y-2">
                   {finalRewardTiers.map(({ tier, claimed, canClaim }) => {
                     const tierThreshold = tier === ">50%" ? 50 : tier === ">70%" ? 70 : tier === ">90%" ? 90 : 100
-                    const xpAmount = tier === ">50%" ? 20 : tier === ">70%" ? 40 : tier === ">90%" ? 60 : 100
-                    const nexonAmount = tier === "100%" ? 50 : 0
                     const xpMultiplier = course.difficulty === "expert" ? 1.5 : course.difficulty === "intermediate" ? 1.25 : 1.0
-                    const finalXP = Math.round(xpAmount * xpMultiplier)
-                    const finalNexon = Math.round(nexonAmount * xpMultiplier)
+                    const rewards = getTierRewardPreview("finalQuiz", tier, xpMultiplier)
                     const currentScore = bestScore || 0
                     const isUnlocked = currentScore >= tierThreshold
                     
@@ -1317,14 +1337,32 @@ function FinalExamCard({ course, quizAttempts, isLocked, allModulesPassed, incom
                                 <span className="text-[10px] text-muted-foreground">({currentScore}%)</span>
                               )}
                             </div>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-xs font-medium text-foreground">+{finalXP} XP</span>
-                              {finalNexon > 0 && (
+                            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                              {rewards.xp > 0 && (
+                                <span className="text-xs font-medium text-foreground">+{rewards.xp} XP</span>
+                              )}
+                              {rewards.nexon > 0 && (
                                 <div className="flex items-center gap-1 text-xs font-medium text-foreground">
-                                  <span>+{finalNexon}</span>
+                                  <span>+{rewards.nexon}</span>
                                   <NexonIcon className="h-3 w-3" />
                                 </div>
                               )}
+                              {rewards.styleShards > 0 && (
+                                <div className="flex items-center gap-1 text-xs font-medium text-violet-600">
+                                  <span>+{rewards.styleShards}</span>
+                                  <Gem className="h-3 w-3" />
+                                  <span>Style Shard</span>
+                                </div>
+                              )}
+                              {rewards.nexusCache > 0 && (
+                                <div className="flex items-center gap-1 text-xs font-medium text-primary">
+                                  <Sparkles className="h-3 w-3" />
+                                  <span>Nexus Cache</span>
+                                </div>
+                              )}
+                              {tier === ">50%" || tier === ">70%" ? (
+                                <span className="text-[10px] text-muted-foreground">XP only</span>
+                              ) : null}
                             </div>
                           </div>
                         </div>

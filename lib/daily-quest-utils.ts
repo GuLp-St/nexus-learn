@@ -387,6 +387,41 @@ export async function refreshQuest(userId: string, questId: string): Promise<boo
 }
 
 /**
+ * Top up one refresh token using Nexon (max 3 total)
+ */
+export async function topUpRefreshToken(userId: string): Promise<{ success: boolean; refreshTokens?: number; error?: string }> {
+  try {
+    const questsRef = doc(db, "dailyQuests", userId)
+    const questsDoc = await getDoc(questsRef)
+    if (!questsDoc.exists()) {
+      return { success: false, error: "Daily quests not found" }
+    }
+
+    const data = questsDoc.data() as DailyQuests
+    const { MAX_REFRESH_TOKENS, REFRESH_TOKEN_TOPUP_NEXON_COST } = await import("./style-shard-utils")
+
+    if (data.refreshTokens >= MAX_REFRESH_TOKENS) {
+      return { success: false, error: "Refresh tokens already full" }
+    }
+
+    const { spendNexon } = await import("./nexon-utils")
+    await spendNexon(userId, REFRESH_TOKEN_TOPUP_NEXON_COST, "Refresh token top-up", {
+      type: "refresh_token_topup",
+    })
+
+    await updateDoc(questsRef, {
+      refreshTokens: data.refreshTokens + 1,
+      updatedAt: serverTimestamp(),
+    })
+
+    return { success: true, refreshTokens: data.refreshTokens + 1 }
+  } catch (error: any) {
+    console.error("Error topping up refresh token:", error)
+    return { success: false, error: error.message || "Failed to top up refresh token" }
+  }
+}
+
+/**
  * Track quest progress by emitting events
  * Use this in components to trigger quest updates
  */

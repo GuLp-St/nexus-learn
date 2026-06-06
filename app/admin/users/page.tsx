@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Search, Shield, Trash2, UserCog, Zap, Coins, BookOpen, VenetianMask, RefreshCw } from "lucide-react"
+import { Search, Shield, Trash2, UserCog, Zap, Coins, BookOpen, VenetianMask, RefreshCw, Gem, Sparkles } from "lucide-react"
 import {
   AdminCourseProgressControls,
   type AdminCourseProgress,
@@ -48,6 +48,8 @@ export default function AdminUsersPage() {
   const [editXp, setEditXp] = useState("")
   const [editNexon, setEditNexon] = useState("")
   const [editQuestTokens, setEditQuestTokens] = useState("3")
+  const [editStyleShards, setEditStyleShards] = useState("0")
+  const [editFreeCaches, setEditFreeCaches] = useState("0")
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [impersonating, setImpersonating] = useState(false)
@@ -74,7 +76,11 @@ export default function AdminUsersPage() {
     setDetailLoading(true)
     try {
       const data = await adminJson<{
-        user: UserRow & { questRefreshTokens?: number | null }
+        user: UserRow & {
+          questRefreshTokens?: number | null
+          styleShards?: number
+          freeNexusCaches?: number
+        }
         courses: UserCourse[]
       }>(
         `/api/admin/users/${userId}`
@@ -84,6 +90,8 @@ export default function AdminUsersPage() {
       setEditQuestTokens(
         data.user.questRefreshTokens != null ? String(data.user.questRefreshTokens) : "3"
       )
+      setEditStyleShards(String(data.user.styleShards ?? 0))
+      setEditFreeCaches(String(data.user.freeNexusCaches ?? 0))
       setCourses(data.courses)
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, ...data.user } : u))
@@ -107,6 +115,33 @@ export default function AdminUsersPage() {
         },
       })
       toast.success("Balances updated")
+      await loadDetail(selectedId)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveStyleShards = async () => {
+    if (!selectedId) return
+    const shards = parseInt(editStyleShards, 10)
+    const freeCaches = parseInt(editFreeCaches, 10)
+    if (Number.isNaN(shards) || shards < 0) {
+      toast.error("Style Shards must be 0 or greater")
+      return
+    }
+    if (Number.isNaN(freeCaches) || freeCaches < 0) {
+      toast.error("Free Nexus Caches must be 0 or greater")
+      return
+    }
+    setSaving(true)
+    try {
+      await adminJson(`/api/admin/users/${selectedId}`, {
+        method: "PATCH",
+        body: { styleShards: shards, freeNexusCaches: freeCaches },
+      })
+      toast.success("Style Shards updated")
       await loadDetail(selectedId)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save")
@@ -319,6 +354,38 @@ export default function AdminUsersPage() {
                         </div>
                         <Button variant="outline" onClick={saveQuestTokens} disabled={saving}>
                           Save tokens
+                        </Button>
+                      </div>
+
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                        <div className="flex-1">
+                          <Label htmlFor="admin-style-shards" className="flex items-center gap-1">
+                            <Gem className="h-3.5 w-3.5" /> Style Shards
+                          </Label>
+                          <Input
+                            id="admin-style-shards"
+                            type="number"
+                            min={0}
+                            value={editStyleShards}
+                            onChange={(e) => setEditStyleShards(e.target.value)}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <Label htmlFor="admin-free-caches" className="flex items-center gap-1">
+                            <Sparkles className="h-3.5 w-3.5" /> Free Nexus Caches
+                          </Label>
+                          <Input
+                            id="admin-free-caches"
+                            type="number"
+                            min={0}
+                            value={editFreeCaches}
+                            onChange={(e) => setEditFreeCaches(e.target.value)}
+                            className="mt-1"
+                          />
+                        </div>
+                        <Button variant="outline" onClick={saveStyleShards} disabled={saving}>
+                          Save shards
                         </Button>
                       </div>
 

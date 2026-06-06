@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, type CSSProperties } from "react"
-import { MessageSquare, Send, X, Loader2, Sparkles } from "lucide-react"
+import { MessageSquare, Send, X, Loader2, Sparkles, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -216,6 +216,12 @@ export function ChatbotOverlay() {
     }
   }
 
+  const handleNewChat = () => {
+    setMessages([])
+    setError(null)
+    setMessage("")
+  }
+
   // Defer viewport-based position until after mount so SSR and first client render match.
   const buttonStyle: CSSProperties = position
     ? {
@@ -273,15 +279,27 @@ export function ChatbotOverlay() {
               <p className="text-xs text-muted-foreground">Always here to help</p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsOpen(false)}
-            className="h-8 w-8"
-            aria-label="Close chat"
-          >
-            <X className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleNewChat}
+              className="h-8 w-8"
+              aria-label="Start new chat"
+              title="New chat"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsOpen(false)}
+              className="h-8 w-8"
+              aria-label="Close chat"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
         {/* Chat History */}

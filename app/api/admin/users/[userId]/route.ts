@@ -72,6 +72,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
         createdAt: data.createdAt?.toMillis?.() ?? null,
         questRefreshTokens:
           typeof questData?.refreshTokens === "number" ? questData.refreshTokens : null,
+        styleShards: typeof data.styleShards === "number" ? data.styleShards : 0,
+        freeNexusCaches: typeof data.freeNexusCaches === "number" ? data.freeNexusCaches : 0,
       },
       courses,
     })
@@ -103,6 +105,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
     if (typeof body.nickname === "string" && body.nickname.trim()) {
       updates.nickname = body.nickname.trim()
+    }
+    if (typeof body.styleShards === "number") {
+      updates.styleShards = Math.max(0, Math.floor(body.styleShards))
+    }
+    if (typeof body.freeNexusCaches === "number") {
+      updates.freeNexusCaches = Math.max(0, Math.floor(body.freeNexusCaches))
     }
     if (typeof body.questRefreshTokens === "number") {
       const tokens = Math.max(0, Math.min(3, Math.floor(body.questRefreshTokens)))

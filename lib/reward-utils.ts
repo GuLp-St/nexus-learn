@@ -15,14 +15,14 @@ export interface RewardConfig {
   moduleQuiz: {
     ">50%": { xp: number }
     ">70%": { xp: number }
-    ">90%": { xp: number }
-    "100%": { xp: number; nexon: number }
+    ">90%": { xp: number; nexon: number }
+    "100%": { xp: number; nexon: number; styleShards: number }
   }
   finalQuiz: {
     ">50%": { xp: number }
     ">70%": { xp: number }
-    ">90%": { xp: number }
-    "100%": { xp: number; nexon: number }
+    ">90%": { xp: number; nexon: number }
+    "100%": { xp: number; nexon: number; nexusCache: number }
   }
 }
 
@@ -37,14 +37,29 @@ const BASE_REWARDS: RewardConfig = {
   moduleQuiz: {
     ">50%": { xp: 10 },
     ">70%": { xp: 20 },
-    ">90%": { xp: 30 },
-    "100%": { xp: 50, nexon: 25 }
+    ">90%": { xp: 30, nexon: 15 },
+    "100%": { xp: 50, nexon: 25, styleShards: 1 }
   },
   finalQuiz: {
     ">50%": { xp: 20 },
     ">70%": { xp: 40 },
-    ">90%": { xp: 60 },
-    "100%": { xp: 100, nexon: 50 }
+    ">90%": { xp: 60, nexon: 30 },
+    "100%": { xp: 100, nexon: 50, nexusCache: 1 }
+  }
+}
+
+export function getTierRewardPreview(
+  rewardType: "moduleQuiz" | "finalQuiz",
+  tier: RewardTier,
+  xpMultiplier = 1.0
+): { xp: number; nexon: number; styleShards: number; nexusCache: number } {
+  const config = BASE_REWARDS[rewardType][tier as keyof (typeof BASE_REWARDS)["moduleQuiz"]]
+  if (!config) return { xp: 0, nexon: 0, styleShards: 0, nexusCache: 0 }
+  return {
+    xp: Math.round(config.xp * xpMultiplier),
+    nexon: "nexon" in config ? Math.round(config.nexon * xpMultiplier) : 0,
+    styleShards: "styleShards" in config ? config.styleShards : 0,
+    nexusCache: rewardType === "finalQuiz" && tier === "100%" && "nexusCache" in config ? config.nexusCache : 0,
   }
 }
 
@@ -111,7 +126,7 @@ export async function claimReward(
   rewardKey: string,
   tier: RewardTier,
   xpMultiplier: number = 1.0
-): Promise<{ xpAwarded?: XPAwardResult; nexonAwarded?: number }> {
+): Promise<{ xpAwarded?: XPAwardResult; nexonAwarded?: number; styleShardsAwarded?: number; nexusCacheAwarded?: boolean }> {
   try {
     // Check if already claimed
     const alreadyClaimed = await hasClaimedReward(userId, courseId, rewardType, rewardKey, tier)
@@ -122,6 +137,8 @@ export async function claimReward(
     // Get reward amount
     let xpAmount = 0
     let nexonAmount = 0
+    let styleShardsAmount = 0
+    let nexusCacheCount = 0
 
     if (rewardType === "lesson" && tier === "first_completion") {
       xpAmount = Math.round(BASE_REWARDS.lesson.first_completion.xp * xpMultiplier)
@@ -131,17 +148,16 @@ export async function claimReward(
       const config = BASE_REWARDS.moduleQuiz[tier as keyof typeof BASE_REWARDS.moduleQuiz]
       if (config) {
         xpAmount = Math.round(config.xp * xpMultiplier)
-        if (tier === "100%" && "nexon" in config) {
-          nexonAmount = Math.round(config.nexon * xpMultiplier)
-        }
+        if ("nexon" in config) nexonAmount = Math.round(config.nexon * xpMultiplier)
+        if ("styleShards" in config) styleShardsAmount = config.styleShards
       }
     } else if (rewardType === "finalQuiz") {
       const config = BASE_REWARDS.finalQuiz[tier as keyof typeof BASE_REWARDS.finalQuiz]
       if (config) {
         xpAmount = Math.round(config.xp * xpMultiplier)
-        if (tier === "100%" && "nexon" in config) {
-          nexonAmount = Math.round(config.nexon * xpMultiplier)
-        }
+        if ("nexon" in config) nexonAmount = Math.round(config.nexon * xpMultiplier)
+        if ("styleShards" in config) styleShardsAmount = config.styleShards
+        if ("nexusCache" in config) nexusCacheCount = config.nexusCache
       }
     }
 
@@ -166,6 +182,23 @@ export async function claimReward(
         `Claimed ${tier} reward for ${rewardType}`,
         { courseId, rewardType, rewardKey, tier, xpMultiplier }
       )
+    }
+
+    let styleShardsResult: number | undefined
+    if (styleShardsAmount > 0) {
+      const { awardStyleShards } = await import("./style-shard-utils")
+      styleShardsResult = await awardStyleShards(
+        userId,
+        styleShardsAmount,
+        `${rewardType} ${tier} Reward`
+      )
+    }
+
+    let nexusCacheAwarded = false
+    if (nexusCacheCount > 0) {
+      const { awardFreeNexusCache } = await import("./style-shard-utils")
+      await awardFreeNexusCache(userId, nexusCacheCount)
+      nexusCacheAwarded = true
     }
 
     // Mark as claimed in both current progress and permanent record
@@ -202,6 +235,8 @@ export async function claimReward(
     return {
       xpAwarded: xpResult,
       nexonAwarded: nexonResult,
+      styleShardsAwarded: styleShardsResult,
+      nexusCacheAwarded,
     }
   } catch (error) {
     console.error("Error claiming reward:", error)

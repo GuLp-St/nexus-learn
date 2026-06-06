@@ -137,9 +137,15 @@ export default function CreateCourseUnified() {
   useEffect(() => {
     const tab = searchParams.get("tab")
     const mode = searchParams.get("mode")
+    const topic = searchParams.get("topic")
     if (tab === "browse") setMainTab("browse")
     if (mode === "upload") setCreateMode("upload")
     if (mode === "ai") setCreateMode("ai")
+    if (topic) {
+      setCourseInput(decodeURIComponent(topic))
+      setMainTab("create")
+      setCreateMode("ai")
+    }
   }, [searchParams])
 
   useEffect(() => {

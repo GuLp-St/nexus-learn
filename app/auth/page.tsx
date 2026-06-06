@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { useAuth } from "@/components/auth-provider"
 import { resetCosmeticTheme } from "@/lib/cosmetic-theme-reset"
 import { usePageContext } from "@/hooks/usePageContext"
+import { LoadingScreen } from "@/components/ui/LoadingScreen"
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState<"signin" | "signup">("signin")
@@ -60,13 +61,7 @@ export default function AuthPage() {
 
   // Show loading state
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="text-muted-foreground">Loading...</div>
-        </div>
-      </div>
-    )
+    return <LoadingScreen />
   }
 
   // Don't render if already authenticated (will redirect)

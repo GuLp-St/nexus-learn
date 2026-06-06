@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { ShoppingBag, Eye, Check, Sparkles, Image, Palette, Frame, Paintbrush } from "lucide-react"
+import { ShoppingBag, Eye, Check, Sparkles, Image, Palette, Frame, Paintbrush, Gem } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +22,8 @@ import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
 import { NameWithColor } from "@/components/name-with-color"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 import { NexonHistoryModal } from "@/components/nexon-history-modal"
+import { NexusCacheModal } from "@/components/nexus-cache-modal"
+import { getStyleShards } from "@/lib/style-shard-utils"
 import { WallpaperRenderer } from "@/components/wallpapers/wallpaper-renderer"
 import { getNameColorClass, getNameColorStyle } from "@/lib/name-color-classes"
 import { useTheme } from "@/components/theme-provider"
@@ -41,6 +43,8 @@ export default function StorePage() {
   const [previewCosmetic, setPreviewCosmetic] = useState<Cosmetic | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [cacheOpen, setCacheOpen] = useState(false)
+  const [styleShards, setStyleShards] = useState(0)
   const tabsListRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -99,14 +103,16 @@ export default function StorePage() {
     if (!user) return
     try {
       if (showLoading) setLoading(true)
-      const [nexonBalance, allCosmetics, userCosmeticData] = await Promise.all([
+      const [nexonBalance, allCosmetics, userCosmeticData, shards] = await Promise.all([
         getUserNexon(user.uid),
         getAllCosmetics(),
         getUserCosmetics(user.uid),
+        getStyleShards(user.uid),
       ])
       setNexon(nexonBalance)
       setCosmetics(allCosmetics)
       setUserCosmetics(userCosmeticData)
+      setStyleShards(shards)
     } catch (error) {
       console.error("Error loading store data:", error)
       toast.error("Failed to load store")
@@ -328,18 +334,32 @@ export default function StorePage() {
                     Purchase cosmetics to customize your profile
                   </p>
                 </div>
-                <Card
-                  className="shrink-0 cursor-pointer border-2 transition-all hover:scale-[1.02] hover:border-primary/50 hover:bg-accent/50 hover:shadow-md group"
-                  onClick={() => setHistoryOpen(true)}
-                >
-                  <CardContent className="p-3 lg:p-4">
-                    <div className="flex items-center gap-2">
-                      <NexonIcon className="h-5 w-5 text-primary group-hover:scale-110 transition-transform lg:h-6 lg:w-6" />
-                      <span className="text-xl font-bold lg:text-2xl">{nexon.toLocaleString()}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 hidden sm:block">Click to view history</p>
-                  </CardContent>
-                </Card>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Card
+                    className="cursor-pointer border-2 transition-all hover:scale-[1.02] hover:border-violet-500/50 hover:bg-violet-500/5 hover:shadow-md group"
+                    onClick={() => setCacheOpen(true)}
+                  >
+                    <CardContent className="p-3 lg:p-4">
+                      <div className="flex items-center gap-2">
+                        <Gem className="h-5 w-5 text-violet-500 group-hover:scale-110 transition-transform lg:h-6 lg:w-6" />
+                        <span className="text-xl font-bold lg:text-2xl">{styleShards}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 hidden sm:block">Nexus Cache</p>
+                    </CardContent>
+                  </Card>
+                  <Card
+                    className="cursor-pointer border-2 transition-all hover:scale-[1.02] hover:border-primary/50 hover:bg-accent/50 hover:shadow-md group"
+                    onClick={() => setHistoryOpen(true)}
+                  >
+                    <CardContent className="p-3 lg:p-4">
+                      <div className="flex items-center gap-2">
+                        <NexonIcon className="h-5 w-5 text-primary group-hover:scale-110 transition-transform lg:h-6 lg:w-6" />
+                        <span className="text-xl font-bold lg:text-2xl">{nexon.toLocaleString()}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 hidden sm:block">Click to view history</p>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
 
               <TabsList
@@ -681,6 +701,15 @@ export default function StorePage() {
         onOpenChange={setHistoryOpen}
         userId={user?.uid || ""}
       />
+
+      {user && (
+        <NexusCacheModal
+          open={cacheOpen}
+          onOpenChange={setCacheOpen}
+          userId={user.uid}
+          onRewardClaimed={() => loadData(false)}
+        />
+      )}
     </div>
   )
 }

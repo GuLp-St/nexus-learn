@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { LayoutDashboard, Trophy, Menu, X, User, Users, Moon, Sun, ShoppingBag, Map, Shield, Globe, KeyRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -20,6 +20,9 @@ interface SidebarNavProps {
 
 export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: SidebarNavProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [dragOffset, setDragOffset] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+  const touchStartRef = useRef<{ x: number; y: number; fromEdge: boolean } | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const { theme, toggleTheme } = useTheme()
   const { totalSocialNotifications } = useSocialNotifications()
@@ -59,11 +62,94 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
       ]
     : []
 
+  const SIDEBAR_WIDTH = 256
+  const EDGE_ZONE = 24
+
+  const handleTouchStart = useCallback((e: TouchEvent) => {
+    if (window.innerWidth >= 1024) return
+    const touch = e.touches[0]
+    const fromEdge = !sidebarOpen && touch.clientX <= EDGE_ZONE
+    const fromOpenSidebar = sidebarOpen && touch.clientX <= SIDEBAR_WIDTH
+    if (!fromEdge && !fromOpenSidebar) return
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, fromEdge: fromEdge || fromOpenSidebar }
+    setIsDragging(true)
+  }, [sidebarOpen])
+
+  const handleTouchMove = useCallback((e: TouchEvent) => {
+    if (!touchStartRef.current || window.innerWidth >= 1024) return
+    const touch = e.touches[0]
+    const deltaX = touch.clientX - touchStartRef.current.x
+    const deltaY = Math.abs(touch.clientY - touchStartRef.current.y)
+    if (deltaY > 40 && Math.abs(deltaX) < 20) {
+      touchStartRef.current = null
+      setIsDragging(false)
+      setDragOffset(0)
+      return
+    }
+    if (sidebarOpen) {
+      const offset = Math.min(0, deltaX)
+      setDragOffset(offset)
+    } else if (touchStartRef.current.fromEdge && deltaX > 0) {
+      const offset = Math.min(deltaX, SIDEBAR_WIDTH)
+      setDragOffset(offset)
+      if (offset > 10) e.preventDefault()
+    }
+  }, [sidebarOpen])
+
+  const handleTouchEnd = useCallback(() => {
+    if (!touchStartRef.current) return
+    const threshold = SIDEBAR_WIDTH * 0.35
+    if (sidebarOpen) {
+      if (dragOffset < -threshold) setSidebarOpen(false)
+    } else if (dragOffset >= threshold) {
+      setSidebarOpen(true)
+    }
+    touchStartRef.current = null
+    setIsDragging(false)
+    setDragOffset(0)
+  }, [sidebarOpen, dragOffset])
+
+  useEffect(() => {
+    window.addEventListener("touchstart", handleTouchStart, { passive: true })
+    window.addEventListener("touchmove", handleTouchMove, { passive: false })
+    window.addEventListener("touchend", handleTouchEnd)
+    return () => {
+      window.removeEventListener("touchstart", handleTouchStart)
+      window.removeEventListener("touchmove", handleTouchMove)
+      window.removeEventListener("touchend", handleTouchEnd)
+    }
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd])
+
+  useEffect(() => {
+    if (!sidebarOpen) setDragOffset(0)
+  }, [sidebarOpen])
+
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 1024)
+    check()
+    window.addEventListener("resize", check)
+    return () => window.removeEventListener("resize", check)
+  }, [])
+
+  const sidebarTranslate = sidebarOpen
+    ? Math.max(-SIDEBAR_WIDTH, dragOffset)
+    : -SIDEBAR_WIDTH + dragOffset
+
+  const sidebarStyle = isMobile
+    ? { transform: `translateX(${sidebarTranslate}px)` }
+    : undefined
+
   return (
     <>
       {/* Mobile Sidebar Overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      {(sidebarOpen || dragOffset > 0) && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden transition-opacity"
+          style={{ opacity: sidebarOpen ? Math.max(0, 1 + dragOffset / SIDEBAR_WIDTH) : dragOffset / SIDEBAR_WIDTH }}
+          onClick={() => setSidebarOpen(false)}
+        />
       )}
 
       {/* Mobile Header */}
@@ -96,9 +182,10 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
 
       {/* Sidebar — dvh avoids mobile browser chrome clipping the bottom */}
       <aside
-        className={`fixed top-0 left-0 z-50 flex h-dvh max-h-dvh w-64 flex-col border-r border-border bg-background transition-transform duration-200 ease-in-out ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
+        className={`fixed top-0 left-0 z-50 flex h-dvh max-h-dvh w-64 flex-col border-r border-border bg-background ${
+          isDragging ? "transition-none" : "transition-transform duration-200 ease-in-out"
+        } lg:translate-x-0`}
+        style={sidebarStyle}
       >
         <div className="flex min-h-0 flex-1 flex-col">
           {/* Logo/Header */}

@@ -11,6 +11,7 @@ import { useChatContext } from "@/context/ChatContext"
 import { DailyQuestCard } from "@/components/daily-quest-card"
 import { AISuggestedCourseCard } from "@/components/ai-suggested-course-card"
 import { CommunityPulseCard } from "@/components/community-pulse-card"
+import { LoadingScreen } from "@/components/ui/LoadingScreen"
 import { subscribeToCommunityActivities } from "@/lib/community-pulse-utils"
 
 export default function LearningDashboard() {
@@ -111,13 +112,7 @@ export default function LearningDashboard() {
 
   // Show loading state while checking auth
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="text-muted-foreground">Loading...</div>
-        </div>
-      </div>
-    )
+    return <LoadingScreen />
   }
 
   // Don't render if not authenticated (will redirect)

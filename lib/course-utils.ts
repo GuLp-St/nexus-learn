@@ -114,6 +114,9 @@ export async function createOrGetCourse(
   userId: string,
   sourceMaterialId?: string
 ): Promise<string> {
+  const { assertCanAddGeneratedCourse } = await import("./course-limit-utils")
+  await assertCanAddGeneratedCourse(userId)
+
   // Always create a new course (private by default)
   // Course becomes public only after completion + rating >= 4
   

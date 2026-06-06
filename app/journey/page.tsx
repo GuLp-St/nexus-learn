@@ -13,6 +13,7 @@ import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
 import { useChatContext } from "@/context/ChatContext"
 import { getUserCourses, CourseWithProgress } from "@/lib/course-utils"
+import { getUserCourseLimits, type CourseLimitInfo } from "@/lib/course-limit-utils"
 import { removeCourseFromLibrary } from "@/lib/library-utils"
 import { CompletedCoursesModal } from "@/components/completed-courses-modal"
 import { checkPublishRequirements, PublishRequirements } from "@/lib/publish-utils"
@@ -303,6 +304,7 @@ const CourseCard = ({ course, index, onRemove, onRate, userId }: { course: Cours
 
 export default function JourneyPage() {
   const [courses, setCourses] = useState<CourseWithProgress[]>([])
+  const [courseLimits, setCourseLimits] = useState<CourseLimitInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     modulesMastered: 0,
@@ -354,12 +356,14 @@ export default function JourneyPage() {
 
     try {
       setLoading(true)
-      const [fetchedCourses, completedRecords] = await Promise.all([
+      const [fetchedCourses, completedRecords, limits] = await Promise.all([
         getUserCourses(user.uid),
         getCompletedCourses(user.uid),
+        getUserCourseLimits(user.uid),
       ])
       
       setCourses(fetchedCourses)
+      setCourseLimits(limits)
 
       // Fetch new tracking metrics
       const { getUserTrackingMetrics } = await import("@/lib/tracking-utils")
@@ -492,7 +496,14 @@ export default function JourneyPage() {
           <div className="mx-auto max-w-5xl space-y-8">
             {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-3xl font-bold tracking-tight text-foreground">My Journey</h2>
+              <div>
+                <h2 className="text-3xl font-bold tracking-tight text-foreground">My Journey</h2>
+                {courseLimits && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Generated {courseLimits.generated}/{courseLimits.maxGenerated} · Added {courseLimits.added}/{courseLimits.maxAdded} · Level {courseLimits.level}
+                  </p>
+                )}
+              </div>
               <Button asChild size="lg" className="gap-2 shrink-0">
                 <Link href="/create-course">
                   <Plus className="h-5 w-5" />
