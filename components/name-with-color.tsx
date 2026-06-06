@@ -1,6 +1,8 @@
 "use client"
 
 import { getUserCosmetics } from "@/lib/cosmetics-utils"
+import { getNameColorClass, getNameColorStyle } from "@/lib/name-color-classes"
+import { useTheme } from "@/components/theme-provider"
 import { useEffect, useState } from "react"
 
 interface NameWithColorProps {
@@ -18,6 +20,7 @@ export function NameWithColor({
   refreshKey = 0,
   overrideColor 
 }: NameWithColorProps) {
+  const { theme } = useTheme()
   const [cosmetics, setCosmetics] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -42,32 +45,16 @@ export function NameWithColor({
 
   const nameColorId = overrideColor || cosmetics?.nameColor
   const colorClass = getNameColorClass(nameColorId)
+  const colorStyle = getNameColorStyle(nameColorId, theme === "dark")
 
   return (
-    <span className={`${colorClass} ${className}`}>
+    <span
+      className={`${colorClass} ${className}`}
+      style={colorStyle}
+      data-name-color={nameColorId ? "true" : undefined}
+    >
       {name}
     </span>
   )
-}
-
-function getNameColorClass(nameColorId: string | undefined): string {
-  if (!nameColorId) return ""
-
-  // Common - Solid colors
-  if (nameColorId === "name-crimson") return "text-rose-600 dark:text-rose-400"
-  if (nameColorId === "name-azure") return "text-cyan-600 dark:text-cyan-400"
-  if (nameColorId === "name-lime") return "text-lime-600 dark:text-lime-400"
-
-  // Rare - Gradients
-  if (nameColorId === "name-golden-god") return "cosmetic-name-golden-god"
-  if (nameColorId === "name-cyberpunk") return "cosmetic-name-cyberpunk"
-  if (nameColorId === "name-ice-cold") return "cosmetic-name-ice-cold"
-
-  // Legendary - Animated
-  if (nameColorId === "name-rgb-gamer") return "cosmetic-name-rgb-gamer"
-  if (nameColorId === "name-neon") return "cosmetic-name-neon"
-  if (nameColorId === "name-glitch") return "cosmetic-name-glitch"
-
-  return ""
 }
 

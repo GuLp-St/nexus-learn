@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { LayoutDashboard, Trophy, Menu, X, User, Users, Moon, Sun, ShoppingBag, LogOut, Map, Shield, Globe, KeyRound } from "lucide-react"
+import { LayoutDashboard, Trophy, Menu, X, User, Users, Moon, Sun, ShoppingBag, Map, Shield, Globe, KeyRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useTheme } from "@/components/theme-provider"
@@ -11,14 +11,6 @@ import { useClaimableQuestCount } from "@/hooks/use-claimable-quests"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/components/auth-provider"
 import { HoldToLogoutButton } from "@/components/hold-to-logout-button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 
 interface SidebarNavProps {
   currentPath?: string
@@ -28,18 +20,17 @@ interface SidebarNavProps {
 
 export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: SidebarNavProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const { theme, toggleTheme } = useTheme()
   const { totalSocialNotifications } = useSocialNotifications()
-  const { user, nickname, avatarUrl, signOut, isAdmin } = useAuth()
+  const { user, signOut, isAdmin } = useAuth()
   const claimableQuests = useClaimableQuestCount(user?.uid)
 
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true)
       await signOut()
-      setLogoutDialogOpen(false)
+      setSidebarOpen(false)
     } catch (error) {
       console.error("Error signing out:", error)
     } finally {
@@ -103,13 +94,13 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
       {/* Desktop layout spacer — keeps main content aligned while aside stays fixed */}
       <div className="hidden lg:block w-64 shrink-0" aria-hidden />
 
-      {/* Sidebar — fixed to viewport on all breakpoints */}
+      {/* Sidebar — dvh avoids mobile browser chrome clipping the bottom */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-col border-r border-border bg-background transition-transform duration-200 ease-in-out ${
+        className={`fixed top-0 left-0 z-50 flex h-dvh max-h-dvh w-64 flex-col border-r border-border bg-background transition-transform duration-200 ease-in-out ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        <div className="flex h-full min-h-0 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col">
           {/* Logo/Header */}
           <div className="flex h-16 shrink-0 items-center justify-start border-b border-border px-4 relative">
             <div className="flex items-center gap-2">
@@ -133,7 +124,7 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
           </div>
 
           {/* Navigation */}
-          <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-4">
+          <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-4">
             {navItems.map((item) => (
               <Link key={item.label} href={item.href}>
                 <button
@@ -178,36 +169,11 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
             )}
           </nav>
 
-          <div className="shrink-0 border-t border-border p-4">
-            <Button 
-              variant="outline" 
-              className="w-full justify-start gap-3 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive border-dashed border-destructive/30" 
-              onClick={() => setLogoutDialogOpen(true)}
-            >
-              <LogOut className="h-5 w-5" />
-              <span>Log Out</span>
-            </Button>
+          <div className="shrink-0 border-t border-border p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <HoldToLogoutButton disabled={isLoggingOut} onConfirm={handleLogout} />
           </div>
         </div>
       </aside>
-
-      {/* Logout Confirmation Dialog */}
-      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm Logout</DialogTitle>
-            <DialogDescription>
-              Press and hold the button below for 3 seconds to end your session.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col gap-2 sm:flex-col">
-            <HoldToLogoutButton disabled={isLoggingOut} onConfirm={handleLogout} />
-            <Button variant="ghost" onClick={() => setLogoutDialogOpen(false)} disabled={isLoggingOut} className="w-full">
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

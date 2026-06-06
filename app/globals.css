@@ -612,6 +612,28 @@
   100% { transform: translate(0, 0); border-color: #ff00ff; }
 }
 
+/* Name Colors - Uncommon Solid */
+.cosmetic-name-crimson {
+  color: #e11d48;
+}
+.dark .cosmetic-name-crimson {
+  color: #fb7185;
+}
+
+.cosmetic-name-azure {
+  color: #0891b2;
+}
+.dark .cosmetic-name-azure {
+  color: #22d3ee;
+}
+
+.cosmetic-name-lime {
+  color: #65a30d;
+}
+.dark .cosmetic-name-lime {
+  color: #a3e635;
+}
+
 /* Name Colors - Rare Gradients */
 .cosmetic-name-golden-god {
   background: linear-gradient(to right, #fbbf24, #f59e0b);
@@ -850,19 +872,9 @@
 .profile-glass-theme h1:not([class*="cosmetic-name-"]),
 .profile-glass-theme h2:not([data-has-name-color="true"]):not([class*="cosmetic-name-"]),
 .profile-glass-theme h4:not([class*="cosmetic-name-"]),
-.profile-glass-theme span:not([class*="cosmetic-name-"]),
+.profile-glass-theme span:not([class*="cosmetic-name-"]):not([data-name-color="true"]),
 .profile-glass-theme button:not([class*="cosmetic-name-"]) {
   color: var(--profile-text) !important;
-}
-
-/* Exclude custom name colors from profile theme overrides */
-.profile-glass-theme [class*="cosmetic-name-"],
-.profile-glass-theme h2[data-has-name-color="true"] {
-  color: inherit !important;
-}
-
-.profile-glass-theme h2[data-has-name-color="true"] * {
-  color: inherit !important;
 }
 
 /* Exclude Add Friend button from profile theme overrides */

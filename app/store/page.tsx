@@ -23,9 +23,12 @@ import { NameWithColor } from "@/components/name-with-color"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 import { NexonHistoryModal } from "@/components/nexon-history-modal"
 import { WallpaperRenderer } from "@/components/wallpapers/wallpaper-renderer"
+import { getNameColorClass, getNameColorStyle } from "@/lib/name-color-classes"
+import { useTheme } from "@/components/theme-provider"
 
 export default function StorePage() {
   const { user, nickname, refreshProfile, loading: authLoading } = useAuth()
+  const { theme } = useTheme()
   const { setPageContext } = useChatContext()
   const router = useRouter()
   const [nexon, setNexon] = useState<number>(0)
@@ -237,25 +240,6 @@ export default function StorePage() {
     return `cosmetic-wallpaper-${wallpaperId.replace("wallpaper-", "")}`
   }
 
-  const getNameColorPreviewClass = (nameColorId: string): string => {
-    // Common - Solid colors
-    if (nameColorId === "name-crimson") return "text-rose-600 dark:text-rose-400"
-    if (nameColorId === "name-azure") return "text-cyan-600 dark:text-cyan-400"
-    if (nameColorId === "name-lime") return "text-lime-600 dark:text-lime-400"
-
-    // Rare - Gradients
-    if (nameColorId === "name-golden-god") return "cosmetic-name-golden-god"
-    if (nameColorId === "name-cyberpunk") return "cosmetic-name-cyberpunk"
-    if (nameColorId === "name-ice-cold") return "cosmetic-name-ice-cold"
-
-    // Legendary - Animated
-    if (nameColorId === "name-rgb-gamer") return "cosmetic-name-rgb-gamer"
-    if (nameColorId === "name-neon") return "cosmetic-name-neon"
-    if (nameColorId === "name-glitch") return "cosmetic-name-glitch"
-
-    return ""
-  }
-
   const renderFramePreview = (frameId: string): React.ReactNode => {
     if (frameId === "frame-laurels") {
       return (
@@ -449,7 +433,11 @@ export default function StorePage() {
                               </div>
                             )}
                             {cosmetic.category === "nameColor" && (
-                              <div className={`text-2xl font-bold ${getNameColorPreviewClass(cosmetic.id)}`}>
+                              <div
+                                className={`text-2xl font-bold ${getNameColorClass(cosmetic.id)}`}
+                                style={getNameColorStyle(cosmetic.id, theme === "dark")}
+                                data-name-color="true"
+                              >
                                 Sample Text
                               </div>
                             )}
