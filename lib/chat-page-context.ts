@@ -168,7 +168,8 @@ export function defaultContextForRoute(route: string): PageContext {
     return {
       route,
       title: "Store",
-      description: "Cosmetics shop where users spend Nexon on avatars, frames, themes, and more.",
+      description:
+        "Cosmetics shop. Nexon buys items directly. Style Shards (from perfect module quizzes) open Nexus Cache loot boxes (5 shards each) for random unowned cosmetics. Free Nexus Caches come from final exam 100% rewards.",
       suggestedChips: chips,
       pageData: { pageType: "store" },
     }
@@ -288,7 +289,7 @@ export function defaultChipsForRoute(route: string): string[] {
     return ["How does AI creation work?", "What file types can I upload?"]
   }
   if (route === "/store") {
-    return ["What can I buy here?", "How do I earn Nexon?"]
+    return ["What is Nexus Cache?", "How do I get Style Shards?", "How do I earn Nexon?"]
   }
   if (route === "/friends") {
     return ["How do I add friends?", "What are challenges?"]

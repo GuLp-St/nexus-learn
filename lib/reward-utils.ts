@@ -55,11 +55,17 @@ export function getTierRewardPreview(
 ): { xp: number; nexon: number; styleShards: number; nexusCache: number } {
   const config = BASE_REWARDS[rewardType][tier as keyof (typeof BASE_REWARDS)["moduleQuiz"]]
   if (!config) return { xp: 0, nexon: 0, styleShards: 0, nexusCache: 0 }
+  const cfg = config as {
+    xp: number
+    nexon?: number
+    styleShards?: number
+    nexusCache?: number
+  }
   return {
-    xp: Math.round(config.xp * xpMultiplier),
-    nexon: "nexon" in config ? Math.round(config.nexon * xpMultiplier) : 0,
-    styleShards: "styleShards" in config ? config.styleShards : 0,
-    nexusCache: rewardType === "finalQuiz" && tier === "100%" && "nexusCache" in config ? config.nexusCache : 0,
+    xp: Math.round(cfg.xp * xpMultiplier),
+    nexon: typeof cfg.nexon === "number" ? Math.round(cfg.nexon * xpMultiplier) : 0,
+    styleShards: typeof cfg.styleShards === "number" ? cfg.styleShards : 0,
+    nexusCache: typeof cfg.nexusCache === "number" ? cfg.nexusCache : 0,
   }
 }
 
@@ -149,15 +155,18 @@ export async function claimReward(
       if (config) {
         xpAmount = Math.round(config.xp * xpMultiplier)
         if ("nexon" in config) nexonAmount = Math.round(config.nexon * xpMultiplier)
-        if ("styleShards" in config) styleShardsAmount = config.styleShards
+        if ("styleShards" in config && typeof (config as { styleShards?: number }).styleShards === "number") {
+          styleShardsAmount = (config as { styleShards: number }).styleShards
+        }
       }
     } else if (rewardType === "finalQuiz") {
       const config = BASE_REWARDS.finalQuiz[tier as keyof typeof BASE_REWARDS.finalQuiz]
       if (config) {
         xpAmount = Math.round(config.xp * xpMultiplier)
         if ("nexon" in config) nexonAmount = Math.round(config.nexon * xpMultiplier)
-        if ("styleShards" in config) styleShardsAmount = config.styleShards
-        if ("nexusCache" in config) nexusCacheCount = config.nexusCache
+        if ("nexusCache" in config && typeof (config as { nexusCache?: number }).nexusCache === "number") {
+          nexusCacheCount = (config as { nexusCache: number }).nexusCache
+        }
       }
     }
 

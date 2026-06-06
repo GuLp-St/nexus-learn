@@ -23,7 +23,7 @@ import { NameWithColor } from "@/components/name-with-color"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 import { NexonHistoryModal } from "@/components/nexon-history-modal"
 import { NexusCacheModal } from "@/components/nexus-cache-modal"
-import { getStyleShards } from "@/lib/style-shard-utils"
+import { getStyleShards, getFreeNexusCaches, STYLE_SHARDS_PER_NEXUS_CACHE } from "@/lib/style-shard-utils"
 import { WallpaperRenderer } from "@/components/wallpapers/wallpaper-renderer"
 import { getNameColorClass, getNameColorStyle } from "@/lib/name-color-classes"
 import { useTheme } from "@/components/theme-provider"
@@ -45,6 +45,7 @@ export default function StorePage() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [cacheOpen, setCacheOpen] = useState(false)
   const [styleShards, setStyleShards] = useState(0)
+  const [freeNexusCaches, setFreeNexusCaches] = useState(0)
   const tabsListRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -75,15 +76,24 @@ export default function StorePage() {
   // Set chatbot context with real-time store data
   useEffect(() => {
     if (!authLoading && user) {
+      const storeChips = ["What is Nexus Cache?", "How do I get Style Shards?"]
+      if (nexon <= 0) storeChips.push("How do I earn more Nexon?")
+      else storeChips.push("What should I buy?")
+
       setPageContext({
         title: "Store",
-        description: "Browse and purchase cosmetics including avatars, frames, wallpapers, and name colors using Nexon currency.",
-        suggestedChips:
-          nexon <= 0
-            ? ["How do I earn more Nexon?", "What can I buy here?"]
-            : ["What should I buy?", "How do I earn more Nexon?"],
+        description:
+          "Cosmetics shop. Users spend Nexon on avatars, frames, wallpapers, name colors, and themes. " +
+          "Style Shards are a separate cosmetic currency — earn them from perfect module quiz scores (100% tier). " +
+          `Spend ${STYLE_SHARDS_PER_NEXUS_CACHE} Style Shards to open a Nexus Cache loot box for a random unowned cosmetic (uncommon to unique: avatars, frames, wallpapers, name colors, themes). ` +
+          "Free Nexus Caches are earned from final exam 100% rewards and can be opened in the Store header.",
+        suggestedChips: storeChips.slice(0, 4),
         pageData: {
+          pageType: "store",
           nexon,
+          styleShards,
+          freeNexusCaches,
+          styleShardsPerNexusCache: STYLE_SHARDS_PER_NEXUS_CACHE,
           selectedCategory,
           cosmetics: cosmetics.filter(c => c.category === selectedCategory).map((cosmetic) => ({
             id: cosmetic.id,
@@ -91,28 +101,31 @@ export default function StorePage() {
             description: cosmetic.description,
             price: cosmetic.price,
             category: cosmetic.category,
-            isOwned: userCosmetics?.[cosmetic.category]?.includes(cosmetic.id) || false,
+            rarity: cosmetic.rarity,
+            isOwned: userCosmetics?.ownedCosmetics?.[`${cosmetic.category}s`]?.includes(cosmetic.id) || false,
           })),
           userCosmetics,
         },
       })
     }
-  }, [user, authLoading, nexon, selectedCategory, cosmetics, userCosmetics, setPageContext])
+  }, [user, authLoading, nexon, styleShards, freeNexusCaches, selectedCategory, cosmetics, userCosmetics, setPageContext])
 
   const loadData = async (showLoading = true) => {
     if (!user) return
     try {
       if (showLoading) setLoading(true)
-      const [nexonBalance, allCosmetics, userCosmeticData, shards] = await Promise.all([
+      const [nexonBalance, allCosmetics, userCosmeticData, shards, freeCaches] = await Promise.all([
         getUserNexon(user.uid),
         getAllCosmetics(),
         getUserCosmetics(user.uid),
         getStyleShards(user.uid),
+        getFreeNexusCaches(user.uid),
       ])
       setNexon(nexonBalance)
       setCosmetics(allCosmetics)
       setUserCosmetics(userCosmeticData)
       setStyleShards(shards)
+      setFreeNexusCaches(freeCaches)
     } catch (error) {
       console.error("Error loading store data:", error)
       toast.error("Failed to load store")
