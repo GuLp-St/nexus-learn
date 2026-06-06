@@ -45,10 +45,14 @@ import {
 } from "@/lib/gemini"
 import { CommunityLibraryPanel } from "@/components/community-library-panel"
 import { cn } from "@/lib/utils"
-import { startCourseCreationJob } from "@/lib/course-creation-job-actions"
+import {
+  cancelCourseCreationJob,
+  startCourseCreationJob,
+} from "@/lib/course-creation-job-actions"
 import type { CourseCreationJob } from "@/lib/course-creation-job"
 import { db } from "@/lib/firebase"
 import { doc, onSnapshot } from "firebase/firestore"
+import { usePageContext } from "@/hooks/usePageContext"
 
 type CreateMode = "ai" | "upload"
 type MainTab = "create" | "browse"
@@ -83,6 +87,40 @@ export default function CreateCourseUnified() {
   const [uploadDifficulty, setUploadDifficulty] = useState<CourseDifficulty>("intermediate")
   const [toneInstruction, setToneInstruction] = useState("")
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
+  const [cancelling, setCancelling] = useState(false)
+
+  usePageContext({
+    title: "Create Course",
+    description:
+      mainTab === "browse"
+        ? "The user is browsing the community course library to add existing courses to their journey."
+        : createMode === "upload"
+          ? "The user is on the upload tab. They can upload PDF, DOCX, or PPTX files to auto-generate a full course journey. Requires a paid upload creation credit."
+          : phase === "working"
+            ? "The user is waiting for a course to be generated. The pipeline is running — help them understand progress or troubleshoot if stuck."
+            : phase === "pick-difficulty"
+              ? "The user chose an AI topic with multiple difficulty paths and is picking which one to use."
+              : "The user is on the AI topic tab. They enter a subject and the app analyzes it to build a full course journey. Requires a paid AI creation credit.",
+    pageData: {
+      pageType: "create-course",
+      mainTab,
+      createMode,
+      phase,
+      hasAiCredit: credits.ai,
+      hasUploadCredit: credits.upload,
+      uploadedFileCount: uploadedFiles.length,
+      uploadDifficulty,
+      ...(activeJobId ? { activeJobId } : {}),
+      ...(progressDetail ? { progressDetail } : {}),
+      ...(error ? { lastError: error } : {}),
+    },
+    suggestedChips:
+      mainTab === "browse"
+        ? ["How do I add a course?", "What's in the library?"]
+        : createMode === "upload"
+          ? ["What file types can I upload?", "How long does upload take?"]
+          : ["How does AI creation work?", "What topics work best?"],
+  })
 
   const refreshCredits = useCallback(async () => {
     if (!user) return
@@ -189,17 +227,38 @@ export default function CreateCourseUnified() {
   useEffect(() => {
     if (!user || authLoading) return
     import("@/lib/course-creation-job-actions").then(({ fetchActiveCourseCreationJob }) => {
-      fetchActiveCourseCreationJob(user.uid).then((job) => {
-        if (job && (job.status === "pending" || job.status === "running")) {
-          setActiveJobId(job.id)
-          setPhase("working")
-          setProgressDetail(job.detail || "Resuming…")
-          setCreateMode(job.type)
-          setMainTab("create")
-        }
-      })
+      fetchActiveCourseCreationJob(user.uid)
+        .then((job) => {
+          if (job?.status === "running") {
+            setActiveJobId(job.id)
+            setPhase("working")
+            setProgressDetail(job.detail || "Resuming…")
+            setCreateMode(job.type)
+            setMainTab("create")
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to resume active creation job:", err)
+        })
     })
   }, [user, authLoading])
+
+  const handleCancelJob = async () => {
+    setCancelling(true)
+    setError("")
+    try {
+      if (user && activeJobId) {
+        await cancelCourseCreationJob(activeJobId, user.uid)
+      }
+    } catch (err) {
+      console.error("Failed to cancel creation job:", err)
+    } finally {
+      setPhase("idle")
+      setActiveJobId(null)
+      setProgressDetail("")
+      setCancelling(false)
+    }
+  }
 
   const runAiFlow = async (difficulty?: DifficultyOption | null) => {
     if (!user || !courseInput.trim()) return
@@ -325,9 +384,19 @@ export default function CreateCourseUnified() {
         headers: { Authorization: `Bearer ${idToken}` },
         body: formData,
       })
-      const payload = await res.json().catch(() => ({}))
+      const rawText = await res.text()
+      let payload: { error?: string; courseId?: string } = {}
+      try {
+        payload = rawText ? JSON.parse(rawText) : {}
+      } catch {
+        payload = {}
+      }
       if (!res.ok) {
-        throw new Error(payload.error || "Upload course creation failed")
+        throw new Error(
+          payload.error ||
+            (rawText && rawText.length < 200 ? rawText : null) ||
+            `Upload course creation failed (${res.status})`
+        )
       }
       if (payload.courseId) {
         router.push(`/journey/${payload.courseId}`)
@@ -382,6 +451,14 @@ export default function CreateCourseUnified() {
                   <p className="text-xs text-muted-foreground">
                     Please keep this tab open until your course is ready.
                   </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCancelJob}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? "Cancelling…" : "Cancel and go back"}
+                  </Button>
                 </CardContent>
               </Card>
             )}

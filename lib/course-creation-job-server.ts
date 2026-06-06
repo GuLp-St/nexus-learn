@@ -1,9 +1,36 @@
-import { FieldValue } from "firebase-admin/firestore"
+import { FieldValue, type DocumentData } from "firebase-admin/firestore"
 import { getAdminFirestore } from "./firebase-admin"
 import type { CreationCreditType } from "./course-creation-credits-shared"
 import type { CourseCreationJob, CreationJobStatus } from "./course-creation-job"
 
 export type { CourseCreationJob, CreationJobStatus }
+
+/** Pending jobs never resume the pipeline — fail after this age. */
+const STALE_PENDING_MS = 60_000
+/** Running pipelines time out (upload API maxDuration is 300s). */
+const STALE_RUNNING_MS = 12 * 60_000
+
+function serializeCourseCreationJob(
+  id: string,
+  data: DocumentData
+): CourseCreationJob {
+  return {
+    id,
+    userId: data.userId,
+    type: data.type,
+    status: data.status,
+    phase: data.phase,
+    detail: data.detail,
+    courseId: data.courseId ?? null,
+    error: data.error ?? null,
+    topic: data.topic,
+    difficultyJson: data.difficultyJson ?? null,
+    difficulty: data.difficulty ?? null,
+    toneInstruction: data.toneInstruction ?? null,
+    createdAt: data.createdAt?.toMillis?.() ?? null,
+    updatedAt: data.updatedAt?.toMillis?.() ?? null,
+  }
+}
 
 export async function createCourseCreationJob(
   userId: string,
@@ -57,7 +84,33 @@ export async function getCourseCreationJob(
   if (!snap.exists) return null
   const data = snap.data()
   if (data?.userId !== userId) return null
-  return { id: snap.id, ...data } as CourseCreationJob
+  return serializeCourseCreationJob(snap.id, data)
+}
+
+function jobAgeMs(job: CourseCreationJob): number {
+  const ts = job.updatedAt ?? job.createdAt
+  if (ts == null) return Number.POSITIVE_INFINITY
+  return Date.now() - ts
+}
+
+function isJobStale(job: CourseCreationJob): boolean {
+  const age = jobAgeMs(job)
+  if (job.status === "pending") return age > STALE_PENDING_MS
+  if (job.status === "running") return age > STALE_RUNNING_MS
+  return false
+}
+
+export async function failCourseCreationJob(
+  jobId: string,
+  userId: string,
+  message: string
+): Promise<void> {
+  await updateCourseCreationJob(jobId, userId, {
+    status: "failed",
+    phase: "error",
+    detail: message,
+    error: message,
+  })
 }
 
 export async function getActiveCourseCreationJob(
@@ -78,8 +131,23 @@ export async function getActiveCourseCreationJob(
       const bT = b.data().updatedAt?.toMillis?.() ?? 0
       return bT - aT
     })
-    const d = sorted[0]
-    return { id: d.id, ...d.data() } as CourseCreationJob
+
+    let activeRunning: CourseCreationJob | null = null
+
+    for (const d of sorted) {
+      const job = serializeCourseCreationJob(d.id, d.data())
+      if (job.status === "running" && !isJobStale(job)) {
+        activeRunning = job
+        continue
+      }
+      const message =
+        job.status === "pending"
+          ? "Creation was interrupted before starting. Please try again."
+          : "Creation timed out. Please try again."
+      await failCourseCreationJob(job.id, userId, message)
+    }
+
+    return activeRunning
   } catch (error) {
     console.error("Error fetching active creation job:", error)
     return null

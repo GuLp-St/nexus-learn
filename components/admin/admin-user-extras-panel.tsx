@@ -91,7 +91,7 @@ export function AdminUserExtrasPanel({
       : data.catalog.filter((c) => c.category === cosmeticFilter)
 
   return (
-    <div className="space-y-4 pt-4 border-t border-border">
+    <div className="min-w-0 space-y-4 pt-4 border-t border-border overflow-hidden">
       <div>
         <h3 className="font-semibold text-sm flex items-center gap-2 mb-2">
           <Award className="h-4 w-4" />
@@ -144,13 +144,13 @@ export function AdminUserExtrasPanel({
             return (
               <div
                 key={c.id}
-                className="flex items-center justify-between gap-2 text-xs py-1"
+                className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs py-1"
               >
                 <span className="truncate min-w-0">
                   {c.name}
                   <span className="text-muted-foreground ml-1">({c.rarity})</span>
                 </span>
-                <div className="flex gap-1 shrink-0">
+                <div className="flex flex-wrap gap-1 sm:shrink-0">
                   {equipped && (
                     <Badge variant="outline" className="text-[10px] h-5">
                       equipped

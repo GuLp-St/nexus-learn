@@ -2,6 +2,7 @@
 
 import {
   createCourseCreationJob,
+  failCourseCreationJob,
   getActiveCourseCreationJob,
   getCourseCreationJob,
 } from "./course-creation-job-server"
@@ -48,4 +49,26 @@ export async function fetchCourseCreationJob(jobId: string, userId: string) {
 
 export async function fetchActiveCourseCreationJob(userId: string) {
   return getActiveCourseCreationJob(userId)
+}
+
+export async function cancelCourseCreationJob(
+  jobId: string,
+  userId: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const job = await getCourseCreationJob(jobId, userId)
+    if (!job) {
+      return { ok: false, error: "Job not found" }
+    }
+    if (job.status === "completed") {
+      return { ok: true }
+    }
+    await failCourseCreationJob(jobId, userId, "Cancelled by user.")
+    return { ok: true }
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to cancel job",
+    }
+  }
 }

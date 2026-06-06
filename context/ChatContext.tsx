@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, ReactNod
 import { usePathname } from "next/navigation"
 import type { PageContext } from "@/lib/page-context-types"
 import { normalizePageContext } from "@/lib/page-context-types"
-import { buildPageContext } from "@/lib/chat-page-context"
+import { buildPageContext, defaultContextForRoute } from "@/lib/chat-page-context"
 
 export type { PageContext } from "@/lib/page-context-types"
 
@@ -23,14 +23,16 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined)
 export function ChatContextProvider({ children }: { children: ReactNode }) {
   const [pageContext, setPageContextState] = useState<PageContext | null>(null)
   const pathname = usePathname()
-  const pathnameRef = useRef<string>(pathname)
+  const pageOverrideRef = useRef(false)
 
   const setPageContext = useCallback(
     (context: PageContextInput | null) => {
       if (!context) {
+        pageOverrideRef.current = false
         setPageContextState(null)
         return
       }
+      pageOverrideRef.current = true
       const normalized = normalizePageContext(context, pathname)
       if (!normalized) return
       setPageContextState(buildPageContext(pathname, normalized))
@@ -38,12 +40,15 @@ export function ChatContextProvider({ children }: { children: ReactNode }) {
     [pathname]
   )
 
-  // Auto-reset context when pathname changes (but allow new page to set it immediately)
+  // Baseline context for routes without a custom setPageContext (deferred so pages win)
   useEffect(() => {
-    if (pathnameRef.current !== pathname) {
-      pathnameRef.current = pathname
-      setPageContextState(null)
-    }
+    pageOverrideRef.current = false
+    const id = setTimeout(() => {
+      if (!pageOverrideRef.current) {
+        setPageContextState(defaultContextForRoute(pathname))
+      }
+    }, 0)
+    return () => clearTimeout(id)
   }, [pathname])
 
   return (

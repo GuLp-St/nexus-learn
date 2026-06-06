@@ -61,8 +61,8 @@ export function AdminCourseProgressControls({
     course.finalQuizScore !== null && course.finalQuizScore >= MODULE_QUIZ_PASS_SCORE
 
   return (
-    <div className="rounded-lg border border-border p-3 space-y-2">
-      <div className="flex justify-between gap-2 items-start">
+    <div className="min-w-0 overflow-hidden rounded-lg border border-border p-3 space-y-2">
+      <div className="flex justify-between gap-2 items-start min-w-0">
         <button
           type="button"
           className="flex items-center gap-1 min-w-0 text-left"
@@ -80,11 +80,11 @@ export function AdminCourseProgressControls({
         </Badge>
       </div>
 
-      <div className="flex flex-wrap gap-1">
+      <div className="grid grid-cols-2 gap-1 sm:flex sm:flex-wrap">
         <Button
           size="sm"
           variant="secondary"
-          className="h-7 text-xs"
+          className="h-7 text-xs w-full sm:w-auto"
           disabled={busy}
           onClick={() => run("complete_course")}
         >
@@ -94,7 +94,7 @@ export function AdminCourseProgressControls({
         <Button
           size="sm"
           variant="outline"
-          className="h-7 text-xs"
+          className="h-7 text-xs w-full sm:w-auto"
           disabled={busy}
           onClick={() => run("complete_final_quiz")}
         >
@@ -103,7 +103,7 @@ export function AdminCourseProgressControls({
         <Button
           size="sm"
           variant="ghost"
-          className="h-7 text-xs text-destructive"
+          className="h-7 text-xs text-destructive w-full sm:w-auto"
           disabled={busy}
           onClick={() => run("reset_progress")}
         >
@@ -113,7 +113,7 @@ export function AdminCourseProgressControls({
         <Button
           size="sm"
           variant="ghost"
-          className="h-7 text-xs text-destructive"
+          className="h-7 text-xs text-destructive w-full sm:w-auto"
           disabled={busy}
           onClick={async () => {
             if (!confirm(`Remove "${course.title}" from this user's library?`)) return

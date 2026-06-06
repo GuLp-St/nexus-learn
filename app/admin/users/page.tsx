@@ -190,8 +190,8 @@ export default function AdminUsersPage() {
     <AdminGuard>
       <div className="flex flex-col min-h-screen bg-background lg:flex-row">
         <SidebarNav currentPath="/admin/users" title="Admin — Users" />
-        <main className="flex-1 overflow-auto p-4 lg:p-8">
-          <div className="mx-auto max-w-6xl space-y-6">
+        <main className="flex-1 min-w-0 overflow-auto p-4 lg:p-8">
+          <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">User management</h1>
               <p className="text-muted-foreground text-sm mt-1">
@@ -199,8 +199,8 @@ export default function AdminUsersPage() {
               </p>
             </div>
 
-            <div className="flex gap-2">
-              <div className="relative flex-1 max-w-md">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative flex-1 min-w-0 max-w-md">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   className="pl-9"
@@ -215,8 +215,8 @@ export default function AdminUsersPage() {
               </Button>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card>
+            <div className="grid min-w-0 gap-6 lg:grid-cols-2">
+              <Card className="min-w-0">
                 <CardHeader>
                   <CardTitle className="text-lg">Users</CardTitle>
                   <CardDescription>{loading ? "Loading…" : `${users.length} shown`}</CardDescription>
@@ -233,8 +233,8 @@ export default function AdminUsersPage() {
                           : "border-border hover:bg-accent"
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium truncate">
+                      <div className="flex items-center justify-between gap-2 min-w-0">
+                        <span className="font-medium truncate min-w-0 flex-1">
                           {u.nickname || u.email || u.id.slice(0, 8)}
                         </span>
                         {u.role === "admin" && (
@@ -255,14 +255,16 @@ export default function AdminUsersPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="min-w-0">
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <UserCog className="h-5 w-5" />
-                    {selected ? selected.nickname || "User detail" : "Select a user"}
+                  <CardTitle className="text-lg flex items-center gap-2 min-w-0">
+                    <UserCog className="h-5 w-5 shrink-0" />
+                    <span className="truncate">
+                      {selected ? selected.nickname || "User detail" : "Select a user"}
+                    </span>
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="min-w-0 overflow-hidden">
                   {!selectedId && (
                     <p className="text-sm text-muted-foreground">Choose a user from the list.</p>
                   )}
@@ -320,12 +322,12 @@ export default function AdminUsersPage() {
                         </Button>
                       </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        <Button onClick={saveBalances} disabled={saving}>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <Button onClick={saveBalances} disabled={saving} className="w-full">
                           <Coins className="h-4 w-4 mr-2" />
                           Save balances
                         </Button>
-                        <Button variant="outline" onClick={toggleAdmin} disabled={saving}>
+                        <Button variant="outline" onClick={toggleAdmin} disabled={saving} className="w-full">
                           <Shield className="h-4 w-4 mr-2" />
                           {selected.role === "admin" ? "Remove admin" : "Make admin"}
                         </Button>
@@ -334,6 +336,7 @@ export default function AdminUsersPage() {
                             variant="outline"
                             onClick={handleImpersonate}
                             disabled={saving || impersonating}
+                            className="w-full"
                           >
                             <VenetianMask className="h-4 w-4 mr-2" />
                             {impersonating ? "Starting…" : "Impersonate"}
@@ -343,6 +346,7 @@ export default function AdminUsersPage() {
                           variant="destructive"
                           onClick={() => setDeleteOpen(true)}
                           disabled={saving}
+                          className="w-full"
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Delete account

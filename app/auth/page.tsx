@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/components/auth-provider"
 import { resetCosmeticTheme } from "@/lib/cosmetic-theme-reset"
+import { usePageContext } from "@/hooks/usePageContext"
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState<"signin" | "signup">("signin")
@@ -21,6 +22,27 @@ export default function AuthPage() {
   const [error, setError] = useState("")
   const router = useRouter()
   const { user, loading } = useAuth()
+
+  usePageContext({
+    title: activeTab === "signin" ? "Sign In" : "Sign Up",
+    description:
+      activeTab === "signin"
+        ? "The user is on the sign-in page. They can log in with email and password. Help with login issues, password requirements, or what NexusLearn offers after signing in."
+        : "The user is on the registration page. They need a nickname, email, password (min 6 characters), and password confirmation. Help with account creation, nickname rules, or getting started.",
+    pageData: {
+      pageType: "auth",
+      activeTab,
+      fields:
+        activeTab === "signin"
+          ? ["email", "password"]
+          : ["nickname", "email", "password", "confirmPassword"],
+      ...(error ? { lastError: error } : {}),
+    },
+    suggestedChips:
+      activeTab === "signin"
+        ? ["How do I create an account?", "What is NexusLearn?"]
+        : ["What should my nickname be?", "What happens after I sign up?"],
+  })
 
   // Reset cosmetic theme on auth page (no user theme on sign-in/register)
   useEffect(() => {

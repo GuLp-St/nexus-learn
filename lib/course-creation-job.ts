@@ -29,8 +29,8 @@ export interface CourseCreationJob {
   difficultyJson?: string | null
   difficulty?: string | null
   toneInstruction?: string | null
-  createdAt?: unknown
-  updatedAt?: unknown
+  createdAt?: number | null
+  updatedAt?: number | null
 }
 
 export async function createCourseCreationJob(
