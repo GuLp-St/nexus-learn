@@ -9,14 +9,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
-import { LoadingScreen } from "@/components/ui/LoadingScreen"
+import { QuizPreparingView } from "@/components/quiz-preparing-view"
+import { startQuizPrepInBackground, subscribeToQuizPrepJob } from "@/lib/quiz-prep-client"
 import Link from "next/link"
 import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
 import { useChatContext } from "@/context/ChatContext"
 import { getCourseWithProgress, CourseWithProgress } from "@/lib/course-utils"
-import { QuizQuestion, QuizAttempt, fetchQuizQuestions, fetchQuizQuestionsByIds, saveQuizQuestions, selectRandomQuestions, createQuizAttempt, saveQuizAttempt, saveQuizAttemptAnswers, getActiveQuiz } from "@/lib/quiz-utils"
-import { generateCourseQuizQuestions, evaluateSubjectiveAnswer, checkObjectiveAnswer } from "@/lib/quiz-generator"
+import { QuizQuestion, QuizAttempt, fetchQuizQuestions, fetchQuizQuestionsByIds, createQuizAttempt, saveQuizAttempt, saveQuizAttemptAnswers, getActiveQuiz } from "@/lib/quiz-utils"
+import { evaluateSubjectiveAnswer, checkObjectiveAnswer } from "@/lib/quiz-generator"
 import { useActivityTracking } from "@/hooks/use-activity-tracking"
 import { useXP } from "@/components/xp-context-provider"
 import { useQuizLeaveWarning } from "@/hooks/use-quiz-leave-warning"
@@ -56,6 +57,8 @@ export default function CourseQuizPage() {
   const { setPageContext } = useChatContext()
   const { showXPAward } = useXP()
   const [error, setError] = useState<string | null>(null) // Track errors
+  const [prepJobId, setPrepJobId] = useState<string | null>(null)
+  const prepLoadedRef = useRef(false)
 
   // Set chatbot context with real-time quiz data
   useEffect(() => {
@@ -121,8 +124,6 @@ export default function CourseQuizPage() {
       })
     }
   }, [course, user, showResults, questions, scores, answers, currentQuestionIndex, setPageContext])
-
-  const FINAL_QUIZ_COUNT = 20 // 18 objective + 2 subjective
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -249,84 +250,17 @@ export default function CourseQuizPage() {
         }
       }
 
-      // Always generate new questions for each quiz attempt
       setGenerating(true)
-      
-      // Set minimum loading time to 30 seconds for optimistic loading
-      const minLoadingTime = 30000
-      const startTime = Date.now()
-      
-      let generatedQuestions: QuizQuestion[] | null = null
-      try {
-        generatedQuestions = await generateCourseQuizQuestions(
-          finalCourseData,
-          courseId,
-          FINAL_QUIZ_COUNT
-        )
-      } catch (err: any) {
-        // If timeout or error, wait 2 seconds then check Firestore
-        if (err.message?.includes("timeout") || err.message?.includes("Generation timeout")) {
-          console.log("Generation timeout, checking Firestore...")
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          
-          // Double-check: Try to load from Firestore using question IDs from attempt
-          // For now, we'll just throw the error since questions aren't saved until after generation
-          // In a real scenario, you might want to check for recently saved questions
-          const elapsed = Date.now() - startTime
-          const remaining = Math.max(0, minLoadingTime - elapsed)
-          if (remaining > 0) {
-            await new Promise(resolve => setTimeout(resolve, remaining))
-          }
-          throw new Error("Generation timed out. Please try again.")
-        } else {
-          throw err
-        }
-      }
-      
-      // Ensure minimum loading time
-      const elapsed = Date.now() - startTime
-      const remaining = Math.max(0, minLoadingTime - elapsed)
-      if (remaining > 0 && generatedQuestions) {
-        await new Promise(resolve => setTimeout(resolve, remaining))
-      }
-
-      if (generatedQuestions) {
-        let selectedQuestions: QuizQuestion[]
-        // In challenge mode or new quiz, always use new random questions
-        // For final quiz: ensure we have 18 objective + 2 subjective
-        const objectiveQuestions = generatedQuestions.filter(q => q.type === "objective")
-        const subjectiveQuestions = generatedQuestions.filter(q => q.type === "subjective")
-        const selectedObjective = selectRandomQuestions(objectiveQuestions, 18)
-        const selectedSubjective = selectRandomQuestions(subjectiveQuestions, 2)
-        selectedQuestions = [...selectedObjective, ...selectedSubjective].sort(() => Math.random() - 0.5)
-
-        if (selectedQuestions.length === 0) {
-          throw new Error("No questions available")
-        }
-
-        // Save questions to database so history works
-        await saveQuizQuestions(selectedQuestions)
-
-        setQuestions(selectedQuestions)
-
-        // Track start time for challenge mode
-        if (isChallengeMode) {
-            const startTime = Date.now()
-            setQuizStartTime(startTime)
-            quizStartTimeRef.current = startTime
-        }
-
-        const newAttemptId = await createQuizAttempt(
-          user.uid,
-          courseId,
-          "course",
-          selectedQuestions.map(q => q.questionId),
-          null,
-          null,
-          false // isRetake - always false for new attempts
-        )
-        setAttemptId(newAttemptId)
-      }
+      const idToken = await user.getIdToken()
+      const jobId = await startQuizPrepInBackground(
+        user.uid,
+        courseId,
+        "course",
+        null,
+        finalCourseData.title,
+        idToken
+      )
+      setPrepJobId(jobId)
 
     } catch (error) {
       console.error("Error loading quiz:", error)
@@ -336,6 +270,53 @@ export default function CourseQuizPage() {
       setGenerating(false)
     }
   }
+
+  useEffect(() => {
+    if (!prepJobId || !user) return
+
+    const unsub = subscribeToQuizPrepJob(prepJobId, async (job) => {
+      if (!job || prepLoadedRef.current) return
+      if (job.status === "failed") {
+        setError(job.error || "Failed to generate quiz questions.")
+        setGenerating(false)
+        setLoading(false)
+        return
+      }
+      if (job.status !== "completed" || !job.questionIds?.length) return
+
+      prepLoadedRef.current = true
+      try {
+        const restored = await fetchQuizQuestionsByIds(courseId, job.questionIds)
+        if (restored.length === 0) {
+          throw new Error("Failed to load generated questions")
+        }
+        setQuestions(restored)
+        if (isChallengeMode) {
+          const startTime = Date.now()
+          setQuizStartTime(startTime)
+          quizStartTimeRef.current = startTime
+        }
+        const newAttemptId = await createQuizAttempt(
+          user.uid,
+          courseId,
+          "course",
+          restored.map((q) => q.questionId),
+          null,
+          null,
+          false
+        )
+        setAttemptId(newAttemptId)
+      } catch (err) {
+        console.error("Error loading prepared quiz:", err)
+        setError(err instanceof Error ? err.message : "Failed to load quiz questions.")
+      } finally {
+        setGenerating(false)
+        setLoading(false)
+      }
+    })
+
+    return () => unsub()
+  }, [prepJobId, user, courseId, isChallengeMode])
 
   const handleAnswerChange = async (questionId: string, answer: string | number | boolean) => {
     const newAnswers = {
@@ -489,7 +470,13 @@ export default function CourseQuizPage() {
   })
 
   if (generating) {
-    return <LoadingScreen />
+    return (
+      <QuizPreparingView
+        title={course ? `Final Quiz: ${course.title}` : "Final Quiz"}
+        error={error}
+        backHref={courseId ? `/journey/${courseId}` : "/journey"}
+      />
+    )
   }
 
   if (loading) {

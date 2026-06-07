@@ -273,6 +273,13 @@ export default function ChallengeQuizPage() {
         throw new Error("Challenge is no longer available")
       }
 
+      if (
+        activeChallenge.status === "generating" ||
+        !activeChallenge.questionIds?.length
+      ) {
+        throw new Error("Quiz is still being prepared. You'll be notified when it's ready.")
+      }
+
       const challengeQuestions = await getChallengeQuestions(activeChallenge)
       if (challengeQuestions.length === 0) {
         throw new Error("Failed to load challenge questions")
@@ -708,6 +715,7 @@ export default function ChallengeQuizPage() {
         targetCorrectAnswer: targetQ?.correctAnswer,
         selfOptions: displayQ.options,
         selfCorrectAnswer: displayQ.correctAnswer,
+        selfObjectiveType: displayQ.objectiveType,
         isTrueFalse: targetQ?.objectiveType === "true-false",
         hasTfExpanded: !!targetQ?.tfExpandedVariant,
       })
@@ -891,49 +899,59 @@ export default function ChallengeQuizPage() {
         sabotageActive={sabotageActive}
       />
       <SidebarNav currentPath="/friends" />
-      <main className="flex-1">
-        <div className="p-4 lg:p-8">
-          <div className="mx-auto max-w-3xl space-y-4">
-            <div className="flex items-start gap-3">
+      <main className="flex-1 max-h-dvh overflow-hidden">
+        <div className="p-2 sm:p-4 lg:p-8 h-full">
+          <div className="mx-auto max-w-3xl h-full flex flex-col gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 shrink-0">
               <Button
                 variant="ghost"
                 size="icon"
-                className="shrink-0 mt-0.5"
+                className="shrink-0 h-8 w-8"
                 onClick={() => void confirmAndLeave("/friends")}
                 aria-label="Leave challenge"
               >
-                <ArrowLeft className="h-5 w-5" />
+                <ArrowLeft className="h-4 w-4" />
               </Button>
               <div className="flex-1 min-w-0">
-                <h1 className="text-2xl font-bold">Challenge Quiz</h1>
-                <p className="text-sm text-muted-foreground">
-                  Question {currentQuestionIndex + 1} of {questions.length} — answers lock when
-                  you press Next
+                <h1 className="text-base sm:text-2xl font-bold leading-tight">Challenge Quiz</h1>
+                <p className="text-[11px] sm:text-sm text-muted-foreground truncate">
+                  Q{currentQuestionIndex + 1}/{questions.length}
+                  {isPowered && ` · ${friendNickname} Q${(opponentLiveIndex ?? 0) + 1}`}
                 </p>
               </div>
               {isPowered && (
-                <div className="shrink-0 rounded-lg border bg-muted/40 px-3 py-1.5 text-right">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground flex items-center justify-end gap-1">
+                <div className="shrink-0 rounded-md border bg-muted/40 px-2 py-1 text-right hidden sm:block">
+                  <p className="text-[9px] uppercase tracking-wide text-muted-foreground flex items-center justify-end gap-1">
                     <Eye className="h-3 w-3" />
                     {friendNickname}
                   </p>
-                  <p className="text-sm font-semibold tabular-nums">
+                  <p className="text-xs sm:text-sm font-semibold tabular-nums">
                     Q{(opponentLiveIndex ?? 0) + 1}/{questions.length}
                   </p>
                 </div>
               )}
             </div>
 
-            <div className="w-full bg-muted rounded-full h-2">
+            <div className="w-full bg-muted rounded-full h-1.5 sm:h-2 shrink-0">
               <div
-                className="bg-primary h-2 rounded-full transition-all"
+                className="bg-primary h-1.5 sm:h-2 rounded-full transition-all"
                 style={{ width: `${progress}%` }}
               />
             </div>
 
-            <Card className={cn(questionShake && "challenge-question-shake")}>
-              <CardContent className="p-4 sm:p-5 space-y-4">
-                <h2 className="text-lg sm:text-xl font-semibold">{currentQuestion.question}</h2>
+            {isPowered && (
+              <div className="shrink-0">
+                <ChallengeActionsPanel
+                  actionsLeft={actionsLeft}
+                  disabled={actionBusy}
+                  onAction={handlePowerAction}
+                />
+              </div>
+            )}
+
+            <Card className={cn("flex-1 min-h-0 flex flex-col", questionShake && "challenge-question-shake")}>
+              <CardContent className="p-3 sm:p-5 space-y-3 sm:space-y-4 flex-1 flex flex-col">
+                <h2 className="text-base sm:text-xl font-semibold leading-snug">{currentQuestion.question}</h2>
 
                 {currentQuestion.type === "objective" && currentQuestion.options && (
                   <RadioGroup
@@ -960,7 +978,23 @@ export default function ChallengeQuizPage() {
                   </p>
                 )}
 
-                <div className="flex justify-end">
+                <div className="flex items-center justify-between gap-2 mt-auto pt-1">
+                  {challengeSettings?.timer !== false ? (
+                    <div
+                      className={cn(
+                        "flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/60 border text-xs sm:text-sm",
+                        fx.timerPulse && "challenge-timer-flash"
+                      )}
+                    >
+                      <span className="text-muted-foreground uppercase tracking-wide text-[10px] sm:text-xs">Time</span>
+                      <span className="font-mono font-bold tabular-nums">
+                        {Math.floor(elapsedTime / 60)}:
+                        {(elapsedTime % 60).toString().padStart(2, "0")}
+                      </span>
+                    </div>
+                  ) : (
+                    <span />
+                  )}
                   {isLastQuestion ? (
                     <Button
                       size="sm"
@@ -971,7 +1005,7 @@ export default function ChallengeQuizPage() {
                         ? "Submitting..."
                         : gradingNext
                           ? "Checking..."
-                          : "Submit Challenge"}
+                          : "Submit"}
                     </Button>
                   ) : (
                     <Button
@@ -995,29 +1029,6 @@ export default function ChallengeQuizPage() {
                 </div>
               </CardContent>
             </Card>
-
-            {isPowered && (
-              <ChallengeActionsPanel
-                actionsLeft={actionsLeft}
-                disabled={actionBusy}
-                onAction={handlePowerAction}
-              />
-            )}
-
-            {challengeSettings?.timer !== false && (
-              <div
-                className={cn(
-                  "flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-muted/60 border mx-auto w-fit",
-                  fx.timerPulse && "challenge-timer-flash"
-                )}
-              >
-                <span className="text-xs text-muted-foreground uppercase tracking-wide">Time</span>
-                <span className="font-mono text-lg font-bold tabular-nums">
-                  {Math.floor(elapsedTime / 60)}:
-                  {(elapsedTime % 60).toString().padStart(2, "0")}
-                </span>
-              </div>
-            )}
           </div>
         </div>
       </main>

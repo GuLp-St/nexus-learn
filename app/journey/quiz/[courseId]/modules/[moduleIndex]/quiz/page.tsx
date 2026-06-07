@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
-import { LoadingScreen } from "@/components/ui/LoadingScreen"
+import { QuizPreparingView } from "@/components/quiz-preparing-view"
+import { startQuizPrepInBackground, subscribeToQuizPrepJob } from "@/lib/quiz-prep-client"
 import Link from "next/link"
 import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
@@ -17,8 +18,8 @@ import { useChatContext } from "@/context/ChatContext"
 import { getCourseWithProgress, CourseWithProgress } from "@/lib/course-utils"
 import { doc, updateDoc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
-import { QuizQuestion, fetchQuizQuestions, saveQuizQuestions, selectRandomQuestions, createQuizAttempt, saveQuizAttempt, saveQuizAttemptAnswers, getActiveQuiz, QuizAttempt } from "@/lib/quiz-utils"
-import { generateModuleQuizQuestions, evaluateSubjectiveAnswer, checkObjectiveAnswer } from "@/lib/quiz-generator"
+import { QuizQuestion, fetchQuizQuestions, fetchQuizQuestionsByIds, createQuizAttempt, saveQuizAttempt, saveQuizAttemptAnswers, getActiveQuiz, QuizAttempt } from "@/lib/quiz-utils"
+import { evaluateSubjectiveAnswer, checkObjectiveAnswer } from "@/lib/quiz-generator"
 import { useActivityTracking } from "@/hooks/use-activity-tracking"
 import { useXP } from "@/components/xp-context-provider"
 import { useQuizLeaveWarning } from "@/hooks/use-quiz-leave-warning"
@@ -59,6 +60,8 @@ export default function ModuleQuizPage() {
   const { setPageContext } = useChatContext()
   const { showXPAward } = useXP()
   const [error, setError] = useState<string | null>(null) // Track errors
+  const [prepJobId, setPrepJobId] = useState<string | null>(null)
+  const prepLoadedRef = useRef(false)
 
   // Set chatbot context with real-time module quiz data
   useEffect(() => {
@@ -265,86 +268,18 @@ export default function ModuleQuizPage() {
           }
         }
 
-        const MODULE_QUIZ_COUNT = 10 // 9 objective + 1 subjective
-        
-        // Always generate new questions for each quiz attempt
         setGenerating(true)
         quizStartedRef.current = true
-        
-        // Set minimum loading time to 30 seconds for optimistic loading
-        const minLoadingTime = 30000
-        const startTime = Date.now()
-        
-        let generatedQuestions: QuizQuestion[] | null = null
-        try {
-          generatedQuestions = await generateModuleQuizQuestions(
-            courseWithProgress,
-            moduleIndex,
-            courseId,
-            MODULE_QUIZ_COUNT
-          )
-        } catch (err: any) {
-          // If timeout or error, wait 2 seconds then check Firestore
-          if (err.message?.includes("timeout") || err.message?.includes("Generation timeout")) {
-            console.log("Generation timeout, checking Firestore...")
-            await new Promise(resolve => setTimeout(resolve, 2000))
-            
-            // Double-check: Try to load from Firestore using question IDs from attempt
-            // For now, we'll just throw the error since questions aren't saved until after generation
-            const elapsed = Date.now() - startTime
-            const remaining = Math.max(0, minLoadingTime - elapsed)
-            if (remaining > 0) {
-              await new Promise(resolve => setTimeout(resolve, remaining))
-            }
-            throw new Error("Generation timed out. Please try again.")
-          } else {
-            throw err
-          }
-        }
-        
-        // Ensure minimum loading time
-        const elapsed = Date.now() - startTime
-        const remaining = Math.max(0, minLoadingTime - elapsed)
-        if (remaining > 0 && generatedQuestions) {
-          await new Promise(resolve => setTimeout(resolve, remaining))
-        }
-
-        if (generatedQuestions) {
-          // Always use new random questions
-          // For module quiz: ensure we have 9 objective + 1 subjective
-          const objectiveQuestions = generatedQuestions.filter(q => q.type === "objective")
-          const subjectiveQuestions = generatedQuestions.filter(q => q.type === "subjective")
-          const selectedObjective = selectRandomQuestions(objectiveQuestions, 9)
-          const selectedSubjective = selectRandomQuestions(subjectiveQuestions, 1)
-          const selectedQuestions = [...selectedObjective, ...selectedSubjective].sort(() => Math.random() - 0.5)
-
-          if (selectedQuestions.length === 0) {
-            throw new Error("No questions available")
-          }
-
-          // Save questions to database so history works
-          await saveQuizQuestions(selectedQuestions)
-
-          setQuestions(selectedQuestions)
-
-          // Track start time for challenge mode
-          if (isChallengeMode) {
-            const startTime = Date.now()
-            setQuizStartTime(startTime)
-            quizStartTimeRef.current = startTime
-          }
-
-          const newAttemptId = await createQuizAttempt(
-            user.uid,
-            courseId,
-            "module",
-            selectedQuestions.map((q) => q.questionId),
-            moduleIndex,
-            null,
-            false // isRetake - always false for new attempts
-          )
-          setAttemptId(newAttemptId)
-        }
+        const idToken = await user.getIdToken()
+        const jobId = await startQuizPrepInBackground(
+          user.uid,
+          courseId,
+          "module",
+          moduleIndex,
+          courseWithProgress.title,
+          idToken
+        )
+        setPrepJobId(jobId)
       } catch (error) {
         console.error("Error loading quiz:", error)
         setError(error instanceof Error ? error.message : "Failed to load quiz.")
@@ -358,6 +293,53 @@ export default function ModuleQuizPage() {
       loadQuiz()
     }
   }, [courseId, moduleIndex, router, user, authLoading])
+
+  useEffect(() => {
+    if (!prepJobId || !user) return
+
+    const unsub = subscribeToQuizPrepJob(prepJobId, async (job) => {
+      if (!job || prepLoadedRef.current) return
+      if (job.status === "failed") {
+        setError(job.error || "Failed to generate quiz questions.")
+        setGenerating(false)
+        setLoading(false)
+        return
+      }
+      if (job.status !== "completed" || !job.questionIds?.length) return
+
+      prepLoadedRef.current = true
+      try {
+        const restored = await fetchQuizQuestionsByIds(courseId, job.questionIds)
+        if (restored.length === 0) {
+          throw new Error("Failed to load generated questions")
+        }
+        setQuestions(restored)
+        if (isChallengeMode) {
+          const startTime = Date.now()
+          setQuizStartTime(startTime)
+          quizStartTimeRef.current = startTime
+        }
+        const newAttemptId = await createQuizAttempt(
+          user.uid,
+          courseId,
+          "module",
+          restored.map((q) => q.questionId),
+          moduleIndex,
+          null,
+          false
+        )
+        setAttemptId(newAttemptId)
+      } catch (err) {
+        console.error("Error loading prepared quiz:", err)
+        setError(err instanceof Error ? err.message : "Failed to load quiz questions.")
+      } finally {
+        setGenerating(false)
+        setLoading(false)
+      }
+    })
+
+    return () => unsub()
+  }, [prepJobId, user, courseId, moduleIndex, isChallengeMode])
 
   const handleAnswerChange = async (questionId: string, answer: string | number | boolean) => {
     // Just record the selected/typed answer and autosave; no feedback yet
@@ -511,7 +493,14 @@ export default function ModuleQuizPage() {
   })
 
   if (generating) {
-    return <LoadingScreen />
+    const moduleTitle = course?.modules[moduleIndex]?.title
+    return (
+      <QuizPreparingView
+        title={moduleTitle ? `Module Quiz: ${moduleTitle}` : "Module Quiz"}
+        error={error}
+        backHref={courseId ? `/journey/${courseId}` : "/journey"}
+      />
+    )
   }
 
   if (loading) {

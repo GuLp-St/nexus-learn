@@ -13,13 +13,23 @@ import { Zap, Trophy, Play, Share2, BookOpen, Plus, Clock, X, Check, Trash2, Ale
 import { Card, CardContent } from "@/components/ui/card"
 import { ChallengeSelectionModal } from "./challenge-selection-modal"
 import { CourseShareModal } from "./course-share-modal"
-import { getChallenge, Challenge, subscribeToChallenge, acceptChallenge, rejectChallenge, cancelChallenge } from "@/lib/challenge-utils"
+import {
+  getChallenge,
+  Challenge,
+  subscribeToChallenge,
+  acceptChallenge,
+  rejectChallenge,
+  cancelChallenge,
+  isPoweredChallenge,
+  normalizeChallengeSettings,
+} from "@/lib/challenge-utils"
 import { getCourseWithProgress, CourseWithProgress } from "@/lib/course-utils"
 import { copyCourseToUserLibrary } from "@/lib/course-copy-utils"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { NexonIcon } from "./ui/nexon-icon"
 import { toast } from "sonner"
+import { Spinner } from "@/components/ui/spinner"
 import { getUserCourseLimits, type CourseLimitInfo } from "@/lib/course-limit-utils"
 import { CourseLimitDialog } from "@/components/course-limit-dialog"
 
@@ -538,7 +548,9 @@ function ChallengeMessageCard({
     !!challenge.isDraw || challenge.winnerId === null || perfTied
   const youWon = !isDrawResult && challenge.winnerId === user?.uid
   const youLost = isCompleted && !isDrawResult && !youWon
-  const isLiveChallenge = challenge.settings?.mode === "live"
+  const isGenerating =
+    challenge.status === "generating" || !challenge.questionIds?.length
+  const isLiveChallenge = isPoweredChallenge(normalizeChallengeSettings(challenge.settings))
   const myLiveIndex = isChallenger ? challenge.challengerLiveIndex : challenge.challengedLiveIndex
   const oppLiveIndex = isChallenger ? challenge.challengedLiveIndex : challenge.challengerLiveIndex
 
@@ -598,6 +610,17 @@ function ChallengeMessageCard({
 
         {/* Dynamic Status / Actions */}
         <div className="space-y-2">
+          {isGenerating && (
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground bg-muted/40 p-2.5 rounded border border-dashed">
+              <Spinner className="h-3.5 w-3.5 shrink-0 animate-spin" />
+              <span>
+                {challenge.generationError
+                  ? `Quiz prep failed: ${challenge.generationError}`
+                  : "Preparing quiz questions…"}
+              </span>
+            </div>
+          )}
+
           {challenge.status === "pending" && (
             <>
               {isChallenger ? (
@@ -608,7 +631,7 @@ function ChallengeMessageCard({
                   </div>
                   <div className="flex gap-2">
                     <Link href={`/challenges/${challengeId}/quiz`} className="flex-1">
-                      <Button size="sm" className="w-full text-xs gap-2" disabled={challengerPlayed}>
+                      <Button size="sm" className="w-full text-xs gap-2" disabled={challengerPlayed || isGenerating}>
                         <Play className="h-3 w-3" />
                         {challengerPlayed
                           ? "Score Locked"
@@ -635,7 +658,7 @@ function ChallengeMessageCard({
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <Button size="sm" className="flex-1 text-xs gap-2 bg-orange-500 hover:bg-orange-600" onClick={handleAccept} disabled={actionLoading}>
+                  <Button size="sm" className="flex-1 text-xs gap-2 bg-orange-500 hover:bg-orange-600" onClick={handleAccept} disabled={actionLoading || isGenerating}>
                     <Check className="h-3 w-3" />
                     Accept
                   </Button>

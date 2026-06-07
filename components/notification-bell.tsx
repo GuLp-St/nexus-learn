@@ -83,6 +83,9 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
     } else if (notification.type === "course_ready" && notification.data.courseId) {
       router.push(`/journey/${notification.data.courseId}`)
       setIsOpen(false)
+    } else if (notification.type === "challenge_ready" && notification.data.challengeId) {
+      router.push(`/challenges/${notification.data.challengeId}/quiz`)
+      setIsOpen(false)
     }
   }
 
@@ -119,6 +122,8 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
         return <Trophy className="h-4 w-4" />
       case "course_ready":
         return <BookOpen className="h-4 w-4" />
+      case "challenge_ready":
+        return <Zap className="h-4 w-4" />
       default:
         return <Bell className="h-4 w-4" />
     }
@@ -147,6 +152,8 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
         }`
       case "course_ready":
         return `Your course "${notification.data.courseTitle || "Journey"}" is ready!`
+      case "challenge_ready":
+        return `Challenge ${notification.data.quizLabel || "quiz"} is ready to play!`
       default:
         return "New notification"
     }

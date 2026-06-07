@@ -147,9 +147,9 @@ export function DailyQuestCard() {
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               Refresh Tokens
             </span>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-col items-end gap-1">
               {quests.refreshTokens > 0 ? (
-                <span className="flex items-center gap-1 text-sm font-medium text-foreground">
+                <span className="flex items-center gap-1 text-sm font-medium text-foreground whitespace-nowrap">
                   <span>{quests.refreshTokens}/{MAX_REFRESH_TOKENS}</span>
                   <RotateCcw className="h-4 w-4 text-muted-foreground" />
                 </span>

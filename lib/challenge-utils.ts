@@ -68,7 +68,8 @@ export interface Challenge {
   challengerTime: number | null // null until challenger plays
   challengerComboMultiplier?: number | null
   challengerPerformanceScore?: number | null
-  status: "pending" | "accepted" | "completed" | "rejected" | "expired"
+  status: "generating" | "pending" | "accepted" | "completed" | "rejected" | "expired"
+  generationError?: string | null
   challengedAttemptId: string | null
   challengedScore: number | null
   challengedTime: number | null
@@ -176,49 +177,137 @@ async function calculateChallengeXP(questionIds: string[], score: number, maxSco
   return totalXP
 }
 
+export interface CreateChallengeParams {
+  challengerId: string
+  challengedId: string
+  courseId: string
+  quizType: "module" | "course"
+  moduleIndex: number | null
+  betAmount?: number
+  expirationHours?: number
+  settings?: ChallengeSettings
+}
+
+function challengeDocPayload(
+  params: CreateChallengeParams,
+  questionIds: string[],
+  status: Challenge["status"]
+): Record<string, unknown> {
+  const {
+    challengerId,
+    challengedId,
+    courseId,
+    quizType,
+    moduleIndex,
+    betAmount = 0,
+    expirationHours = 48,
+    settings = DEFAULT_CHALLENGE_SETTINGS,
+  } = params
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + expirationHours * 60 * 60 * 1000)
+
+  return {
+    challengerId,
+    challengedId,
+    courseId,
+    quizType,
+    moduleIndex,
+    lessonIndex: null,
+    questionIds,
+    challengerAttemptId: null,
+    challengerScore: null,
+    challengerTime: null,
+    status,
+    challengedAttemptId: null,
+    challengedScore: null,
+    challengedTime: null,
+    winnerId: null,
+    betAmount,
+    expirationHours,
+    hasChallengerPlayed: false,
+    hasChallengedAccepted: false,
+    settings: { ...settings, combo: true },
+    generationError: null,
+    ...(isPoweredChallenge(settings)
+      ? {
+          challengerReady: false,
+          challengedReady: false,
+          challengerLiveIndex: null,
+          challengedLiveIndex: null,
+          liveStartAt: null,
+          sabotageUntil: null,
+          sabotageBy: null,
+          challengerActionsLeft: CHALLENGE_ACTIONS_PER_PLAYER,
+          challengedActionsLeft: CHALLENGE_ACTIONS_PER_PLAYER,
+          challengerComboStreak: 0,
+          challengedComboStreak: 0,
+          challengerEffects: {},
+          challengedEffects: {},
+        }
+      : {}),
+    createdAt: serverTimestamp(),
+    expiresAt: Timestamp.fromDate(expiresAt),
+    completedAt: null,
+  }
+}
+
 /**
- * Create a new challenge (immediately, before quiz is taken)
+ * Create challenge shell immediately (quiz generates in background).
  */
-export async function createChallenge(
-  challengerId: string,
-  challengedId: string,
-  courseId: string,
-  quizType: "module" | "course",
-  moduleIndex: number | null,
-  betAmount: number = 0,
-  expirationHours: number = 48, // Default 2 days
-  settings: ChallengeSettings = DEFAULT_CHALLENGE_SETTINGS
-): Promise<string> {
-  try {
-    const challengeRef = doc(collection(db, "challenges"))
-    const challengeId = challengeRef.id
+export async function createChallengeShell(params: CreateChallengeParams): Promise<string> {
+  const { challengerId, betAmount = 0 } = params
+  const challengeRef = doc(collection(db, "challenges"))
+  const challengeId = challengeRef.id
 
-    // Deduct bet amount from challenger immediately and put on hold
-    if (betAmount > 0) {
-      const { spendNexon, getUserNexon } = await import("./nexon-utils")
-      const challengerNexon = await getUserNexon(challengerId)
-      if (challengerNexon < betAmount) {
-        throw new Error("Insufficient Nexon to place bet")
-      }
-      await spendNexon(challengerId, betAmount, `Placed bet on challenge (on hold)`, { challengeId: challengeRef.id, betAmount })
+  if (betAmount > 0) {
+    const { spendNexon, getUserNexon } = await import("./nexon-utils")
+    const challengerNexon = await getUserNexon(challengerId)
+    if (challengerNexon < betAmount) {
+      throw new Error("Insufficient Nexon to place bet")
     }
+    await spendNexon(challengerId, betAmount, `Placed bet on challenge (on hold)`, {
+      challengeId,
+      betAmount,
+    })
+  }
 
-    // Generate questions immediately so both users have the same fresh set
-    const { generateModuleQuizQuestions, generateCourseQuizQuestions } = await import("./quiz-generator")
+  await setDoc(challengeRef, challengeDocPayload(params, [], "generating"))
+  return challengeId
+}
+
+/**
+ * Generate quiz questions and mark challenge ready (run in background).
+ */
+export async function finalizeChallengeQuestions(
+  challengeId: string,
+  params: CreateChallengeParams
+): Promise<void> {
+  const challengeRef = doc(db, "challenges", challengeId)
+  try {
+    const { generateModuleQuizQuestions, generateCourseQuizQuestions } = await import(
+      "./quiz-generator"
+    )
     const { saveQuizQuestions } = await import("./quiz-utils")
-    
-    // Fetch course data
+    const { createNotification } = await import("./notification-utils")
+
+    const { courseId, quizType, moduleIndex, settings = DEFAULT_CHALLENGE_SETTINGS } = params
+
     const courseRef = doc(db, "courses", courseId)
     const courseSnap = await getDoc(courseRef)
     if (!courseSnap.exists()) {
       throw new Error("Course not found")
     }
     const courseData = { id: courseSnap.id, ...courseSnap.data() } as any
-    
+
     let generatedQuestions: QuizQuestion[] = []
     const questionTarget = quizType === "module" ? 10 : 20
     if (quizType === "module" && moduleIndex !== null) {
-      generatedQuestions = await generateModuleQuizQuestions(courseData, moduleIndex, courseId, questionTarget)
+      generatedQuestions = await generateModuleQuizQuestions(
+        courseData,
+        moduleIndex,
+        courseId,
+        questionTarget
+      )
     } else {
       generatedQuestions = await generateCourseQuizQuestions(courseData, courseId, questionTarget)
     }
@@ -229,62 +318,63 @@ export async function createChallenge(
       generatedQuestions = await enrichQuestionsForPoweredMode(generatedQuestions)
     }
 
-    // Save questions to Firestore so they are permanent and accessible by both players
     await saveQuizQuestions(generatedQuestions)
-    const questionIds = generatedQuestions.map(q => q.questionId)
+    const questionIds = generatedQuestions.map((q) => q.questionId)
 
-    // Calculate expiration times
-    const now = new Date()
-    const expiresAt = new Date(now.getTime() + expirationHours * 60 * 60 * 1000)
-
-    await setDoc(challengeRef, {
-      challengerId,
-      challengedId,
-      courseId,
-      quizType,
-      moduleIndex,
-      lessonIndex: null, // Always null now
+    await updateDoc(challengeRef, {
       questionIds,
-      challengerAttemptId: null,
-      challengerScore: null,
-      challengerTime: null,
       status: "pending",
-      challengedAttemptId: null,
-      challengedScore: null,
-      challengedTime: null,
-      winnerId: null,
-      betAmount,
-      expirationHours,
-      hasChallengerPlayed: false,
-      hasChallengedAccepted: false,
-      settings: { ...settings, combo: true },
-      ...(isPoweredChallenge(settings)
-        ? {
-            challengerReady: false,
-            challengedReady: false,
-            challengerLiveIndex: null,
-            challengedLiveIndex: null,
-            liveStartAt: null,
-            sabotageUntil: null,
-            sabotageBy: null,
-            challengerActionsLeft: CHALLENGE_ACTIONS_PER_PLAYER,
-            challengedActionsLeft: CHALLENGE_ACTIONS_PER_PLAYER,
-            challengerComboStreak: 0,
-            challengedComboStreak: 0,
-            challengerEffects: {},
-            challengedEffects: {},
-          }
-        : {}),
-      createdAt: serverTimestamp(),
-      expiresAt: Timestamp.fromDate(expiresAt),
-      completedAt: null,
+      generationError: null,
     })
 
-    return challengeId
+    const quizLabel = quizType === "course" ? "Final Quiz" : "Module Quiz"
+    await createNotification(params.challengerId, "challenge_ready", {
+      challengeId,
+      courseId,
+      quizType,
+      quizLabel,
+    })
+    await createNotification(params.challengedId, "challenge_ready", {
+      challengeId,
+      courseId,
+      quizType,
+      quizLabel,
+    })
   } catch (error) {
-    console.error("Error creating challenge:", error)
-    throw error instanceof Error ? error : new Error("Failed to create challenge")
+    console.error("Error finalizing challenge questions:", error)
+    const message = error instanceof Error ? error.message : "Failed to generate quiz"
+    await updateDoc(challengeRef, {
+      status: "generating",
+      generationError: message,
+    }).catch(() => {})
+    throw error instanceof Error ? error : new Error(message)
   }
+}
+
+/** @deprecated Use createChallengeShell + finalizeChallengeQuestions */
+export async function createChallenge(
+  challengerId: string,
+  challengedId: string,
+  courseId: string,
+  quizType: "module" | "course",
+  moduleIndex: number | null,
+  betAmount: number = 0,
+  expirationHours: number = 48,
+  settings: ChallengeSettings = DEFAULT_CHALLENGE_SETTINGS
+): Promise<string> {
+  const params: CreateChallengeParams = {
+    challengerId,
+    challengedId,
+    courseId,
+    quizType,
+    moduleIndex,
+    betAmount,
+    expirationHours,
+    settings,
+  }
+  const challengeId = await createChallengeShell(params)
+  await finalizeChallengeQuestions(challengeId, params)
+  return challengeId
 }
 
 /**
@@ -302,6 +392,10 @@ export async function acceptChallenge(challengeId: string, challengedUserId: str
     const challengeData = challengeDoc.data() as Challenge
     if (challengeData.challengedId !== challengedUserId) {
       throw new Error("User is not the challenged user")
+    }
+
+    if (challengeData.status === "generating" || !challengeData.questionIds?.length) {
+      throw new Error("Quiz is still being prepared. Try again in a moment.")
     }
 
     if (challengeData.status !== "pending") {
@@ -956,6 +1050,7 @@ export async function useChallengePowerAction(
     targetCorrectAnswer?: string | number | boolean
     selfOptions?: string[]
     selfCorrectAnswer?: string | number | boolean
+    selfObjectiveType?: "multiple-choice" | "true-false" | "matching"
     isTrueFalse?: boolean
     hasTfExpanded?: boolean
   }
@@ -1053,7 +1148,7 @@ export async function useChallengePowerAction(
       const opts = context.selfOptions ?? []
       const halved =
         opts.length > 0
-          ? halveOptions(opts, context.selfCorrectAnswer)
+          ? halveOptions(opts, context.selfCorrectAnswer, context.selfObjectiveType)
           : []
       patch[selfEffectsKey] = {
         ...selfEffects,

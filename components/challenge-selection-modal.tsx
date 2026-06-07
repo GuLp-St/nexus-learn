@@ -13,10 +13,12 @@ import { useRouter } from "next/navigation"
 import { Spinner } from "@/components/ui/spinner"
 import { canAccessCourseQuiz, canAccessModuleQuiz, hasAnyUnlockedModuleQuiz } from "@/lib/quiz-access-utils"
 import {
-  createChallenge,
+  createChallengeShell,
+  finalizeChallengeQuestions,
   DEFAULT_CHALLENGE_SETTINGS,
   type ChallengeSettings,
   type ChallengeGameMode,
+  type CreateChallengeParams,
 } from "@/lib/challenge-utils"
 import { sendMessage } from "@/lib/chat-utils"
 import { getUserNexon } from "@/lib/nexon-utils"
@@ -146,21 +148,17 @@ export function ChallengeSelectionModal({
     if (!user || !presetCourseId || !selectedCourse) return
     setSubmitting(true)
     try {
-      const challengeId = await Promise.race([
-        createChallenge(
-          user.uid,
-          friendId,
-          presetCourseId,
-          selectedQuizType,
-          selectedModuleIndex,
-          betEnabled ? betAmount : 0,
-          parseInt(expirationHours),
-          { ...settings, combo: true }
-        ),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Quiz generation timed out. Please try again.")), 120000)
-        ),
-      ])
+      const params: CreateChallengeParams = {
+        challengerId: user.uid,
+        challengedId: friendId,
+        courseId: presetCourseId,
+        quizType: selectedQuizType,
+        moduleIndex: selectedModuleIndex,
+        betAmount: betEnabled ? betAmount : 0,
+        expirationHours: parseInt(expirationHours),
+        settings: { ...settings, combo: true },
+      }
+      const challengeId = await createChallengeShell(params)
       await sendMessage(
         user.uid,
         friendId,
@@ -182,6 +180,9 @@ export function ChallengeSelectionModal({
       } else {
         router.push(`/friends`)
       }
+      void finalizeChallengeQuestions(challengeId, params).catch((err) => {
+        console.error("Background challenge generation failed:", err)
+      })
     } catch (error: unknown) {
       alert(error instanceof Error ? error.message : "Failed to create challenge")
     } finally {
@@ -389,7 +390,7 @@ export function ChallengeSelectionModal({
                 Cancel
               </Button>
               <Button size="sm" className="flex-1" onClick={handleSubmit} disabled={!canSubmit}>
-                {submitting ? "Starting…" : "Send challenge"}
+                {submitting ? "Sending…" : "Send challenge"}
               </Button>
             </div>
           </div>

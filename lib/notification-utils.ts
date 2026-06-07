@@ -25,6 +25,7 @@ export type NotificationType =
   | "xp_award"
   | "quest_claimable"
   | "course_ready"
+  | "challenge_ready"
 
 export interface Notification {
   id: string
@@ -60,6 +61,8 @@ export interface Notification {
     // course_ready
     courseTitle?: string
     jobType?: "ai" | "upload"
+    // challenge_ready
+    quizLabel?: string
   }
   read: boolean
   createdAt: Timestamp

@@ -45,6 +45,8 @@ export function ChallengeReadyRoom({
       ? "Final Quiz"
       : `Module ${Number(challenge.moduleIndex) + 1} Quiz`
 
+  const isGenerating =
+    challenge.status === "generating" || !challenge.questionIds?.length
   const myReady = isChallenger ? challenge.challengerReady : challenge.challengedReady
   const oppReady = isChallenger ? challenge.challengedReady : challenge.challengerReady
   const waitingAccept = isPowered && isChallenger && challenge.status === "pending"
@@ -81,8 +83,12 @@ export function ChallengeReadyRoom({
             </p>
             <p>
               <span className="text-muted-foreground">Questions: </span>
-              <span className="font-semibold">{challenge.questionIds.length}</span>
-              <span className="text-xs text-muted-foreground ml-1">(objective only)</span>
+              <span className="font-semibold">
+                {isGenerating ? "Preparing…" : challenge.questionIds.length}
+              </span>
+              {!isGenerating && (
+                <span className="text-xs text-muted-foreground ml-1">(objective only)</span>
+              )}
             </p>
             {bet > 0 && (
               <p className="flex items-center gap-2">
@@ -156,6 +162,17 @@ export function ChallengeReadyRoom({
             </p>
           )}
 
+          {isGenerating && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 border border-dashed rounded-lg p-3">
+              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+              <span>
+                {challenge.generationError
+                  ? `Quiz prep failed: ${challenge.generationError}`
+                  : "Preparing quiz questions… You can browse elsewhere and you\u2019ll be notified when ready."}
+              </span>
+            </div>
+          )}
+
           {startError && (
             <p className="text-sm text-center text-destructive bg-destructive/10 rounded-lg p-3">
               {startError}
@@ -164,7 +181,7 @@ export function ChallengeReadyRoom({
 
           <div className="flex flex-col gap-2">
             {needsAccept && onAccept && (
-              <Button size="lg" className="w-full" onClick={onAccept} disabled={accepting || starting}>
+              <Button size="lg" className="w-full" onClick={onAccept} disabled={accepting || starting || isGenerating}>
                 {accepting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -181,7 +198,7 @@ export function ChallengeReadyRoom({
             {isPowered ? (
               <>
                 {!needsAccept && !myReady && onMarkReady && (
-                  <Button size="lg" className="w-full gap-2" onClick={onMarkReady} disabled={starting || waitingAccept}>
+                  <Button size="lg" className="w-full gap-2" onClick={onMarkReady} disabled={starting || waitingAccept || isGenerating}>
                     I&apos;m Ready
                   </Button>
                 )}
@@ -206,7 +223,7 @@ export function ChallengeReadyRoom({
                 )}
               </>
             ) : (
-              <Button size="lg" className="w-full gap-2" onClick={onStart} disabled={starting || needsAccept}>
+              <Button size="lg" className="w-full gap-2" onClick={onStart} disabled={starting || needsAccept || isGenerating}>
                 {starting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />

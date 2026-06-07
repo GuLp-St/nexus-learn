@@ -1,4 +1,5 @@
 import type { QuizQuestion } from "./quiz-utils"
+import { checkObjectiveAnswer } from "./quiz-generator"
 
 export type PowerActionType =
   | "add_more_answers"
@@ -97,27 +98,46 @@ export function shuffleArray<T>(arr: T[]): T[] {
 
 function isCorrectOption(
   options: string[],
-  correct: string | number | boolean | undefined,
+  correctAnswer: string | number | boolean | undefined,
   opt: string,
-  idx: number
+  idx: number,
+  objectiveType?: QuizQuestion["objectiveType"]
 ): boolean {
-  if (typeof correct === "number") return idx === correct
-  if (typeof correct === "boolean") {
-    return opt.toLowerCase() === (correct ? "true" : "false")
-  }
-  return opt === correct || opt.toLowerCase() === String(correct).toLowerCase()
+  const mock = {
+    questionId: "",
+    question: "",
+    type: "objective" as const,
+    courseId: "",
+    quizType: "module" as const,
+    options,
+    correctAnswer,
+    objectiveType,
+  } satisfies QuizQuestion
+  return checkObjectiveAnswer(mock, opt) || checkObjectiveAnswer(mock, idx)
 }
 
 export function halveOptions(
   options: string[],
-  correctAnswer: string | number | boolean | undefined
+  correctAnswer: string | number | boolean | undefined,
+  objectiveType?: QuizQuestion["objectiveType"]
 ): string[] {
-  const targetKept = Math.ceil(options.length / 2)
+  if (options.length === 0) return []
+
   const correctOpts = options.filter((opt, idx) =>
-    isCorrectOption(options, correctAnswer, opt, idx)
+    isCorrectOption(options, correctAnswer, opt, idx, objectiveType)
   )
+
+  // True/false (2 options): always keep only the correct answer
+  if (options.length <= 2) {
+    if (correctOpts.length > 0) return correctOpts.slice(0, 1)
+    return options
+  }
+
+  const targetKept = Math.ceil(options.length / 2)
+  if (correctOpts.length === 0) return options
+
   const wrongOpts = options.filter(
-    (opt, idx) => !isCorrectOption(options, correctAnswer, opt, idx)
+    (opt, idx) => !isCorrectOption(options, correctAnswer, opt, idx, objectiveType)
   )
   const wrongToKeep = Math.max(0, targetKept - correctOpts.length)
   const keptWrong = shuffleArray(wrongOpts).slice(0, wrongToKeep)
@@ -169,8 +189,8 @@ export function applyPowerEffectsToQuestion(
   if (effects.halvedOptionsByQuestionId?.[qid]) {
     q = { ...q, options: [...effects.halvedOptionsByQuestionId[qid]] }
   } else if (effects.removedWrongByQuestionId?.[qid] && q.options && q.correctAnswer !== undefined) {
-    const halved = halveOptions(q.options, q.correctAnswer)
-    q = { ...q, options: halved.length > 0 ? halved : q.options.slice(0, 1) }
+    const halved = halveOptions(q.options, q.correctAnswer, q.objectiveType)
+    q = { ...q, options: halved.length > 0 ? halved : q.options }
   }
 
   return q

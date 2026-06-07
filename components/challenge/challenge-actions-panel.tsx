@@ -36,7 +36,7 @@ function ActionButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "h-auto w-full flex flex-col items-start gap-1 px-3 py-2.5 text-left whitespace-normal",
+        "h-auto w-full flex flex-col items-start gap-0.5 sm:gap-1 px-2 py-1.5 sm:px-3 sm:py-2.5 text-left whitespace-normal",
         tone === "sabotage"
           ? "border-orange-500/30 hover:bg-orange-500/10"
           : "border-primary/30 hover:bg-primary/5"
@@ -50,7 +50,7 @@ function ActionButton({
       >
         {short}
       </span>
-      <span className="text-[10px] font-normal text-muted-foreground leading-snug">
+      <span className="hidden sm:block text-[10px] font-normal text-muted-foreground leading-snug">
         {description}
       </span>
     </Button>
@@ -65,8 +65,8 @@ export function ChallengeActionsPanel({
   const busy = disabled
 
   return (
-    <div className="w-full space-y-3 rounded-lg border bg-muted/20 p-3">
-      <div className="flex items-center justify-center gap-2 text-sm font-semibold">
+    <div className="w-full space-y-2 sm:space-y-3 rounded-lg border bg-muted/20 p-2 sm:p-3">
+      <div className="flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold">
         <Zap className="h-4 w-4 text-orange-500" />
         <span>
           Actions {actionsLeft}/{CHALLENGE_ACTIONS_PER_PLAYER}
@@ -78,7 +78,7 @@ export function ChallengeActionsPanel({
           <Zap className="h-3 w-3 text-orange-500" />
           Sabotage
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-2 gap-1.5 sm:gap-2">
           {SABOTAGE_ACTIONS.map((a) => (
             <ActionButton
               key={a.id}
@@ -97,7 +97,7 @@ export function ChallengeActionsPanel({
           <Shield className="h-3 w-3" />
           Power-ups
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-2 gap-1.5 sm:gap-2">
           {POWERUP_ACTIONS.map((a) => (
             <ActionButton
               key={a.id}
