@@ -20,6 +20,8 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { NexonIcon } from "./ui/nexon-icon"
 import { toast } from "sonner"
+import { getUserCourseLimits, type CourseLimitInfo } from "@/lib/course-limit-utils"
+import { CourseLimitDialog } from "@/components/course-limit-dialog"
 
 interface FriendChatModalProps {
   open: boolean
@@ -806,6 +808,15 @@ function CourseShareMessageCard({
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
   const [hasAddedViaThisInvite, setHasAddedViaThisInvite] = useState(false)
+  const [courseLimits, setCourseLimits] = useState<CourseLimitInfo | null>(null)
+  const [limitDialogOpen, setLimitDialogOpen] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    getUserCourseLimits(user.uid)
+      .then(setCourseLimits)
+      .catch((error) => console.error("Error fetching course limits:", error))
+  }, [user])
 
   useEffect(() => {
     const fetchCourse = async () => {
@@ -835,15 +846,20 @@ function CourseShareMessageCard({
     fetchCourse()
   }, [courseId, user, messageId])
 
+  const atAddedLimit =
+    courseLimits != null && courseLimits.added >= courseLimits.maxAdded
+
   const handleAddToLibrary = async () => {
     if (!user || !course || adding || hasAddedViaThisInvite) return
+    if (atAddedLimit) {
+      setLimitDialogOpen(true)
+      return
+    }
 
     setAdding(true)
     try {
-      // Add course to library
       const newCourseId = await copyCourseToUserLibrary(user.uid, courseId)
-      
-      // Mark this user as having used this specific invitation
+
       const { updateDoc, doc, arrayUnion } = await import("firebase/firestore")
       const { db } = await import("@/lib/firebase")
       await updateDoc(doc(db, "chatMessages", messageId), {
@@ -853,8 +869,13 @@ function CourseShareMessageCard({
       setHasAddedViaThisInvite(true)
       router.push(`/journey/${newCourseId}`)
     } catch (error) {
-      console.error("Error adding course to library:", error)
-      alert("Failed to add course to library. Please try again.")
+      const message = error instanceof Error ? error.message : ""
+      if (message.includes("added course limit")) {
+        setLimitDialogOpen(true)
+      } else {
+        console.error("Error adding course to library:", error)
+        alert("Failed to add course to library. Please try again.")
+      }
     } finally {
       setAdding(false)
     }
@@ -912,43 +933,56 @@ function CourseShareMessageCard({
   }
 
   return (
-    <Card className={`overflow-hidden border-2 ${isOwnMessage ? "border-primary/20 bg-primary/5" : "border-blue-500/20 bg-blue-500/5"}`}>
-      <CardContent className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Share2 className={`h-4 w-4 ${isOwnMessage ? "text-primary" : "text-blue-500"}`} />
-          <span className="font-bold text-sm">COURSE SHARED</span>
-        </div>
-        
-        <div className="space-y-2">
-          {course.imageUrl && (
-            <img 
-              src={course.imageUrl} 
-              alt={course.title}
-              className="w-full h-32 object-cover rounded-md"
-            />
-          )}
-          <div>
-            <h4 className="font-semibold text-sm truncate">{course.title}</h4>
-            {course.description && (
-              <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                {course.description}
-              </p>
-            )}
+    <>
+      <Card className={`overflow-hidden border-2 ${isOwnMessage ? "border-primary/20 bg-primary/5" : "border-blue-500/20 bg-blue-500/5"}`}>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Share2 className={`h-4 w-4 ${isOwnMessage ? "text-primary" : "text-blue-500"}`} />
+            <span className="font-bold text-sm">COURSE SHARED</span>
           </div>
-        </div>
+          
+          <div className="space-y-2">
+            {course.imageUrl && (
+              <img 
+                src={course.imageUrl} 
+                alt={course.title}
+                className="w-full h-32 object-cover rounded-md"
+              />
+            )}
+            <div>
+              <h4 className="font-semibold text-sm truncate">{course.title}</h4>
+              {course.description && (
+                <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                  {course.description}
+                </p>
+              )}
+            </div>
+          </div>
 
-        {!isOwnMessage && (
-          <Button
-            size="sm"
-            className="w-full text-xs gap-2 bg-blue-500 hover:bg-blue-600"
-            onClick={handleAddToLibrary}
-            disabled={adding}
-          >
-            <Plus className="h-3 w-3" />
-            {adding ? "Adding..." : "Add to Library"}
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+          {!isOwnMessage && (
+            <Button
+              size="sm"
+              className="w-full text-xs gap-2 bg-blue-500 hover:bg-blue-600"
+              onClick={handleAddToLibrary}
+              disabled={adding}
+            >
+              <Plus className="h-3 w-3" />
+              {adding ? "Adding..." : "Add to Library"}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {courseLimits && (
+        <CourseLimitDialog
+          open={limitDialogOpen}
+          onOpenChange={setLimitDialogOpen}
+          type="added"
+          limit={courseLimits.maxAdded}
+          current={courseLimits.added}
+          level={courseLimits.level}
+        />
+      )}
+    </>
   )
 }

@@ -31,9 +31,10 @@ export async function runUploadCourseCreationPipeline(
   options: {
     difficulty: CourseDifficulty
     toneInstruction?: string
+    sourceFiles?: Array<{ name: string; url: string }>
   }
 ): Promise<string> {
-  const { difficulty, toneInstruction = "" } = options
+  const { difficulty, toneInstruction = "", sourceFiles = [] } = options
   const report = async (phase: string, detail: string) => {
     await updateCourseCreationJob(jobId, userId, {
       status: "running",
@@ -162,6 +163,7 @@ export async function runUploadCourseCreationPipeline(
   await report("saving-material", "Saving material library…")
   const processedImages = buildProcessedImagesForMaterial(analysis, imageMapLocal)
   const materialId = await createCourseMaterial(userId, {
+    ...(sourceFiles.length > 0 ? { sourceFiles } : {}),
     summary: analysis.summary,
     visualDescriptions: analysis.visualDescriptions,
     suggestedModules: analysis.suggestedModules,

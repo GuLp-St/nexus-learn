@@ -8,6 +8,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import type { TextBlock } from "@/lib/gemini"
 import {
+  resolveBlockReferenceUrl,
+  formatReferenceLabel,
+  type MaterialReferenceContext,
+} from "@/lib/lesson-reference-resolver"
+import {
   getLessonBlockNote,
   saveLessonBlockNote,
   resolveLessonBlockNoteConflict,
@@ -28,6 +33,7 @@ interface LessonBlockPanelProps {
   canContinue?: boolean
   onContinue?: () => void
   borderClass?: string
+  materialContext?: MaterialReferenceContext
 }
 
 export function LessonBlockPanel({
@@ -45,6 +51,7 @@ export function LessonBlockPanel({
   courseTitle,
   moduleTitle,
   lessonTitle,
+  materialContext,
 }: LessonBlockPanelProps) {
   const [noteOpen, setNoteOpen] = useState(false)
   const [note, setNote] = useState("")
@@ -113,6 +120,8 @@ export function LessonBlockPanel({
       ? `${lessonTitle}${moduleTitle ? ` · ${moduleTitle}` : ""}`
       : courseTitle || "Course material",
   }
+  const linkUrl = resolveBlockReferenceUrl(ref, materialContext) ?? ref.url
+  const displayLabel = formatReferenceLabel(ref)
 
   return (
     <Card className={isPast && !readOnly ? "opacity-60" : readOnly ? "border" : borderClass}>
@@ -121,24 +130,18 @@ export function LessonBlockPanel({
 
         <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
             <span className="font-medium text-foreground">Source: </span>
-            {ref.url ? (
+            {linkUrl ? (
               <a
-                href={ref.url}
+                href={linkUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline inline-flex items-center gap-1 font-medium"
               >
-                {ref.label || ref.url}
+                {displayLabel}
                 <ExternalLink className="h-3 w-3 shrink-0" />
               </a>
-            ) : ref.fileName ? (
-              <span className="text-foreground font-medium">
-                {ref.fileName}
-                {ref.page ? ` · page ${ref.page}` : ""}
-                {ref.label ? ` — ${ref.label}` : ""}
-              </span>
             ) : (
-              <span className="text-foreground font-medium">{ref.label}</span>
+              <span className="text-foreground font-medium">{displayLabel}</span>
             )}
         </div>
 

@@ -16,6 +16,8 @@ import { copyCourseToUserLibrary } from "@/lib/course-copy-utils"
 import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
+import { getUserCourseLimits, type CourseLimitInfo } from "@/lib/course-limit-utils"
+import { CourseLimitDialog } from "@/components/course-limit-dialog"
 
 export function CommunityPulseCard() {
   const { user } = useAuth()
@@ -24,6 +26,8 @@ export function CommunityPulseCard() {
   const [loading, setLoading] = useState(true)
   const [addingCourse, setAddingCourse] = useState<string | null>(null)
   const [userCourseIds, setUserCourseIds] = useState<Set<string>>(new Set())
+  const [courseLimits, setCourseLimits] = useState<CourseLimitInfo | null>(null)
+  const [limitDialogOpen, setLimitDialogOpen] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -46,19 +50,35 @@ export function CommunityPulseCard() {
     }
     fetchUserCourses()
 
+    getUserCourseLimits(user.uid)
+      .then(setCourseLimits)
+      .catch((error) => console.error("Error fetching course limits:", error))
+
     return () => {
       unsubscribe()
     }
   }, [user])
 
+  const atAddedLimit =
+    courseLimits != null && courseLimits.added >= courseLimits.maxAdded
+
   const handleAddCourse = async (courseId: string) => {
     if (!user || addingCourse) return
+    if (atAddedLimit) {
+      setLimitDialogOpen(true)
+      return
+    }
     try {
       setAddingCourse(courseId)
       await copyCourseToUserLibrary(user.uid, courseId)
       router.push(`/journey/${courseId}`)
     } catch (error) {
-      console.error("Error adding course to library:", error)
+      const message = error instanceof Error ? error.message : ""
+      if (message.includes("added course limit")) {
+        setLimitDialogOpen(true)
+      } else {
+        console.error("Error adding course to library:", error)
+      }
     } finally {
       setAddingCourse(null)
     }
@@ -129,49 +149,49 @@ export function CommunityPulseCard() {
 
                 <div className="flex-1 min-w-0">
                   {isCourseActivity(activity) && activity.metadata.courseId ? (
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm">
-                          <span
-                            className="font-medium cursor-pointer hover:underline"
-                            onClick={() => handleAvatarClick(activity.userId)}
-                          >
-                            <NameWithColor
-                              userId={activity.userId}
-                              name={activity.userNickname}
-                            />
-                          </span>{" "}
-                          {formatActivityDescription(activity).replace(activity.userNickname, "").trim()}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
+                    <>
+                      <p className="text-sm">
+                        <span
+                          className="font-medium cursor-pointer hover:underline"
+                          onClick={() => handleAvatarClick(activity.userId)}
+                        >
+                          <NameWithColor
+                            userId={activity.userId}
+                            name={activity.userNickname}
+                          />
+                        </span>{" "}
+                        {formatActivityDescription(activity).replace(activity.userNickname, "").trim()}
+                      </p>
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        <p className="text-xs text-muted-foreground">
                           {activity.relativeTime || "Just now"}
                         </p>
+                        {activity.activityType === "course_published" && (
+                          userCourseIds.has(activity.metadata.courseId!) ? (
+                            <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              In Library
+                            </span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAddCourse(activity.metadata.courseId!)}
+                              disabled={addingCourse === activity.metadata.courseId}
+                              className="h-7 text-xs shrink-0"
+                            >
+                              {addingCourse === activity.metadata.courseId ? (
+                                <Spinner className="h-3 w-3" />
+                              ) : (
+                                <>
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Add
+                                </>
+                              )}
+                            </Button>
+                          )
+                        )}
                       </div>
-                      {activity.activityType === "course_published" && (
-                        userCourseIds.has(activity.metadata.courseId!) ? (
-                          <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0 self-center">
-                            In Library
-                          </span>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleAddCourse(activity.metadata.courseId!)}
-                            disabled={addingCourse === activity.metadata.courseId}
-                            className="flex-shrink-0 h-7 text-xs"
-                          >
-                            {addingCourse === activity.metadata.courseId ? (
-                              <Spinner className="h-3 w-3" />
-                            ) : (
-                              <>
-                                <Plus className="h-3 w-3 mr-1" />
-                                Add
-                              </>
-                            )}
-                          </Button>
-                        )
-                      )}
-                    </div>
+                    </>
                   ) : (
                     <>
                       <p className="text-sm">
@@ -197,6 +217,17 @@ export function CommunityPulseCard() {
           </div>
         )}
       </CardContent>
+
+      {courseLimits && (
+        <CourseLimitDialog
+          open={limitDialogOpen}
+          onOpenChange={setLimitDialogOpen}
+          type="added"
+          limit={courseLimits.maxAdded}
+          current={courseLimits.added}
+          level={courseLimits.level}
+        />
+      )}
     </Card>
   )
 }

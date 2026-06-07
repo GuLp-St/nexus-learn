@@ -36,9 +36,11 @@ import {
 import { NexusFocusRegion } from "@/components/nexus-focus-region"
 import { useActiveFocusObserver } from "@/hooks/use-active-focus-observer"
 import { activeFocusFromLessonBlock, textFromLessonBlock } from "@/lib/chat-page-context"
+import type { MaterialReferenceContext } from "@/lib/lesson-reference-resolver"
 
 export default function LessonPage() {
   const [course, setCourse] = useState<CourseWithProgress | null>(null)
+  const [materialContext, setMaterialContext] = useState<MaterialReferenceContext | undefined>()
   const [lessonStream, setLessonStream] = useState<LessonStream | null>(null)
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0)
   const [interactionResults, setInteractionResults] = useState<{ [index: number]: boolean }>({})
@@ -108,6 +110,21 @@ export default function LessonPage() {
 
         const courseData = courseWithProgress
         setCourse(courseData)
+
+        let loadedMaterialContext: MaterialReferenceContext | undefined
+        const sourceMaterialId =
+          (courseData as { sourceMaterialId?: string }).sourceMaterialId
+        if (sourceMaterialId) {
+          const materialSnap = await getDoc(doc(db, "course_materials", sourceMaterialId))
+          if (materialSnap.exists()) {
+            const mat = materialSnap.data()
+            loadedMaterialContext = {
+              sourceFiles: mat.sourceFiles as MaterialReferenceContext["sourceFiles"],
+              imageMap: mat.imageMap as MaterialReferenceContext["imageMap"],
+            }
+            setMaterialContext(loadedMaterialContext)
+          }
+        }
 
         const module = courseData.modules[moduleIndex]
         const lesson = module?.lessons[lessonIndex]
@@ -234,8 +251,17 @@ export default function LessonPage() {
                   lessonSummary: sourceContext.lessonSummary,
                   moduleSummary: sourceContext.moduleSummary,
                   processedImages: sourceContext.processedImages || [],
+                  sourceFiles: loadedMaterialContext?.sourceFiles,
+                  imageMap: loadedMaterialContext?.imageMap,
                 }
-              : undefined
+              : loadedMaterialContext
+                ? {
+                    keyPoints: [],
+                    references: [],
+                    sourceFiles: loadedMaterialContext.sourceFiles,
+                    imageMap: loadedMaterialContext.imageMap,
+                  }
+                : undefined
           )
         } catch (err: any) {
           // If timeout or error, wait 2 seconds then check Firestore
@@ -882,6 +908,7 @@ export default function LessonPage() {
                         courseTitle={course?.title}
                         moduleTitle={module?.title}
                         lessonTitle={lesson?.title}
+                        materialContext={materialContext}
                         isPast={!readOnlyView}
                         readOnly={readOnlyView}
                         borderClass=""
@@ -910,6 +937,7 @@ export default function LessonPage() {
                       courseTitle={course?.title}
                       moduleTitle={module?.title}
                       lessonTitle={lesson?.title}
+                      materialContext={materialContext}
                       canContinue={canContinue}
                       onContinue={handleContinue}
                     />

@@ -45,7 +45,7 @@ const MODE_INFO: Record<
   },
   powered: {
     label: "Powered",
-    description: "Classic rules plus 3 actions each — power-ups & sabotage.",
+    description: "Live 1v1 — both players must be present. Classic rules plus 3 actions each.",
     icon: <Zap className="h-3.5 w-3.5 shrink-0 text-orange-500" />,
   },
 }

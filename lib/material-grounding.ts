@@ -8,6 +8,8 @@ export const MATERIAL_ONLY_RULES = `CRITICAL RULES — MATERIAL-ONLY GENERATION:
 - Paraphrase is allowed; fabrication is not.`
 
 export type StoredCourseMaterial = {
+  sourceFiles?: Array<{ name: string; url: string }>
+  imageMap?: Record<number, string>
   extractedText?: string
   toneInstruction?: string
   difficulty?: string

@@ -53,6 +53,8 @@ import type { CourseCreationJob } from "@/lib/course-creation-job"
 import { db } from "@/lib/firebase"
 import { doc, onSnapshot } from "firebase/firestore"
 import { usePageContext } from "@/hooks/usePageContext"
+import { getUserCourseLimits, type CourseLimitInfo } from "@/lib/course-limit-utils"
+import { CourseLimitDialog } from "@/components/course-limit-dialog"
 
 type CreateMode = "ai" | "upload"
 type MainTab = "create" | "browse"
@@ -89,6 +91,8 @@ export default function CreateCourseUnified() {
   const [toneInstruction, setToneInstruction] = useState("")
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
+  const [courseLimits, setCourseLimits] = useState<CourseLimitInfo | null>(null)
+  const [limitDialogOpen, setLimitDialogOpen] = useState(false)
 
   usePageContext({
     title: "Create Course",
@@ -155,8 +159,14 @@ export default function CreateCourseUnified() {
     ;(async () => {
       setCreditsLoading(true)
       try {
-        const c = await getCourseCreationCredits(user.uid)
-        if (!cancelled) setCredits(c)
+        const [c, limits] = await Promise.all([
+          getCourseCreationCredits(user.uid),
+          getUserCourseLimits(user.uid),
+        ])
+        if (!cancelled) {
+          setCredits(c)
+          setCourseLimits(limits)
+        }
       } finally {
         if (!cancelled) setCreditsLoading(false)
       }
@@ -169,8 +179,17 @@ export default function CreateCourseUnified() {
   const hasCreditForMode = (mode: CreateMode) =>
     mode === "ai" ? credits.ai : credits.upload
 
+  const atGeneratedLimit =
+    courseLimits != null && courseLimits.generated >= courseLimits.maxGenerated
+
+  const showGeneratedLimitDialog = () => setLimitDialogOpen(true)
+
   const handlePay = async (type: CreationCreditType) => {
     if (!user) return
+    if (atGeneratedLimit) {
+      showGeneratedLimitDialog()
+      return
+    }
     setPaying(type)
     setError("")
     try {
@@ -179,7 +198,11 @@ export default function CreateCourseUnified() {
           ? await purchaseAiCreationCredit(user.uid)
           : await purchaseUploadCreationCredit(user.uid)
       if (!result.ok) {
-        setError(result.error || "Payment failed")
+        if (result.error?.includes("generated course limit")) {
+          showGeneratedLimitDialog()
+        } else {
+          setError(result.error || "Payment failed")
+        }
         return
       }
       await refreshCredits()
@@ -301,6 +324,10 @@ export default function CreateCourseUnified() {
 
   const runAiFlow = async (difficulty?: DifficultyOption | null) => {
     if (!user || !courseInput.trim()) return
+    if (atGeneratedLimit) {
+      showGeneratedLimitDialog()
+      return
+    }
     setPhase("working")
     setError("")
     setProgressDetail("Starting…")
@@ -350,6 +377,10 @@ export default function CreateCourseUnified() {
 
   const handleCreateAi = async () => {
     if (!user || !courseInput.trim()) return
+    if (atGeneratedLimit) {
+      showGeneratedLimitDialog()
+      return
+    }
     if (!hasCreditForMode("ai")) {
       setError("Pay the creation fee to continue with AI generation.")
       return
@@ -391,6 +422,10 @@ export default function CreateCourseUnified() {
 
   const handleCreateUpload = async () => {
     if (!user || uploadedFiles.length === 0) return
+    if (atGeneratedLimit) {
+      showGeneratedLimitDialog()
+      return
+    }
     if (!hasCreditForMode("upload")) {
       setError("Pay the creation fee to continue with upload.")
       return
@@ -556,7 +591,22 @@ export default function CreateCourseUnified() {
                     </Button>
                   </div>
 
-                  {!hasCreditForMode(createMode) && (
+                  {atGeneratedLimit ? (
+                    <Card className="border-amber-500/30 bg-amber-500/5">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Generated course limit reached</CardTitle>
+                        <CardDescription>
+                          You&apos;ve used {courseLimits?.generated}/{courseLimits?.maxGenerated}{" "}
+                          generated slots. Level up to unlock more before creating another course.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <Button onClick={showGeneratedLimitDialog} size="lg" variant="outline">
+                          View limit details
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ) : !hasCreditForMode(createMode) ? (
                     <Card className="border-primary/20 bg-primary/5">
                       <CardHeader className="pb-2">
                         <CardTitle className="text-base">Creation fee required</CardTitle>
@@ -587,7 +637,7 @@ export default function CreateCourseUnified() {
                         </Button>
                       </CardContent>
                     </Card>
-                  )}
+                  ) : null}
 
                   {createMode === "ai" && phase === "pick-difficulty" && difficultyAnalysis?.options && (
                     <Card className="border-primary/30">
@@ -799,6 +849,17 @@ export default function CreateCourseUnified() {
           </div>
         </div>
       </main>
+
+      {courseLimits && (
+        <CourseLimitDialog
+          open={limitDialogOpen}
+          onOpenChange={setLimitDialogOpen}
+          type="generated"
+          limit={courseLimits.maxGenerated}
+          current={courseLimits.generated}
+          level={courseLimits.level}
+        />
+      )}
     </div>
   )
 }

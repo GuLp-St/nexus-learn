@@ -14,6 +14,8 @@ import { useRouter } from "next/navigation"
 import { generateCourseContent } from "@/lib/gemini"
 import { generateAndUploadImage } from "@/lib/upload-actions"
 import { DEFAULT_COURSE_IMAGE_URL } from "@/lib/image-constants"
+import { getUserCourseLimits, type CourseLimitInfo } from "@/lib/course-limit-utils"
+import { CourseLimitDialog } from "@/components/course-limit-dialog"
 
 const CACHE_PREFIX = "nexus-ai-suggestions"
 
@@ -61,10 +63,16 @@ export function AISuggestedCourseCard() {
   const [suggestions, setSuggestions] = useState<CourseSuggestion[]>([])
   const [loading, setLoading] = useState(true)
   const [actionId, setActionId] = useState<string | null>(null)
+  const [courseLimits, setCourseLimits] = useState<CourseLimitInfo | null>(null)
+  const [limitDialogOpen, setLimitDialogOpen] = useState(false)
+  const [limitType, setLimitType] = useState<"generated" | "added">("added")
 
   useEffect(() => {
     if (user) {
       loadSuggestions()
+      getUserCourseLimits(user.uid)
+        .then(setCourseLimits)
+        .catch((error) => console.error("Error fetching course limits:", error))
     }
   }, [user])
 
@@ -96,6 +104,11 @@ export function AISuggestedCourseCard() {
     if (!user || actionId) return
 
     if (suggestion.type === "ai") {
+      if (courseLimits && courseLimits.generated >= courseLimits.maxGenerated) {
+        setLimitType("generated")
+        setLimitDialogOpen(true)
+        return
+      }
       router.push(`/create-course?mode=ai&topic=${encodeURIComponent(suggestion.title)}`)
       return
     }
@@ -105,6 +118,11 @@ export function AISuggestedCourseCard() {
 
     try {
       if (suggestion.type === "community" && suggestion.course) {
+        if (courseLimits && courseLimits.added >= courseLimits.maxAdded) {
+          setLimitType("added")
+          setLimitDialogOpen(true)
+          return
+        }
         await copyCourseToUserLibrary(user.uid, suggestion.course.id)
         invalidateAISuggestionCache(user.uid)
         router.push(`/journey/${suggestion.course.id}`)
@@ -125,8 +143,14 @@ export function AISuggestedCourseCard() {
         router.push(`/journey/${newCourseId}`)
       }
     } catch (error) {
-      console.error("Error processing suggestion:", error)
-      alert("Failed to process course. Please try again.")
+      const message = error instanceof Error ? error.message : ""
+      if (message.includes("course limit")) {
+        setLimitType(message.includes("added") ? "added" : "generated")
+        setLimitDialogOpen(true)
+      } else {
+        console.error("Error processing suggestion:", error)
+        alert("Failed to process course. Please try again.")
+      }
     } finally {
       setActionId(null)
     }
@@ -245,6 +269,17 @@ export function AISuggestedCourseCard() {
           </div>
         </CardContent>
       </Card>
+
+      {courseLimits && (
+        <CourseLimitDialog
+          open={limitDialogOpen}
+          onOpenChange={setLimitDialogOpen}
+          type={limitType}
+          limit={limitType === "generated" ? courseLimits.maxGenerated : courseLimits.maxAdded}
+          current={limitType === "generated" ? courseLimits.generated : courseLimits.added}
+          level={courseLimits.level}
+        />
+      )}
     </>
   )
 }

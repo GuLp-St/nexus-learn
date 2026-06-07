@@ -1,4 +1,8 @@
 import type { LessonStream, TextBlock } from "./gemini"
+import {
+  enrichReferenceWithMaterial,
+  type MaterialReferenceContext,
+} from "./lesson-reference-resolver"
 
 export type ParsedReference = {
   label: string
@@ -41,6 +45,7 @@ export function ensureTextBlockReferences(
     moduleTitle?: string
     lessonTitle?: string
     defaultFileName?: string
+    material?: MaterialReferenceContext
   }
 ): LessonStream {
   const parsedRefs = (options?.references ?? [])
@@ -55,13 +60,25 @@ export function ensureTextBlockReferences(
   }
 
   let textIndex = 0
+  const enrich = (ref: ParsedReference): ParsedReference =>
+    enrichReferenceWithMaterial(ref, options?.material)
+
   const blocks = stream.blocks.map((block) => {
     if (block.type !== "text") return block
     const textBlock = block as TextBlock
-    if (textBlock.reference?.label || textBlock.reference?.url || textBlock.reference?.fileName) {
-      return textBlock
+    const existing = textBlock.reference
+    if (existing?.label || existing?.url || existing?.fileName) {
+      return {
+        ...textBlock,
+        reference: enrich({
+          label: existing.label || "Course material",
+          url: existing.url,
+          fileName: existing.fileName,
+          page: existing.page,
+        }),
+      }
     }
-    const ref = parsedRefs[textIndex % Math.max(parsedRefs.length, 1)] ?? fallback
+    const ref = enrich(parsedRefs[textIndex % Math.max(parsedRefs.length, 1)] ?? fallback)
     textIndex++
     return { ...textBlock, reference: ref }
   })

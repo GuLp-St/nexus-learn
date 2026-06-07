@@ -290,58 +290,56 @@ function QuestItem({ quest, onClaim, onRefresh, claiming, refreshing, canRefresh
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 flex-shrink-0 items-end">
-          {quest.claimed ? (
-            <div className="text-xs text-center text-muted-foreground py-1">
-              <QuestCompletedCountdown />
-            </div>
-          ) : (
-            <>
-              {/* Rewards - Always visible at the top */}
-              <div className="flex flex-col gap-1 items-end">
-                <div className="text-xs font-medium text-foreground">+{quest.xpReward} XP</div>
-                <div className="flex items-center gap-1 text-xs font-medium text-foreground">
-                  <span>+{quest.nexonReward}</span>
-                  <NexonIcon className="h-3.5 w-3.5" />
-                </div>
+        {!quest.claimed && (
+          <div className="flex flex-col gap-3 flex-shrink-0 items-end">
+            <div className="flex flex-col gap-1 items-end">
+              <div className="text-xs font-medium text-foreground">+{quest.xpReward} XP</div>
+              <div className="flex items-center gap-1 text-xs font-medium text-foreground">
+                <span>+{quest.nexonReward}</span>
+                <NexonIcon className="h-3.5 w-3.5" />
               </div>
+            </div>
 
-              {/* Action Button - Replaces refresh spot when completed */}
-              {isCompleted ? (
+            {isCompleted ? (
+              <Button
+                size="sm"
+                onClick={onClaim}
+                disabled={claiming}
+                className="text-xs h-8 px-4"
+              >
+                {claiming ? (
+                  <Spinner className="h-3 w-3" />
+                ) : (
+                  "Claim"
+                )}
+              </Button>
+            ) : (
+              canRefresh && !quest.completed && (
                 <Button
                   size="sm"
-                  onClick={onClaim}
-                  disabled={claiming}
-                  className="text-xs h-8 px-4"
+                  variant="outline"
+                  onClick={onRefresh}
+                  disabled={refreshing}
+                  className="text-xs h-8 w-8 p-0"
+                  title="Refresh Quest"
                 >
-                  {claiming ? (
+                  {refreshing ? (
                     <Spinner className="h-3 w-3" />
                   ) : (
-                    "Claim"
+                    <RefreshCw className="h-3 w-3" />
                   )}
                 </Button>
-              ) : (
-                canRefresh && !quest.completed && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={onRefresh}
-                    disabled={refreshing}
-                    className="text-xs h-8 w-8 p-0"
-                    title="Refresh Quest"
-                  >
-                    {refreshing ? (
-                      <Spinner className="h-3 w-3" />
-                    ) : (
-                      <RefreshCw className="h-3 w-3" />
-                    )}
-                  </Button>
-                )
-              )}
-            </>
-          )}
-        </div>
+              )
+            )}
+          </div>
+        )}
       </div>
+
+      {quest.claimed && (
+        <div className="flex justify-center border-t border-border/50 pt-2">
+          <QuestCompletedCountdown />
+        </div>
+      )}
     </div>
   )
 }

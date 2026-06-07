@@ -87,6 +87,8 @@ async function parseFileInputs(request: NextRequest): Promise<{
 
   fileInputs: Array<{ name: string; buffer: Buffer }>
 
+  sourceFiles: Array<{ name: string; url: string }>
+
 }> {
 
   const contentType = request.headers.get("content-type") || ""
@@ -119,17 +121,21 @@ async function parseFileInputs(request: NextRequest): Promise<{
 
     const fileInputs: Array<{ name: string; buffer: Buffer }> = []
 
+    const sourceFiles: Array<{ name: string; url: string }> = []
+
     for (const ref of remoteFiles.slice(0, MAX_FILES)) {
 
       if (!ref?.name || !ref?.url || !isValidCourseFileName(ref.name)) continue
 
       fileInputs.push(await downloadRemoteFile(ref))
 
+      sourceFiles.push({ name: ref.name, url: ref.url })
+
     }
 
 
 
-    return { userId, jobId, difficulty, toneInstruction, fileInputs }
+    return { userId, jobId, difficulty, toneInstruction, fileInputs, sourceFiles }
 
   }
 
@@ -185,7 +191,7 @@ async function parseFileInputs(request: NextRequest): Promise<{
 
 
 
-  return { userId, jobId, difficulty, toneInstruction, fileInputs }
+  return { userId, jobId, difficulty, toneInstruction, fileInputs, sourceFiles: [] }
 
 }
 
@@ -260,6 +266,8 @@ export async function POST(request: NextRequest) {
       difficulty: parsed.difficulty,
 
       toneInstruction: parsed.toneInstruction,
+
+      sourceFiles: parsed.sourceFiles,
 
     })
 

@@ -13,6 +13,8 @@ import { db } from "@/lib/firebase"
 import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore"
 import { PublicCourse } from "@/lib/course-utils"
 import { copyCourseToUserLibrary } from "@/lib/course-copy-utils"
+import { getUserCourseLimits, type CourseLimitInfo } from "@/lib/course-limit-utils"
+import { CourseLimitDialog } from "@/components/course-limit-dialog"
 import {
   Dialog,
   DialogContent,
@@ -39,12 +41,15 @@ export function CommunityLibraryPanel({ compact = false }: { compact?: boolean }
   const [addingCourseId, setAddingCourseId] = useState<string | null>(null)
   const [userCourseIds, setUserCourseIds] = useState<Set<string>>(new Set())
   const [detailCourse, setDetailCourse] = useState<PublishedCourse | null>(null)
+  const [courseLimits, setCourseLimits] = useState<CourseLimitInfo | null>(null)
+  const [limitDialogOpen, setLimitDialogOpen] = useState(false)
   const router = useRouter()
   const { user } = useAuth()
 
   useEffect(() => {
+    if (!user) return
+
     const fetchUserCourses = async () => {
-      if (!user) return
       try {
         const { getUserCourses } = await import("@/lib/course-utils")
         const userCourses = await getUserCourses(user.uid)
@@ -54,6 +59,10 @@ export function CommunityLibraryPanel({ compact = false }: { compact?: boolean }
       }
     }
     fetchUserCourses()
+
+    getUserCourseLimits(user.uid)
+      .then(setCourseLimits)
+      .catch((error) => console.error("Error fetching course limits:", error))
   }, [user])
 
   useEffect(() => {
@@ -139,15 +148,26 @@ export function CommunityLibraryPanel({ compact = false }: { compact?: boolean }
 
   const displayCourses = showAll ? filteredCourses : filteredCourses.slice(0, compact ? 6 : 12)
 
+  const atAddedLimit =
+    courseLimits != null && courseLimits.added >= courseLimits.maxAdded
+
   const handleAddCourse = async (courseId: string) => {
     if (!user) return
+    if (atAddedLimit) {
+      setLimitDialogOpen(true)
+      return
+    }
     setAddingCourseId(courseId)
     try {
       await copyCourseToUserLibrary(user.uid, courseId)
       router.push(`/journey/${courseId}`)
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to add course"
-      alert(message)
+      if (message.includes("added course limit")) {
+        setLimitDialogOpen(true)
+      } else {
+        alert(message)
+      }
     } finally {
       setAddingCourseId(null)
     }
@@ -329,6 +349,17 @@ export function CommunityLibraryPanel({ compact = false }: { compact?: boolean }
           )}
         </DialogContent>
       </Dialog>
+
+      {courseLimits && (
+        <CourseLimitDialog
+          open={limitDialogOpen}
+          onOpenChange={setLimitDialogOpen}
+          type="added"
+          limit={courseLimits.maxAdded}
+          current={courseLimits.added}
+          level={courseLimits.level}
+        />
+      )}
     </div>
   )
 }

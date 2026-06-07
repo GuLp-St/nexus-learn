@@ -9,6 +9,7 @@ import { getAdminFirestore } from "./firebase-admin"
 import { getUserNexonAdmin, spendNexonAdmin } from "./nexon-admin"
 
 import { COURSE_GENERATION_NEXON_COST } from "./course-constants"
+import { checkCanAddGeneratedCourseAdmin } from "./course-limit-server"
 
 
 
@@ -67,6 +68,24 @@ export async function purchaseUploadCreationCredit(userId: string): Promise<{
 }> {
 
   try {
+
+    const limitCheck = await checkCanAddGeneratedCourseAdmin(userId)
+
+    if (!limitCheck.ok) {
+
+      return {
+
+        ok: false,
+
+        alreadyPaid: false,
+
+        error: limitCheck.error,
+
+      }
+
+    }
+
+
 
     const credits = await getCourseCreationCredits(userId)
 
@@ -163,6 +182,24 @@ export async function purchaseAiCreationCredit(userId: string): Promise<{
 }> {
 
   try {
+
+    const limitCheck = await checkCanAddGeneratedCourseAdmin(userId)
+
+    if (!limitCheck.ok) {
+
+      return {
+
+        ok: false,
+
+        alreadyPaid: false,
+
+        error: limitCheck.error,
+
+      }
+
+    }
+
+
 
     const credits = await getCourseCreationCredits(userId)
 

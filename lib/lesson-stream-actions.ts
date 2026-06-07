@@ -22,6 +22,8 @@ export async function generateLessonStreamWithImages(
     moduleSummary?: string
     processedImages?: LessonMaterialImage[]
     defaultFileName?: string
+    sourceFiles?: Array<{ name: string; url: string }>
+    imageMap?: Record<number, string>
   }
 ): Promise<LessonStream> {
   let stream = await generateLessonStream(
@@ -31,12 +33,17 @@ export async function generateLessonStreamWithImages(
     sourceContext
   )
 
+  const materialContext = sourceContext?.sourceFiles || sourceContext?.imageMap
+    ? { sourceFiles: sourceContext?.sourceFiles, imageMap: sourceContext?.imageMap }
+    : undefined
+
   stream = ensureTextBlockReferences(stream, {
     references: sourceContext?.references,
     courseTitle,
     moduleTitle,
     lessonTitle,
     defaultFileName: sourceContext?.defaultFileName,
+    material: materialContext,
   })
 
   const materialImages = sourceContext?.processedImages ?? []
@@ -60,5 +67,6 @@ export async function generateLessonStreamWithImages(
     moduleTitle,
     lessonTitle,
     defaultFileName: sourceContext?.defaultFileName,
+    material: materialContext,
   })
 }

@@ -4,6 +4,7 @@ import type { CourseData } from "./gemini"
 import { creditsFromUser, type CreationCreditType } from "./course-creation-credits-shared"
 import { omitUndefinedDeep } from "./firestore-sanitize"
 import { ensureUserProgressAdmin } from "./ensure-user-progress-admin"
+import { checkCanAddGeneratedCourseAdmin } from "./course-limit-server"
 
 /**
  * Atomically create a private course and consume the matching creation credit (Admin SDK).
@@ -14,6 +15,11 @@ export async function createCourseAndConsumeCredit(
   creditType: CreationCreditType,
   sourceMaterialId?: string
 ): Promise<string> {
+  const limitCheck = await checkCanAddGeneratedCourseAdmin(userId)
+  if (!limitCheck.ok) {
+    throw new Error(limitCheck.error)
+  }
+
   const db = getAdminFirestore()
   const courseRef = db.collection("courses").doc()
 
