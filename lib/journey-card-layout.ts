@@ -4,7 +4,7 @@ import type { JourneyViewType } from "./journey-settings-utils"
 export function journeyCardShellClass(viewType: JourneyViewType): string {
   switch (viewType) {
     case "list":
-      return "h-14"
+      return "min-h-[4.5rem] h-auto"
     case "icon-sm":
       return "h-[160px]"
     case "icon-md":

@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   POWERUP_ACTIONS,
   SABOTAGE_ACTIONS,
   type PowerActionType,
 } from "@/lib/challenge-powered-actions"
+import { CHALLENGE_ACTIONS_PER_PLAYER } from "@/lib/challenge-utils"
 import { Zap, Shield } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -16,84 +16,100 @@ interface ChallengeActionsPanelProps {
   onAction: (action: PowerActionType) => Promise<void>
 }
 
+function ActionButton({
+  short,
+  description,
+  tone,
+  disabled,
+  onClick,
+}: {
+  short: string
+  description: string
+  tone: "sabotage" | "powerup"
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "h-auto w-full flex flex-col items-start gap-1 px-3 py-2.5 text-left whitespace-normal",
+        tone === "sabotage"
+          ? "border-orange-500/30 hover:bg-orange-500/10"
+          : "border-primary/30 hover:bg-primary/5"
+      )}
+    >
+      <span
+        className={cn(
+          "text-xs font-bold leading-none",
+          tone === "sabotage" ? "text-orange-700 dark:text-orange-300" : "text-primary"
+        )}
+      >
+        {short}
+      </span>
+      <span className="text-[10px] font-normal text-muted-foreground leading-snug">
+        {description}
+      </span>
+    </Button>
+  )
+}
+
 export function ChallengeActionsPanel({
   actionsLeft,
   disabled,
   onAction,
 }: ChallengeActionsPanelProps) {
-  const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState<PowerActionType | null>(null)
-
-  const run = async (action: PowerActionType) => {
-    setBusy(action)
-    try {
-      await onAction(action)
-      setOpen(false)
-    } finally {
-      setBusy(null)
-    }
-  }
+  const busy = disabled
 
   return (
-    <div className="relative">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="gap-1 h-8 text-xs"
-        disabled={disabled || actionsLeft <= 0}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <Zap className="h-3.5 w-3.5 text-orange-500" />
-        Actions ({actionsLeft})
-      </Button>
+    <div className="w-full space-y-3 rounded-lg border bg-muted/20 p-3">
+      <div className="flex items-center justify-center gap-2 text-sm font-semibold">
+        <Zap className="h-4 w-4 text-orange-500" />
+        <span>
+          Actions {actionsLeft}/{CHALLENGE_ACTIONS_PER_PLAYER}
+        </span>
+      </div>
 
-      {open && (
-        <div className="absolute left-1/2 -translate-x-1/2 top-full z-50 mt-1 w-56 rounded-lg border bg-popover p-2 shadow-lg">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-1 mb-1">
-            Sabotage
-          </p>
-          <div className="grid grid-cols-2 gap-1 mb-2">
-            {SABOTAGE_ACTIONS.map((a) => (
-              <Button
-                key={a.id}
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-7 text-[10px] justify-start px-2 text-orange-700 dark:text-orange-300",
-                  busy === a.id && "opacity-50"
-                )}
-                disabled={!!busy}
-                onClick={() => void run(a.id)}
-              >
-                {a.short}
-              </Button>
-            ))}
-          </div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-1 mb-1 flex items-center gap-1">
-            <Shield className="h-3 w-3" /> Power-ups
-          </p>
-          <div className="grid grid-cols-2 gap-1">
-            {POWERUP_ACTIONS.map((a) => (
-              <Button
-                key={a.id}
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-7 text-[10px] justify-start px-2 text-primary",
-                  busy === a.id && "opacity-50"
-                )}
-                disabled={!!busy}
-                onClick={() => void run(a.id)}
-              >
-                {a.short}
-              </Button>
-            ))}
-          </div>
+      <div className="space-y-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+          <Zap className="h-3 w-3 text-orange-500" />
+          Sabotage
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {SABOTAGE_ACTIONS.map((a) => (
+            <ActionButton
+              key={a.id}
+              short={a.short}
+              description={a.description}
+              tone="sabotage"
+              disabled={busy || actionsLeft <= 0}
+              onClick={() => void onAction(a.id)}
+            />
+          ))}
         </div>
-      )}
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+          <Shield className="h-3 w-3" />
+          Power-ups
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {POWERUP_ACTIONS.map((a) => (
+            <ActionButton
+              key={a.id}
+              short={a.short}
+              description={a.description}
+              tone="powerup"
+              disabled={busy || actionsLeft <= 0}
+              onClick={() => void onAction(a.id)}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

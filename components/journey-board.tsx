@@ -288,7 +288,7 @@ export function JourneyBoard({
               <Button
                 variant="secondary"
                 size="icon"
-                className="absolute top-2 left-2 z-20 h-7 w-7 opacity-0 group-hover:opacity-100 shadow-md"
+                className="absolute top-2 left-2 z-20 h-7 w-7 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 shadow-md"
                 title="Move to folder"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -298,7 +298,12 @@ export function JourneyBoard({
                 <Folder className="h-3 w-3" />
               </Button>
             )}
-            <div className="h-full overflow-hidden rounded-xl">
+            <div
+              className={cn(
+                "h-full rounded-xl",
+                viewType === "list" ? "overflow-visible" : "overflow-hidden"
+              )}
+            >
               {renderCourse(course, index, viewType)}
             </div>
           </div>

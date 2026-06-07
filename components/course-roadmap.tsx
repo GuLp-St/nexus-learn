@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Lock, CheckCircle2, Play, BookOpen, GraduationCap, Castle, Flag, XCircle, RotateCcw, Eye, Gift, FileQuestion, Clock, Gem, Sparkles } from "lucide-react"
+import { Lock, CheckCircle2, Play, BookOpen, GraduationCap, Castle, Flag, XCircle, RotateCcw, Eye, Gift, FileQuestion, Clock, Gem, Sparkles, CircleCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { CourseWithProgress } from "@/lib/course-utils"
@@ -29,6 +29,12 @@ import {
   getEffectiveModuleQuizScore,
   isModuleQuizPassed,
 } from "@/lib/progress-display-utils"
+import {
+  getPregenerateTarget,
+  lessonKey,
+  isLessonPregenerated,
+  pregenerateLesson,
+} from "@/lib/pregenerate-lesson"
 
 interface CourseRoadmapProps {
   course: CourseWithProgress
@@ -127,6 +133,35 @@ function generateNodePositions(lessonCount: number): Array<{ x: number; y: numbe
   return positions
 }
 
+function PregenerateRing({ loading, ready }: { loading?: boolean; ready?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 text-primary-foreground" aria-hidden>
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        opacity={0.25}
+      />
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={56.5}
+        strokeDashoffset={ready ? 0 : loading ? 28 : 42}
+        className={loading ? "origin-center animate-[spin_1.2s_linear_infinite]" : ""}
+        style={{ transformOrigin: "center" }}
+      />
+    </svg>
+  )
+}
+
 interface ModuleLevelCardProps {
   moduleIndex: number
   module: CourseWithProgress["modules"][0]
@@ -137,6 +172,10 @@ interface ModuleLevelCardProps {
   previousModulePassed: boolean
   currentLessonIndex?: number
   nextLesson?: { moduleIndex: number; lessonIndex: number } | null
+  pregenerateTarget?: { moduleIndex: number; lessonIndex: number } | null
+  pregeneratedLessons: Set<string>
+  pregeneratingLesson: string | null
+  onPregenerate: (moduleIndex: number, lessonIndex: number) => void
   incompleteAttempt: (QuizAttempt & { courseTitle?: string }) | null
   onRefresh?: () => void
 }
@@ -151,6 +190,10 @@ function ModuleLevelCard({
   previousModulePassed,
   currentLessonIndex,
   nextLesson,
+  pregenerateTarget,
+  pregeneratedLessons,
+  pregeneratingLesson,
+  onPregenerate,
   incompleteAttempt,
   onRefresh,
 }: ModuleLevelCardProps) {
@@ -327,6 +370,23 @@ function ModuleLevelCard({
     const prevLessonId = lessonIndex > 0 ? `${moduleIndex}-${lessonIndex - 1}` : null
     const isLockedLesson = prevLessonId ? !completedLessons.has(prevLessonId) : false
     
+    const isPregenerateTarget =
+      pregenerateTarget?.moduleIndex === moduleIndex &&
+      pregenerateTarget?.lessonIndex === lessonIndex
+    const key = lessonKey(moduleIndex, lessonIndex)
+    const isPregenerated = pregeneratedLessons.has(key)
+    const isPregenerating = pregeneratingLesson === key
+
+    if (isLockedLesson && isPregenerateTarget) {
+      if (isPregenerating) return
+      if (isPregenerated) {
+        toast.message("Complete your current lesson first — the next one is ready!")
+        return
+      }
+      onPregenerate(moduleIndex, lessonIndex)
+      return
+    }
+
     if (isLockedLesson) {
       toast.error("Finish previous lesson first.")
       return
@@ -479,17 +539,27 @@ function ModuleLevelCard({
               !isCompleted
             const prevLessonId = lessonIndex > 0 ? `${moduleIndex}-${lessonIndex - 1}` : null
             const isLockedLesson = prevLessonId ? !completedLessons.has(prevLessonId) : false
+            const isPregenerateTarget =
+              pregenerateTarget?.moduleIndex === moduleIndex &&
+              pregenerateTarget?.lessonIndex === lessonIndex
+            const pregenKey = lessonKey(moduleIndex, lessonIndex)
+            const isPregenerated = pregeneratedLessons.has(pregenKey)
+            const isPregenerating = pregeneratingLesson === pregenKey
             
             const nodeTone =
-              isLockedLesson || isLocked
-                ? "locked"
-                : isNext
-                  ? "next"
-                  : isCompleted
-                    ? "completed"
-                    : isCurrent
-                      ? "current"
-                      : "available"
+              isPregenerateTarget && isLockedLesson
+                ? isPregenerated
+                  ? "pregenerate-ready"
+                  : "pregenerate"
+                : isLockedLesson || isLocked
+                  ? "locked"
+                  : isNext
+                    ? "next"
+                    : isCompleted
+                      ? "completed"
+                      : isCurrent
+                        ? "current"
+                        : "available"
             
             return (
               <div
@@ -567,7 +637,11 @@ function ModuleLevelCard({
                   {/* Node circle - sits on top of ring */}
                   <div
                     className={`relative z-10 rounded-full border-2 shadow-lg flex items-center justify-center transition-transform group-hover:scale-110 ${
-                      nodeTone === "locked"
+                      nodeTone === "pregenerate"
+                        ? "bg-violet-600 border-violet-500 ring-2 ring-violet-400/50 ring-offset-2 ring-offset-background"
+                        : nodeTone === "pregenerate-ready"
+                          ? "bg-violet-500 border-violet-400"
+                          : nodeTone === "locked"
                         ? "bg-muted-foreground border-muted-foreground/80"
                         : nodeTone === "next"
                           ? "bg-primary border-primary ring-2 ring-primary ring-offset-2 ring-offset-background scale-110"
@@ -582,7 +656,13 @@ function ModuleLevelCard({
                       height: `${LESSON_NODE_SIZE}px`,
                     }}
                   >
-                  {isLockedLesson || isLocked ? (
+                  {isPregenerating ? (
+                    <PregenerateRing loading />
+                  ) : isPregenerateTarget && isLockedLesson && isPregenerated ? (
+                    <CircleCheck className="h-5 w-5 text-primary-foreground" />
+                  ) : isPregenerateTarget && isLockedLesson ? (
+                    <Sparkles className="h-4 w-4 text-primary-foreground" />
+                  ) : isLockedLesson || isLocked ? (
                     <Lock className="h-4 w-4 text-primary-foreground" />
                   ) : isCompleted ? (
                     <CheckCircle2 className="h-5 w-5 text-primary-foreground" />
@@ -600,6 +680,20 @@ function ModuleLevelCard({
                   <div className="absolute left-1/2 top-full mt-2 z-20 -translate-x-1/2 pointer-events-none">
                     <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary-foreground shadow-md">
                       Next
+                    </span>
+                  </div>
+                )}
+                {isPregenerateTarget && isLockedLesson && !isPregenerating && (
+                  <div className="absolute left-1/2 top-full mt-2 z-20 -translate-x-1/2 pointer-events-none">
+                    <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-md whitespace-nowrap">
+                      {isPregenerated ? "Ready" : "Pregenerate"}
+                    </span>
+                  </div>
+                )}
+                {isPregenerating && (
+                  <div className="absolute left-1/2 top-full mt-2 z-20 -translate-x-1/2 pointer-events-none">
+                    <span className="rounded-full bg-violet-600/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-md">
+                      Building…
                     </span>
                   </div>
                 )}
@@ -1584,6 +1678,8 @@ export function CourseRoadmap({ course }: CourseRoadmapProps) {
   const router = useRouter()
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([])
   const [incompleteAttempt, setIncompleteAttempt] = useState<(QuizAttempt & { courseTitle?: string }) | null>(null)
+  const [pregeneratedLessons, setPregeneratedLessons] = useState<Set<string>>(new Set())
+  const [pregeneratingLesson, setPregeneratingLesson] = useState<string | null>(null)
   const activeCardRef = useRef<HTMLDivElement>(null)
   
   if (!course.userProgress) return null
@@ -1638,6 +1734,44 @@ export function CourseRoadmap({ course }: CourseRoadmapProps) {
     completedLessonSet,
     isModuleUnlocked
   )
+  const pregenerateTarget = getPregenerateTarget(
+    nextLesson,
+    course,
+    isModuleUnlocked
+  )
+
+  useEffect(() => {
+    if (!user || !pregenerateTarget) return
+    const key = lessonKey(pregenerateTarget.moduleIndex, pregenerateTarget.lessonIndex)
+    void isLessonPregenerated(
+      user.uid,
+      course.id,
+      pregenerateTarget.moduleIndex,
+      pregenerateTarget.lessonIndex
+    ).then((ready) => {
+      if (ready) {
+        setPregeneratedLessons((prev) => new Set(prev).add(key))
+      }
+    })
+  }, [user, course.id, pregenerateTarget?.moduleIndex, pregenerateTarget?.lessonIndex])
+
+  const handlePregenerate = async (moduleIndex: number, lessonIndex: number) => {
+    if (!user) return
+    const key = lessonKey(moduleIndex, lessonIndex)
+    if (pregeneratingLesson || pregeneratedLessons.has(key)) return
+
+    setPregeneratingLesson(key)
+    try {
+      await pregenerateLesson(user.uid, course, moduleIndex, lessonIndex)
+      setPregeneratedLessons((prev) => new Set(prev).add(key))
+      toast.success("Next lesson pregenerated — it will be ready when you finish the current one!")
+    } catch (err) {
+      console.error("Pregenerate failed:", err)
+      toast.error("Could not pregenerate lesson. Try again.")
+    } finally {
+      setPregeneratingLesson(null)
+    }
+  }
   
   // Find active module
   const lastModule = course.userProgress.lastAccessedModule ?? 0
@@ -1678,6 +1812,10 @@ export function CourseRoadmap({ course }: CourseRoadmapProps) {
               previousModulePassed={previousModulePassed}
               currentLessonIndex={isActive ? lastLesson : undefined}
               nextLesson={nextLesson}
+              pregenerateTarget={pregenerateTarget}
+              pregeneratedLessons={pregeneratedLessons}
+              pregeneratingLesson={pregeneratingLesson}
+              onPregenerate={handlePregenerate}
               incompleteAttempt={incompleteAttempt}
               onRefresh={loadData}
             />

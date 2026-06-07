@@ -61,6 +61,16 @@ export function useQuizLeaveWarning({
   useEffect(() => {
     if (!active) return
 
+    history.pushState({ quizLeaveGuard: true }, "", window.location.href)
+
+    const onPopState = () => {
+      if (!activeRef.current) return
+      history.pushState({ quizLeaveGuard: true }, "", window.location.href)
+      if (window.confirm(message)) {
+        void runLeave()
+      }
+    }
+
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault()
       e.returnValue = message
@@ -73,10 +83,12 @@ export function useQuizLeaveWarning({
       }
     }
 
+    window.addEventListener("popstate", onPopState)
     window.addEventListener("beforeunload", onBeforeUnload)
     window.addEventListener("pagehide", onPageHide)
 
     return () => {
+      window.removeEventListener("popstate", onPopState)
       window.removeEventListener("beforeunload", onBeforeUnload)
       window.removeEventListener("pagehide", onPageHide)
     }

@@ -124,7 +124,11 @@ export default function ChallengeQuizPage() {
     challenge.sabotageUntil.toMillis() > Date.now() &&
     challenge.sabotageBy !== user?.uid
 
-  const fx = useChallengeQuizFx(currentQuestionIndex, questions.length)
+  const fx = useChallengeQuizFx(
+    currentQuestionIndex,
+    questions.length,
+    challengeSettings?.bpm !== false
+  )
   const actionFx = useChallengeActionFx()
   const tabAwayDeadlineRef = useRef<number | null>(null)
   const submitLockRef = useRef(false)
@@ -454,7 +458,7 @@ export default function ChallengeQuizPage() {
   const prevSabotageRef = useRef(false)
   useEffect(() => {
     if (sabotageActive && !prevSabotageRef.current) {
-      actionFx.triggerActionFx("incoming_sabotage", 5000)
+      actionFx.triggerActionFx("incoming_sabotage", 10000)
     }
     prevSabotageRef.current = !!sabotageActive
   }, [sabotageActive, actionFx])
@@ -694,11 +698,16 @@ export default function ChallengeQuizPage() {
     const targetQ = questions[oppIdx]
     setActionBusy(true)
     try {
+      const displayQ = applyPowerEffectsToQuestion(raw, selfEffects)
       await useChallengePowerAction(challengeId, user.uid, action, {
         currentQuestionId: raw.questionId,
         opponentQuestionIndex: oppIdx,
         questionIds: questions.map((q) => q.questionId),
         extraOptions: targetQ?.extraOptions,
+        targetOptions: targetQ?.options,
+        targetCorrectAnswer: targetQ?.correctAnswer,
+        selfOptions: displayQ.options,
+        selfCorrectAnswer: displayQ.correctAnswer,
         isTrueFalse: targetQ?.objectiveType === "true-false",
         hasTfExpanded: !!targetQ?.tfExpandedVariant,
       })
@@ -877,9 +886,6 @@ export default function ChallengeQuizPage() {
         comboMultiplier={fx.comboMultiplier}
         peakComboMultiplier={fx.peakComboMultiplier}
         comboTimeLeft={fx.comboTimeLeft}
-        timerPulse={fx.timerPulse}
-        elapsedTime={elapsedTime}
-        showTimer={challengeSettings?.timer !== false}
         showCombo={challengeSettings?.combo !== false}
         showFlash={challengeSettings?.immediateFeedback !== false}
         sabotageActive={sabotageActive}
@@ -887,7 +893,7 @@ export default function ChallengeQuizPage() {
       <SidebarNav currentPath="/friends" />
       <main className="flex-1">
         <div className="p-4 lg:p-8">
-          <div className="mx-auto max-w-3xl space-y-6">
+          <div className="mx-auto max-w-3xl space-y-4">
             <div className="flex items-start gap-3">
               <Button
                 variant="ghost"
@@ -926,8 +932,8 @@ export default function ChallengeQuizPage() {
             </div>
 
             <Card className={cn(questionShake && "challenge-question-shake")}>
-              <CardContent className="p-6 space-y-6">
-                <h2 className="text-xl font-semibold">{currentQuestion.question}</h2>
+              <CardContent className="p-4 sm:p-5 space-y-4">
+                <h2 className="text-lg sm:text-xl font-semibold">{currentQuestion.question}</h2>
 
                 {currentQuestion.type === "objective" && currentQuestion.options && (
                   <RadioGroup
@@ -935,11 +941,12 @@ export default function ChallengeQuizPage() {
                     onValueChange={(value) =>
                       handleAnswerChange(currentQuestion.questionId, value)
                     }
+                    className="space-y-2"
                   >
                     {currentQuestion.options.map((option, idx) => (
                       <div key={idx} className="flex items-center space-x-2">
                         <RadioGroupItem value={option} id={`option-${idx}`} />
-                        <Label htmlFor={`option-${idx}`} className="cursor-pointer flex-1">
+                        <Label htmlFor={`option-${idx}`} className="cursor-pointer flex-1 text-sm">
                           {option}
                         </Label>
                       </div>
@@ -956,6 +963,7 @@ export default function ChallengeQuizPage() {
                 <div className="flex justify-end">
                   {isLastQuestion ? (
                     <Button
+                      size="sm"
                       onClick={() => void handleFinalSubmit()}
                       disabled={submitting || gradingNext}
                     >
@@ -966,7 +974,11 @@ export default function ChallengeQuizPage() {
                           : "Submit Challenge"}
                     </Button>
                   ) : (
-                    <Button onClick={() => void handleNext()} disabled={gradingNext || submitting}>
+                    <Button
+                      size="sm"
+                      onClick={() => void handleNext()}
+                      disabled={gradingNext || submitting}
+                    >
                       {gradingNext ? (
                         <>
                           <Spinner className="h-4 w-4 mr-2" />
@@ -985,12 +997,25 @@ export default function ChallengeQuizPage() {
             </Card>
 
             {isPowered && (
-              <div className="flex justify-center">
-                <ChallengeActionsPanel
-                  actionsLeft={actionsLeft}
-                  disabled={actionBusy}
-                  onAction={handlePowerAction}
-                />
+              <ChallengeActionsPanel
+                actionsLeft={actionsLeft}
+                disabled={actionBusy}
+                onAction={handlePowerAction}
+              />
+            )}
+
+            {challengeSettings?.timer !== false && (
+              <div
+                className={cn(
+                  "flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-muted/60 border mx-auto w-fit",
+                  fx.timerPulse && "challenge-timer-flash"
+                )}
+              >
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">Time</span>
+                <span className="font-mono text-lg font-bold tabular-nums">
+                  {Math.floor(elapsedTime / 60)}:
+                  {(elapsedTime % 60).toString().padStart(2, "0")}
+                </span>
               </div>
             )}
           </div>

@@ -5,6 +5,7 @@ import { QuizQuestion } from "./quiz-utils"
 import { calculatePerformanceScore, filterObjectiveQuestions } from "./challenge-scoring"
 import { fetchQuizQuestionsByIds, saveQuizQuestions } from "./quiz-utils"
 import type { PowerActionType, PowerEffectsBucket } from "./challenge-powered-actions"
+import { halveOptions, shuffleArray } from "./challenge-powered-actions"
 import { enrichQuestionsForPoweredMode } from "./challenge-question-enrichment"
 
 export type ChallengeGameMode = "classic" | "powered"
@@ -25,9 +26,9 @@ export interface ChallengeSettings {
 export const CHALLENGE_ACTIONS_PER_PLAYER = 3
 
 export const DEFAULT_CHALLENGE_SETTINGS: ChallengeSettings = {
-  gameMode: "classic",
+  gameMode: "powered",
   timer: true,
-  bpm: false,
+  bpm: true,
   immediateFeedback: true,
   combo: true,
 }
@@ -47,7 +48,7 @@ export function normalizeChallengeSettings(raw?: Partial<ChallengeSettings>): Ch
   return {
     gameMode,
     timer: raw.timer ?? true,
-    bpm: raw.bpm ?? false,
+    bpm: raw.bpm ?? true,
     immediateFeedback: raw.immediateFeedback ?? true,
     combo: true,
   }
@@ -951,6 +952,10 @@ export async function useChallengePowerAction(
     opponentQuestionIndex: number
     questionIds: string[]
     extraOptions?: string[]
+    targetOptions?: string[]
+    targetCorrectAnswer?: string | number | boolean
+    selfOptions?: string[]
+    selfCorrectAnswer?: string | number | boolean
     isTrueFalse?: boolean
     hasTfExpanded?: boolean
   }
@@ -999,11 +1004,17 @@ export async function useChallengePowerAction(
       } else {
         const extras = context.extraOptions ?? []
         if (extras.length === 0) throw new Error("No extra answers available for this question")
+        const base = context.targetOptions ?? []
+        const merged = base.length > 0 ? shuffleArray([...base, ...extras]) : extras
         patch[oppEffectsKey] = {
           ...oppEffects,
           extraOptionsByQuestionId: {
             ...oppEffects.extraOptionsByQuestionId,
             [targetId]: extras,
+          },
+          shuffledOptionsByQuestionId: {
+            ...oppEffects.shuffledOptionsByQuestionId,
+            [targetId]: merged,
           },
         }
       }
@@ -1033,20 +1044,34 @@ export async function useChallengePowerAction(
       break
     }
     case "distort_screen": {
-      const until = Timestamp.fromDate(new Date(Date.now() + 5000))
+      const until = Timestamp.fromDate(new Date(Date.now() + 10000))
       patch.sabotageUntil = until
       patch.sabotageBy = fromUserId
       break
     }
-    case "remove_wrong":
+    case "remove_wrong": {
+      const opts = context.selfOptions ?? []
+      const halved =
+        opts.length > 0
+          ? halveOptions(opts, context.selfCorrectAnswer)
+          : []
       patch[selfEffectsKey] = {
         ...selfEffects,
         removedWrongByQuestionId: {
           ...selfEffects.removedWrongByQuestionId,
           [context.currentQuestionId]: true,
         },
+        ...(halved.length > 0
+          ? {
+              halvedOptionsByQuestionId: {
+                ...selfEffects.halvedOptionsByQuestionId,
+                [context.currentQuestionId]: halved,
+              },
+            }
+          : {}),
       }
       break
+    }
     case "combo_shield":
       patch[selfEffectsKey] = { ...selfEffects, comboShield: true }
       break

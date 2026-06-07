@@ -8,7 +8,11 @@ import {
 
 export type AnswerFx = "correct" | "wrong" | null
 
-export function useChallengeQuizFx(questionIndex: number, totalQuestions: number) {
+export function useChallengeQuizFx(
+  questionIndex: number,
+  totalQuestions: number,
+  bpmEnabled = true
+) {
   const [comboStreak, setComboStreak] = useState(0)
   const [comboMultiplier, setComboMultiplier] = useState(1)
   const [peakComboMultiplier, setPeakComboMultiplier] = useState(1)
@@ -126,11 +130,20 @@ export function useChallengeQuizFx(questionIndex: number, totalQuestions: number
   }, [resetActiveCombo])
 
   useEffect(() => {
+    if (tickIntervalRef.current) {
+      clearInterval(tickIntervalRef.current)
+      tickIntervalRef.current = null
+    }
+
+    if (!bpmEnabled) {
+      if (pulseGainRef.current) pulseGainRef.current.gain.value = 0.02
+      return
+    }
+
     const progress = totalQuestions > 0 ? (questionIndex + 1) / totalQuestions : 0
     const bpm = 60 + Math.floor(progress * 100)
     const intervalMs = Math.max(250, Math.round(60000 / bpm))
 
-    if (tickIntervalRef.current) clearInterval(tickIntervalRef.current)
     tickIntervalRef.current = setInterval(() => {
       playTone(800 + progress * 400, 0.04, "square", 0.03)
       setTimerPulse(true)
@@ -150,7 +163,7 @@ export function useChallengeQuizFx(questionIndex: number, totalQuestions: number
         tickIntervalRef.current = null
       }
     }
-  }, [questionIndex, totalQuestions, playTone])
+  }, [questionIndex, totalQuestions, playTone, bpmEnabled])
 
   useEffect(() => {
     startAmbientPulse()

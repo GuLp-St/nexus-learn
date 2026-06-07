@@ -153,7 +153,7 @@ export function JourneyFolderCard({
             </p>
           </div>
           <div
-            className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0"
             onClick={(e) => e.stopPropagation()}
           >
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onRename}>

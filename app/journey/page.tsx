@@ -171,7 +171,7 @@ const CourseCard = ({
   if (viewType === "list") {
     return (
       <div
-        className="group flex h-full items-center gap-3 rounded-lg border p-3 hover:bg-accent/30 transition-colors cursor-pointer"
+        className="group flex min-h-[4.5rem] h-full items-center gap-3 rounded-lg border px-3 py-2.5 hover:bg-accent/30 transition-colors cursor-pointer"
         onClick={() => router.push(`/journey/${course.id}`)}
       >
         <div
@@ -258,7 +258,7 @@ const CourseCard = ({
 
         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
 
-        <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <div className="absolute top-1.5 right-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10">
           <Button
             variant="secondary"
             size="icon"

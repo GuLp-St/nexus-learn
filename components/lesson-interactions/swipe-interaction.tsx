@@ -15,11 +15,11 @@ export function SwipeInteractionComponent({ interaction, onComplete }: SwipeInte
   const [selected, setSelected] = useState<string | null>(null)
   const [showResult, setShowResult] = useState(false)
 
-  const handleSwipe = (label: string) => {
+  const handleSwipe = (index: number) => {
     if (showResult) return
-    const option = interaction.options.find(opt => opt.label === label)
+    const option = interaction.options[index]
     if (option) {
-      setSelected(label)
+      setSelected(option.label)
       setShowResult(true)
       onComplete(option.isCorrect)
     }
@@ -33,13 +33,13 @@ export function SwipeInteractionComponent({ interaction, onComplete }: SwipeInte
           
           {!showResult ? (
             <div className="flex flex-wrap gap-4 justify-center">
-              {interaction.options.map((option) => (
+              {interaction.options.map((option, index) => (
                 <Button
-                  key={option.label}
+                  key={`${index}-${option.label}`}
                   variant={selected === option.label ? "default" : "outline"}
                   size="lg"
                   className="min-w-[120px] whitespace-normal break-words h-auto py-2"
-                  onClick={() => handleSwipe(option.label)}
+                  onClick={() => handleSwipe(index)}
                 >
                   <span className="break-words">{option.label}</span>
                 </Button>

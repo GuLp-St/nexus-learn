@@ -14,27 +14,79 @@ export type PowerActionCategory = "sabotage" | "powerup"
 
 export interface PowerEffectsBucket {
   extraOptionsByQuestionId?: Record<string, string[]>
+  shuffledOptionsByQuestionId?: Record<string, string[]>
+  halvedOptionsByQuestionId?: Record<string, string[]>
   tfExpandedByQuestionId?: Record<string, boolean>
   swappedQuestionByQuestionId?: Record<string, "easy" | "hard">
   removedWrongByQuestionId?: Record<string, boolean>
   comboShield?: boolean
 }
 
-export const SABOTAGE_ACTIONS: { id: PowerActionType; label: string; short: string }[] = [
-  { id: "add_more_answers", label: "+2 false answers", short: "+2 False answer" },
-  { id: "combo_breaker", label: "Combo breaker", short: "Break" },
-  { id: "swap_harder", label: "Harder question", short: "Harder" },
-  { id: "distort_screen", label: "Distort screen", short: "Distort" },
+export const SABOTAGE_ACTIONS: {
+  id: PowerActionType
+  label: string
+  short: string
+  description: string
+}[] = [
+  {
+    id: "add_more_answers",
+    label: "False answers",
+    short: "False",
+    description: "Add 2 wrong options to opponent's current question",
+  },
+  {
+    id: "combo_breaker",
+    label: "Combo breaker",
+    short: "Break",
+    description: "Reset opponent's combo streak to zero",
+  },
+  {
+    id: "swap_harder",
+    label: "Harder question",
+    short: "Harder",
+    description: "Swap opponent's question for a harder version",
+  },
+  {
+    id: "distort_screen",
+    label: "Distort screen",
+    short: "Distort",
+    description: "Blur and disorient opponent's screen for 10 seconds",
+  },
 ]
 
-export const POWERUP_ACTIONS: { id: PowerActionType; label: string; short: string }[] = [
-  { id: "remove_wrong", label: "Halve answers", short: "Halve" },
-  { id: "combo_shield", label: "Combo shield", short: "Shield" },
-  { id: "swap_easier", label: "Easier question", short: "Easier" },
-  { id: "combo_switcher", label: "Combo switcher", short: "Switch" },
+export const POWERUP_ACTIONS: {
+  id: PowerActionType
+  label: string
+  short: string
+  description: string
+}[] = [
+  {
+    id: "remove_wrong",
+    label: "Halve answers",
+    short: "Halve",
+    description: "Remove half the wrong options on your question",
+  },
+  {
+    id: "combo_shield",
+    label: "Combo shield",
+    short: "Shield",
+    description: "Block your next wrong answer from breaking combo",
+  },
+  {
+    id: "swap_easier",
+    label: "Easier question",
+    short: "Easier",
+    description: "Swap your question for an easier version",
+  },
+  {
+    id: "combo_switcher",
+    label: "Combo switcher",
+    short: "Switch",
+    description: "Swap combo streaks with your opponent",
+  },
 ]
 
-function shuffleArray<T>(arr: T[]): T[] {
+export function shuffleArray<T>(arr: T[]): T[] {
   const copy = [...arr]
   for (let i = copy.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
@@ -56,7 +108,7 @@ function isCorrectOption(
   return opt === correct || opt.toLowerCase() === String(correct).toLowerCase()
 }
 
-function halveOptions(
+export function halveOptions(
   options: string[],
   correctAnswer: string | number | boolean | undefined
 ): string[] {
@@ -108,13 +160,15 @@ export function applyPowerEffectsToQuestion(
       objectiveType: "multiple-choice",
     }
   } else {
-    const extras = effects.extraOptionsByQuestionId?.[qid]
-    if (extras?.length && q.options) {
-      q = { ...q, options: shuffleArray([...q.options, ...extras]) }
+    const shuffled = effects.shuffledOptionsByQuestionId?.[qid]
+    if (shuffled?.length) {
+      q = { ...q, options: [...shuffled] }
     }
   }
 
-  if (effects.removedWrongByQuestionId?.[qid] && q.options && q.correctAnswer !== undefined) {
+  if (effects.halvedOptionsByQuestionId?.[qid]) {
+    q = { ...q, options: [...effects.halvedOptionsByQuestionId[qid]] }
+  } else if (effects.removedWrongByQuestionId?.[qid] && q.options && q.correctAnswer !== undefined) {
     const halved = halveOptions(q.options, q.correctAnswer)
     q = { ...q, options: halved.length > 0 ? halved : q.options.slice(0, 1) }
   }

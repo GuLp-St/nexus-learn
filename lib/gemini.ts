@@ -824,26 +824,8 @@ Requirements:
     const generationPromise = (async () => {
       const text = await poolGenerateText(prompt)
 
-      // Clean the response
-      let jsonText = text.trim()
-      
-      // Extract JSON between { and } or [ and ] for robustness
-      const firstBrace = jsonText.indexOf('{')
-      const lastBrace = jsonText.lastIndexOf('}')
-      const firstBracket = jsonText.indexOf('[')
-      const lastBracket = jsonText.lastIndexOf(']')
-
-      if (firstBrace !== -1 && lastBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
-        jsonText = jsonText.substring(firstBrace, lastBrace + 1)
-      } else if (firstBracket !== -1 && lastBracket !== -1) {
-        jsonText = jsonText.substring(firstBracket, lastBracket + 1)
-      } else if (jsonText.startsWith("```json")) {
-        jsonText = jsonText.replace(/^```json\n?/, "").replace(/\n?```$/, "")
-      } else if (jsonText.startsWith("```")) {
-        jsonText = jsonText.replace(/^```\n?/, "").replace(/\n?```$/, "")
-      }
-
-      const lessonStream = JSON.parse(jsonText) as LessonStream
+      const { parseGeminiJson } = await import("./parse-gemini-json")
+      const lessonStream = parseGeminiJson<LessonStream>(text)
       return normalizeLessonStreamBlocks(lessonStream)
     })()
 

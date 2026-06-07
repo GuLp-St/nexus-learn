@@ -12,9 +12,6 @@ interface ChallengeQuizOverlayProps {
   comboMultiplier: number
   peakComboMultiplier: number
   comboTimeLeft: number
-  timerPulse: boolean
-  elapsedTime: number
-  showTimer?: boolean
   showCombo?: boolean
   showFlash?: boolean
   sabotageActive?: boolean
@@ -50,9 +47,6 @@ export function ChallengeQuizOverlay({
   comboMultiplier,
   peakComboMultiplier,
   comboTimeLeft,
-  timerPulse,
-  elapsedTime,
-  showTimer = true,
   showCombo = true,
   showFlash = true,
   sabotageActive,
@@ -121,19 +115,6 @@ export function ChallengeQuizOverlay({
         </div>
       )}
 
-      {showTimer && (
-        <div
-          className={cn(
-            "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full bg-background/90 border shadow-lg backdrop-blur",
-            timerPulse && "challenge-timer-flash"
-          )}
-        >
-          <span className="text-xs text-muted-foreground uppercase tracking-wide">Time</span>
-          <span className="font-mono text-xl font-bold tabular-nums">
-            {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, "0")}
-          </span>
-        </div>
-      )}
     </>
   )
 }
