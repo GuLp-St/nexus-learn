@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Search, Users, MessageCircle, Zap, Check, XIcon, Trophy, UserPlus, UserMinus } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -30,7 +31,9 @@ import {
 export default function SocialPage() {
   const { user } = useAuth()
   const { setPageContext } = useChatContext()
-  
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState<"friends" | "requests" | "search">("friends")
   const [unreadMessagesMap, setUnreadMessagesMap] = useState<Record<string, number>>({})
@@ -43,6 +46,7 @@ export default function SocialPage() {
   
   const [selectedFriend, setSelectedFriend] = useState<{ id: string; nickname: string; avatarUrl?: string } | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
+  const [pendingChallengeCourseId, setPendingChallengeCourseId] = useState<string | null>(null)
   const [unfriendDialog, setUnfriendDialog] = useState<{ open: boolean; friendId: string | null; friendNickname: string }>({
     open: false,
     friendId: null,
@@ -67,6 +71,28 @@ export default function SocialPage() {
       unsubscribes.forEach(unsub => unsub())
     }
   }, [user, friends])
+
+  // Open chat when returning from share/challenge course picker
+  useEffect(() => {
+    const openChatId = searchParams.get("openChat")
+    const openChatName = searchParams.get("friendName")
+    const challengeCourseId = searchParams.get("challengeCourseId")
+    if (!openChatId || friends.length === 0) return
+
+    const friend = friends.find((f) => f.userId === openChatId)
+    if (friend) {
+      setSelectedFriend({
+        id: friend.userId,
+        nickname: openChatName ? decodeURIComponent(openChatName) : friend.nickname,
+        avatarUrl: friend.avatarUrl,
+      })
+      setChatOpen(true)
+      if (challengeCourseId) {
+        setPendingChallengeCourseId(challengeCourseId)
+      }
+      router.replace("/friends")
+    }
+  }, [friends, searchParams, router])
 
   // Fetch friends and friend requests
   useEffect(() => {
@@ -560,10 +586,15 @@ export default function SocialPage() {
       {selectedFriend && (
         <FriendChatModal
           open={chatOpen}
-          onOpenChange={setChatOpen}
+          onOpenChange={(open) => {
+            setChatOpen(open)
+            if (!open) setPendingChallengeCourseId(null)
+          }}
           friendId={selectedFriend.id}
           friendNickname={selectedFriend.nickname}
           friendAvatarUrl={selectedFriend.avatarUrl}
+          initialChallengeCourseId={pendingChallengeCourseId}
+          onChallengeCourseConsumed={() => setPendingChallengeCourseId(null)}
         />
       )}
 

@@ -144,7 +144,12 @@ export default function QuizHistoryPage() {
                         // Fetch questions for this attempt
                         if (attempt.questionIds && attempt.questionIds.length > 0) {
                           try {
-                            const questions = await fetchQuizQuestionsByIds(courseId, attempt.questionIds)
+                            const questions = await fetchQuizQuestionsByIds(
+                              courseId,
+                              attempt.questionIds,
+                              attempt.moduleIndex ?? null,
+                              attempt.lessonIndex ?? null
+                            )
                             setSelectedAttemptQuestions(questions)
                             if (questions.length === 0) {
                               setQuestionError("Could not find question data for this attempt.")

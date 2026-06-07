@@ -18,6 +18,7 @@ import {
   type NexusCacheReward,
 } from "@/lib/style-shard-utils"
 import { toast } from "sonner"
+import { playSpinSound, playRevealSound } from "@/lib/loot-sounds"
 
 interface NexusCacheModalProps {
   open: boolean
@@ -95,30 +96,15 @@ export function NexusCacheModal({
     if (phase === "spinning" && isAnimating) {
       setIsAnimating(false)
       setPhase("revealed")
+      if (reward) {
+        playRevealSound(reward.rarity)
+      }
       onRewardClaimed?.()
       loadShards()
     }
   }
 
-  const startSpin = (pool: Cosmetic[], finalReward: NexusCacheReward) => {
-    const winnerIndex = pool.findIndex((c) => c.id === finalReward.cosmetic.id)
-    const idx = winnerIndex >= 0 ? winnerIndex : 0
-    const target = calcTargetRotation(idx, pool.length, 5 + Math.floor(Math.random() * 3))
-
-    setWheelPool(pool)
-    setReward(finalReward)
-    setPhase("spinning")
-    setWheelRotation(0)
-    setIsAnimating(true)
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setWheelRotation(target)
-      })
-    })
-  }
-
-  const handleOpen = async () => {
+  const runOpen = async () => {
     if (opening || phase === "spinning") return
     if (freeCaches <= 0 && styleShards < STYLE_SHARDS_PER_NEXUS_CACHE) {
       toast.error(`Need ${STYLE_SHARDS_PER_NEXUS_CACHE} Style Shards to open a Nexus Cache`)
@@ -141,6 +127,7 @@ export function NexusCacheModal({
           : await openNexusCacheWithShards(userId)
 
       const pool = buildWheelPool(allCosmetics, result.cosmetic)
+      playSpinSound(4200)
       startSpin(pool, result)
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to open Nexus Cache"
@@ -150,7 +137,40 @@ export function NexusCacheModal({
     }
   }
 
+  const handleOpen = () => {
+    void runOpen()
+  }
+
+  const handleSpinAgain = () => {
+    setPhase("idle")
+    setReward(null)
+    setWheelPool([])
+    setWheelRotation(0)
+    setIsAnimating(false)
+    void runOpen()
+  }
+
+  const startSpin = (pool: Cosmetic[], finalReward: NexusCacheReward) => {
+    const winnerIndex = pool.findIndex((c) => c.id === finalReward.cosmetic.id)
+    const idx = winnerIndex >= 0 ? winnerIndex : 0
+    const target = calcTargetRotation(idx, pool.length, 5 + Math.floor(Math.random() * 3))
+
+    setWheelPool(pool)
+    setReward(finalReward)
+    setPhase("spinning")
+    setWheelRotation(0)
+    setIsAnimating(true)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setWheelRotation(target)
+      })
+    })
+  }
+
   const segmentAngle = wheelPool.length > 0 ? 360 / wheelPool.length : 0
+  const canSpinAgain =
+    freeCaches > 0 || styleShards >= STYLE_SHARDS_PER_NEXUS_CACHE
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -302,9 +322,25 @@ export function NexusCacheModal({
               >
                 {reward.rarity} · {reward.cosmetic.category}
               </Badge>
-              <Button variant="outline" className="mt-3 w-full" onClick={() => onOpenChange(false)}>
-                Awesome!
-              </Button>
+              <div className="mt-3 flex flex-col gap-2">
+                {canSpinAgain && (
+                  <Button className="w-full" onClick={handleSpinAgain} disabled={opening}>
+                    {opening ? (
+                      <Spinner className="h-4 w-4" />
+                    ) : freeCaches > 0 ? (
+                      `Spin Again (${freeCaches} free)`
+                    ) : (
+                      <>
+                        Spin Again · {STYLE_SHARDS_PER_NEXUS_CACHE}{" "}
+                        <Gem className="ml-1.5 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                )}
+                <Button variant="outline" className="w-full" onClick={() => onOpenChange(false)}>
+                  Awesome!
+                </Button>
+              </div>
             </div>
           )}
         </div>

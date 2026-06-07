@@ -5,6 +5,26 @@ import { QuizQuestion } from "./quiz-utils"
 import { calculatePerformanceScore, filterObjectiveQuestions } from "./challenge-scoring"
 import { fetchQuizQuestionsByIds, saveQuizQuestions } from "./quiz-utils"
 
+export interface ChallengeSettings {
+  mode: "async" | "live"
+  timer: boolean
+  bpm: boolean
+  immediateFeedback: boolean
+  combo: boolean
+  hint: boolean
+  sabotage: boolean
+}
+
+export const DEFAULT_CHALLENGE_SETTINGS: ChallengeSettings = {
+  mode: "async",
+  timer: true,
+  bpm: false,
+  immediateFeedback: true,
+  combo: true,
+  hint: false,
+  sabotage: false,
+}
+
 export interface Challenge {
   id?: string
   challengerId: string
@@ -35,6 +55,17 @@ export interface Challenge {
   completedAt?: Timestamp | null
   expiresAt?: Timestamp | null // 2 days from creation for response
   completionDeadline?: Timestamp | null // 1 week from acceptance for completion
+  settings?: ChallengeSettings
+  challengerReady?: boolean
+  challengedReady?: boolean
+  sabotageBy?: string | null
+  /** Live duel: current question index per player (0-based) */
+  challengerLiveIndex?: number | null
+  challengedLiveIndex?: number | null
+  /** When both players are ready, countdown then simultaneous start */
+  liveStartAt?: Timestamp | null
+  /** Opponent screen blur until this time */
+  sabotageUntil?: Timestamp | null
 }
 
 /**
@@ -120,7 +151,8 @@ export async function createChallenge(
   quizType: "module" | "course",
   moduleIndex: number | null,
   betAmount: number = 0,
-  expirationHours: number = 48 // Default 2 days
+  expirationHours: number = 48, // Default 2 days
+  settings: ChallengeSettings = DEFAULT_CHALLENGE_SETTINGS
 ): Promise<string> {
   try {
     const challengeRef = doc(collection(db, "challenges"))
@@ -156,9 +188,7 @@ export async function createChallenge(
       generatedQuestions = await generateCourseQuizQuestions(courseData, courseId, questionTarget)
     }
 
-    if (betAmount > 0) {
-      generatedQuestions = filterObjectiveQuestions(generatedQuestions, questionTarget)
-    }
+    generatedQuestions = filterObjectiveQuestions(generatedQuestions, questionTarget)
 
     // Save questions to Firestore so they are permanent and accessible by both players
     await saveQuizQuestions(generatedQuestions)
@@ -188,6 +218,18 @@ export async function createChallenge(
       expirationHours,
       hasChallengerPlayed: false,
       hasChallengedAccepted: false,
+      settings,
+      ...(settings.mode === "live"
+        ? {
+            challengerReady: false,
+            challengedReady: false,
+            challengerLiveIndex: null,
+            challengedLiveIndex: null,
+            liveStartAt: null,
+            sabotageUntil: null,
+            sabotageBy: null,
+          }
+        : {}),
       createdAt: serverTimestamp(),
       expiresAt: Timestamp.fromDate(expiresAt),
       completedAt: null,
@@ -759,9 +801,7 @@ export async function getChallengeQuestions(challenge: Challenge): Promise<QuizQ
     generated = await generateCourseQuizQuestions(courseData, courseId, questionTarget)
   }
 
-  if ((betAmount || 0) > 0) {
-    generated = filterObjectiveQuestions(generated, questionTarget)
-  }
+  generated = filterObjectiveQuestions(generated, questionTarget)
 
   if (generated.length === 0) {
     throw new Error("Failed to generate challenge questions")
@@ -775,6 +815,74 @@ export async function getChallengeQuestions(challenge: Challenge): Promise<QuizQ
   }
 
   return generated
+}
+
+/** Mark current player ready in a live duel (challenged must accept first). */
+export async function markChallengeReady(challengeId: string, userId: string): Promise<void> {
+  const ref = doc(db, "challenges", challengeId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error("Challenge not found")
+
+  const data = snap.data() as Challenge
+  if (data.settings?.mode !== "live") {
+    throw new Error("Ready room is only for live challenges")
+  }
+
+  const isChallenger = userId === data.challengerId
+  const isChallenged = userId === data.challengedId
+  if (!isChallenger && !isChallenged) throw new Error("Not part of this challenge")
+  if (isChallenged && data.status === "pending") {
+    throw new Error("Accept the challenge before marking ready")
+  }
+
+  await updateDoc(ref, isChallenger ? { challengerReady: true } : { challengedReady: true })
+}
+
+/** Schedule synchronized start when both players are ready (live only). */
+export async function scheduleLiveMatchStart(challengeId: string): Promise<void> {
+  const ref = doc(db, "challenges", challengeId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) return
+
+  const data = snap.data() as Challenge
+  if (data.settings?.mode !== "live") return
+  if (data.status !== "accepted") return
+  if (!data.challengerReady || !data.challengedReady) return
+  if (data.liveStartAt) return
+
+  const startAt = Timestamp.fromDate(new Date(Date.now() + 3000))
+  await updateDoc(ref, { liveStartAt: startAt })
+}
+
+/** Update live question progress for opponent view */
+export async function updateChallengeLiveProgress(
+  challengeId: string,
+  userId: string,
+  questionIndex: number
+): Promise<void> {
+  const ref = doc(db, "challenges", challengeId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) return
+
+  const data = snap.data() as Challenge
+  if (data.settings?.mode !== "live") return
+
+  const isChallenger = userId === data.challengerId
+  await updateDoc(ref, isChallenger ? { challengerLiveIndex: questionIndex } : { challengedLiveIndex: questionIndex })
+}
+
+/** Brief screen-blur sabotage on opponent (live + sabotage enabled) */
+export async function sendChallengeSabotage(challengeId: string, fromUserId: string): Promise<void> {
+  const ref = doc(db, "challenges", challengeId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error("Challenge not found")
+
+  const data = snap.data() as Challenge
+  if (data.settings?.mode !== "live") throw new Error("Sabotage only works in live duels")
+  if (!data.settings?.sabotage) throw new Error("Sabotage is disabled for this challenge")
+
+  const until = Timestamp.fromDate(new Date(Date.now() + 5000))
+  await updateDoc(ref, { sabotageUntil: until, sabotageBy: fromUserId })
 }
 
 /**

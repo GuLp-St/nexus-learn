@@ -84,6 +84,7 @@ export default function CreateCourseUnified() {
     useState<DifficultyOption | null>(null)
 
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
+  const [isDragOver, setIsDragOver] = useState(false)
   const [uploadDifficulty, setUploadDifficulty] = useState<CourseDifficulty>("intermediate")
   const [toneInstruction, setToneInstruction] = useState("")
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
@@ -188,7 +189,11 @@ export default function CreateCourseUnified() {
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
+    addFiles(Array.from(e.target.files || []))
+    e.target.value = ""
+  }
+
+  const addFiles = (files: File[]) => {
     const valid = files.filter((f) => {
       const n = f.name.toLowerCase()
       return n.endsWith(".pdf") || n.endsWith(".docx") || n.endsWith(".pptx")
@@ -197,8 +202,36 @@ export default function CreateCourseUnified() {
       setError("Only PDF, DOCX, and PPTX files are supported")
       return
     }
-    setUploadedFiles((prev) => [...prev, ...valid])
+    const oversized = valid.filter((f) => f.size > 10 * 1024 * 1024)
+    if (oversized.length > 0) {
+      setError(`${oversized[0].name} exceeds 10MB limit`)
+      return
+    }
+    setUploadedFiles((prev) => {
+      const combined = [...prev, ...valid]
+      return combined.slice(0, 10)
+    })
     setError("")
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (hasCreditForMode("upload")) setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+    if (!hasCreditForMode("upload")) return
+    addFiles(Array.from(e.dataTransfer.files))
   }
 
   const applyJobSnapshot = useCallback(
@@ -638,16 +671,27 @@ export default function CreateCourseUnified() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center">
+                        <div
+                          className={cn(
+                            "border-2 border-dashed rounded-lg p-8 text-center transition-colors",
+                            isDragOver
+                              ? "border-primary bg-primary/5"
+                              : "border-muted-foreground/25",
+                            !hasCreditForMode("upload") && "opacity-50 cursor-not-allowed"
+                          )}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDrop}
+                        >
                           <Upload className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
                           <label
                             htmlFor="unified-file-upload"
                             className={cn(
                               "cursor-pointer text-primary font-medium",
-                              !hasCreditForMode("upload") && "pointer-events-none opacity-50"
+                              !hasCreditForMode("upload") && "pointer-events-none"
                             )}
                           >
-                            Click to upload
+                            {isDragOver ? "Drop files here" : "Drag & drop or click to upload"}
                           </label>
                           <input
                             id="unified-file-upload"

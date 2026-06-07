@@ -137,6 +137,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     await progressRef.update(updates)
 
+    try {
+      const { updateUserTrackingMetrics } = await import("@/lib/tracking-utils")
+      await updateUserTrackingMetrics(userId)
+    } catch (err) {
+      console.warn("Failed to refresh tracking metrics after admin progress update:", err)
+    }
+
     return NextResponse.json({
       progress,
       completedLessons,

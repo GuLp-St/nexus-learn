@@ -273,17 +273,18 @@ export async function fetchQuizQuestionsByIds(
   try {
     const fetched = await Promise.all(
       questionIds.map(async (questionId) => {
-        const primaryId = getQuizQuestionDocId(courseId, moduleIndex, lessonIndex, questionId)
-        const primarySnap = await getDoc(doc(db, "quizQuestions", primaryId))
-        if (primarySnap.exists()) {
-          return primarySnap.data() as QuizQuestion
-        }
+        const candidates = [
+          getQuizQuestionDocId(courseId, moduleIndex, lessonIndex, questionId),
+          moduleIndex !== null
+            ? getQuizQuestionDocId(courseId, moduleIndex, null, questionId)
+            : null,
+          getQuizQuestionDocId(courseId, null, null, questionId),
+        ].filter((id, idx, arr) => id && arr.indexOf(id) === idx) as string[]
 
-        const courseLevelId = getQuizQuestionDocId(courseId, null, null, questionId)
-        if (courseLevelId !== primaryId) {
-          const courseSnap = await getDoc(doc(db, "quizQuestions", courseLevelId))
-          if (courseSnap.exists()) {
-            return courseSnap.data() as QuizQuestion
+        for (const docId of candidates) {
+          const snap = await getDoc(doc(db, "quizQuestions", docId))
+          if (snap.exists()) {
+            return snap.data() as QuizQuestion
           }
         }
 

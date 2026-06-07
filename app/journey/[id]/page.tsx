@@ -1,19 +1,20 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, BookOpen, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LoadingScreen } from "@/components/ui/LoadingScreen"
 import { Spinner } from "@/components/ui/spinner"
 import Link from "next/link"
 import SidebarNav from "@/components/sidebar-nav"
-import { useAuth } from "@/components/auth-provider"
+import { useRequireAuth } from "@/hooks/use-require-auth"
 import { useChatContext } from "@/context/ChatContext"
 import { getCourseWithProgress, CourseWithProgress } from "@/lib/course-utils"
 import { useActivityTracking } from "@/hooks/use-activity-tracking"
 import { CourseRoadmap } from "@/components/course-roadmap"
 import { AdminJourneyTools } from "@/components/admin/admin-journey-tools"
+import { ChallengeSelectionModal } from "@/components/challenge-selection-modal"
 
 
 export default function CourseContentPage() {
@@ -21,9 +22,15 @@ export default function CourseContentPage() {
   const [loading, setLoading] = useState(true)
   const params = useParams()
   const router = useRouter()
-  const { user } = useAuth()
+  const searchParams = useSearchParams()
+  const { user, loading: authLoading } = useRequireAuth()
   const { setPageContext } = useChatContext()
   const courseId = params.id as string
+  const challengeFriendId = searchParams.get("friendId")
+  const challengeFriendName = searchParams.get("friendName")
+    ? decodeURIComponent(searchParams.get("friendName")!)
+    : "friend"
+  const [challengeOpen, setChallengeOpen] = useState(!!challengeFriendId)
 
   const refreshCourse = async () => {
     if (!user) return
@@ -40,10 +47,7 @@ export default function CourseContentPage() {
   })
 
   useEffect(() => {
-    if (!user) {
-      router.push("/auth")
-      return
-    }
+    if (authLoading || !user) return
 
     const fetchCourse = async () => {
       try {
@@ -67,11 +71,11 @@ export default function CourseContentPage() {
             processCourseData(courseWithProgress)
           }
         } else {
-          router.push("/")
+          router.push("/journey")
         }
       } catch (error) {
         console.error("Error fetching course:", error)
-        router.push("/")
+        router.push("/journey")
       } finally {
         setLoading(false)
       }
@@ -85,7 +89,7 @@ export default function CourseContentPage() {
     if (user) {
       fetchCourse()
     }
-  }, [params.id, router, user])
+  }, [params.id, router, user, authLoading])
 
   // Save and restore scroll position
   useEffect(() => {
@@ -186,7 +190,7 @@ export default function CourseContentPage() {
     }
   }, [course, loading, user, setPageContext])
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Spinner className="h-8 w-8" />
@@ -265,6 +269,20 @@ export default function CourseContentPage() {
           </article>
         </div>
       </main>
+
+      {challengeFriendId && user && (
+        <ChallengeSelectionModal
+          open={challengeOpen}
+          onOpenChange={(open) => {
+            setChallengeOpen(open)
+            if (!open) router.replace(`/journey/${courseId}`)
+          }}
+          friendId={challengeFriendId}
+          friendNickname={challengeFriendName}
+          presetCourseId={courseId}
+          returnToChat
+        />
+      )}
     </div>
   )
 }

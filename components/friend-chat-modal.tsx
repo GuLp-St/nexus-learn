@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -8,7 +8,7 @@ import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
 import { NameWithColor } from "@/components/name-with-color"
 import { sendMessage, subscribeToChatMessages, markMessagesAsRead, setTypingStatus, subscribeToTypingStatus, ChatMessage } from "@/lib/chat-utils"
 import { useAuth } from "@/components/auth-provider"
-import { format } from "date-fns"
+import { format, isToday, isYesterday, isSameDay } from "date-fns"
 import { Zap, Trophy, Play, Share2, BookOpen, Plus, Clock, X, Check, Trash2, AlertCircle, Send, CheckCheck } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { ChallengeSelectionModal } from "./challenge-selection-modal"
@@ -27,6 +27,9 @@ interface FriendChatModalProps {
   friendId: string
   friendNickname: string
   friendAvatarUrl?: string
+  /** Open challenge settings after picking a course on journey */
+  initialChallengeCourseId?: string | null
+  onChallengeCourseConsumed?: () => void
 }
 
 export function FriendChatModal({
@@ -35,7 +38,10 @@ export function FriendChatModal({
   friendId,
   friendNickname,
   friendAvatarUrl,
+  initialChallengeCourseId,
+  onChallengeCourseConsumed,
 }: FriendChatModalProps) {
+  const router = useRouter()
   const { user } = useAuth()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [newMessage, setNewMessage] = useState("")
@@ -43,16 +49,61 @@ export function FriendChatModal({
   const [isFriendTyping, setIsFriendTyping] = useState(false)
   const [isChallengeModalOpen, setIsChallengeModalOpen] = useState(false)
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+  const [activeChallengeCourseId, setActiveChallengeCourseId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (open && initialChallengeCourseId) {
+      setActiveChallengeCourseId(initialChallengeCourseId)
+      setIsChallengeModalOpen(true)
+      onChallengeCourseConsumed?.()
+    }
+  }, [open, initialChallengeCourseId, onChallengeCourseConsumed])
+
+  useEffect(() => {
+    if (!open) {
+      setActiveChallengeCourseId(null)
+      setIsChallengeModalOpen(false)
+    }
+  }, [open])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Scroll to bottom when messages or typing status changes
+  const shouldStickToBottomRef = useRef(true)
+
+  const scrollToBottom = useCallback(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    container.scrollTop = container.scrollHeight
+  }, [])
+
+  // Stick to bottom when chat opens or messages update
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
+    if (!open) return
+    shouldStickToBottomRef.current = true
+    scrollToBottom()
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(scrollToBottom)
+    })
+    const timers = [50, 150, 400, 800, 1200].map((ms) => setTimeout(scrollToBottom, ms))
+    return () => {
+      cancelAnimationFrame(raf)
+      timers.forEach(clearTimeout)
     }
-  }, [messages, isFriendTyping])
+  }, [open, messages, isFriendTyping, scrollToBottom])
+
+  // Re-scroll when message area height changes (async cards, images, etc.)
+  useEffect(() => {
+    if (!open) return
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const ro = new ResizeObserver(() => {
+      if (shouldStickToBottomRef.current) scrollToBottom()
+    })
+    ro.observe(container)
+    return () => ro.disconnect()
+  }, [open, scrollToBottom])
 
   // Subscribe to chat messages when modal opens
   useEffect(() => {
@@ -118,6 +169,7 @@ export function FriendChatModal({
       await setTypingStatus(user.uid, friendId, false)
       await sendMessage(user.uid, friendId, newMessage.trim())
       setNewMessage("")
+      scrollToBottom()
     } catch (error) {
       console.error("Error sending message:", error)
     } finally {
@@ -143,7 +195,7 @@ export function FriendChatModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[600px] max-h-[90vh] flex-col p-0 sm:max-w-[500px]">
+      <DialogContent className="flex h-[600px] max-h-[90vh] min-h-0 flex-col p-0 sm:max-w-[500px]">
         <DialogHeader className="border-b px-6 py-4">
           <DialogDescription className="sr-only">
             Chat with {friendNickname}. Send messages, quiz challenges, and shared courses.
@@ -173,7 +225,12 @@ export function FriendChatModal({
                 variant="outline"
                 size="sm"
                 className="gap-2 text-xs"
-                onClick={() => setIsShareModalOpen(true)}
+                onClick={() => {
+                  onOpenChange(false)
+                  router.push(
+                    `/journey?action=share&friendId=${encodeURIComponent(friendId)}&friendName=${encodeURIComponent(friendNickname)}`
+                  )
+                }}
               >
                 <Share2 className="h-3 w-3" />
                 Share
@@ -182,7 +239,12 @@ export function FriendChatModal({
                 variant="outline"
                 size="sm"
                 className="gap-2 text-xs"
-                onClick={() => setIsChallengeModalOpen(true)}
+                onClick={() => {
+                  onOpenChange(false)
+                  router.push(
+                    `/journey?action=challenge&friendId=${encodeURIComponent(friendId)}&friendName=${encodeURIComponent(friendNickname)}`
+                  )
+                }}
               >
                 <Zap className="h-3 w-3" />
                 Challenge
@@ -194,20 +256,39 @@ export function FriendChatModal({
         {/* Messages Container */}
         <div
           ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto p-4 space-y-4 bg-accent/5"
+          className="flex-1 min-h-0 overflow-y-auto p-4 pb-2 space-y-4 bg-accent/5 scrollbar-thin scrollbar-thumb-muted-foreground/30 scrollbar-track-transparent"
         >
           {messages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-muted-foreground">
               <p>No messages yet. Start the conversation!</p>
             </div>
           ) : (
-            messages.map((message) => {
+            messages.map((message, msgIndex) => {
               const isOwnMessage = message.senderId === user?.uid
               const messageDate = message.createdAt?.toDate() || new Date()
+              const prevDate = msgIndex > 0
+                ? messages[msgIndex - 1].createdAt?.toDate()
+                : null
+              const showDateSep =
+                !prevDate || !isSameDay(messageDate, prevDate)
+              const dateLabel = isToday(messageDate)
+                ? "Today"
+                : isYesterday(messageDate)
+                  ? "Yesterday"
+                  : format(messageDate, "MMMM d, yyyy")
 
               return (
+                <div key={message.id}>
+                  {showDateSep && (
+                    <div className="flex items-center gap-3 py-2">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                        {dateLabel}
+                      </span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                  )}
                 <div
-                  key={message.id}
                   className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
                 >
                   <div
@@ -253,10 +334,11 @@ export function FriendChatModal({
                     </div>
                   </div>
                 </div>
+                </div>
               )
             })
           )}
-          <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} className="h-px shrink-0" aria-hidden />
         </div>
 
         {/* Message Input */}
@@ -281,13 +363,20 @@ export function FriendChatModal({
           </div>
         </div>
 
-        <ChallengeSelectionModal
-          open={isChallengeModalOpen}
-          onOpenChange={setIsChallengeModalOpen}
-          friendId={friendId}
-          friendNickname={friendNickname}
-          inChat={true}
-        />
+        {activeChallengeCourseId && (
+          <ChallengeSelectionModal
+            open={isChallengeModalOpen}
+            onOpenChange={(next) => {
+              setIsChallengeModalOpen(next)
+              if (!next) setActiveChallengeCourseId(null)
+            }}
+            friendId={friendId}
+            friendNickname={friendNickname}
+            inChat
+            returnToChat
+            presetCourseId={activeChallengeCourseId}
+          />
+        )}
 
         <CourseShareModal
           open={isShareModalOpen}
@@ -447,6 +536,9 @@ function ChallengeMessageCard({
     !!challenge.isDraw || challenge.winnerId === null || perfTied
   const youWon = !isDrawResult && challenge.winnerId === user?.uid
   const youLost = isCompleted && !isDrawResult && !youWon
+  const isLiveChallenge = challenge.settings?.mode === "live"
+  const myLiveIndex = isChallenger ? challenge.challengerLiveIndex : challenge.challengedLiveIndex
+  const oppLiveIndex = isChallenger ? challenge.challengedLiveIndex : challenge.challengerLiveIndex
 
   const formatQuizTime = (sec: number | null | undefined) => {
     if (sec == null) return "—"
@@ -472,7 +564,9 @@ function ChallengeMessageCard({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Zap className={`h-4 w-4 ${isOwnMessage ? "text-primary" : "text-orange-500"}`} />
-            <span className="font-bold text-xs uppercase tracking-wider">Quiz Challenge</span>
+            <span className="font-bold text-xs uppercase tracking-wider">
+              {isLiveChallenge ? "Live Duel" : "Quiz Challenge"}
+            </span>
           </div>
           {timeLeft && !isCompleted && !isExpired && !isRejected && (
             <div className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
@@ -514,7 +608,11 @@ function ChallengeMessageCard({
                     <Link href={`/challenges/${challengeId}/quiz`} className="flex-1">
                       <Button size="sm" className="w-full text-xs gap-2" disabled={challengerPlayed}>
                         <Play className="h-3 w-3" />
-                        {challengerPlayed ? "Score Locked" : "Take Quiz"}
+                        {challengerPlayed
+                          ? "Score Locked"
+                          : isLiveChallenge
+                            ? "Join Live Lobby"
+                            : "Take Quiz"}
                       </Button>
                     </Link>
                     <Button
@@ -552,6 +650,12 @@ function ChallengeMessageCard({
             <div className="space-y-2">
               {/* Opponent Progress Info */}
               <div className="text-[10px] text-muted-foreground bg-muted/30 p-2 rounded space-y-1">
+                {isLiveChallenge && (myLiveIndex != null || oppLiveIndex != null) && (
+                  <p className="flex items-center gap-1.5">
+                    <Play className="h-3 w-3 text-primary" />
+                    Live: you Q{(myLiveIndex ?? 0) + 1} · {friendNickname} Q{(oppLiveIndex ?? 0) + 1}
+                  </p>
+                )}
                 {isChallenger ? (
                   <p className="flex items-center gap-1.5">
                     {challengedPlayed ? <CheckCheck className="h-3 w-3 text-green-500" /> : <Clock className="h-3 w-3" />}
@@ -571,7 +675,7 @@ function ChallengeMessageCard({
                   <Link href={`/challenges/${challengeId}/quiz`} className="flex-1">
                     <Button size="sm" className="w-full text-xs gap-2">
                       <Play className="h-3 w-3" />
-                      Take Quiz
+                      {isLiveChallenge ? "Join Live Lobby" : "Take Quiz"}
                     </Button>
                   </Link>
                   {isChallenged && (

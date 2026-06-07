@@ -74,6 +74,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
           typeof questData?.refreshTokens === "number" ? questData.refreshTokens : null,
         styleShards: typeof data.styleShards === "number" ? data.styleShards : 0,
         freeNexusCaches: typeof data.freeNexusCaches === "number" ? data.freeNexusCaches : 0,
+        challengeWins: typeof data.challengeWins === "number" ? data.challengeWins : 0,
+        challengeWinStreak: typeof data.challengeWinStreak === "number" ? data.challengeWinStreak : 0,
       },
       courses,
     })
@@ -111,6 +113,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
     if (typeof body.freeNexusCaches === "number") {
       updates.freeNexusCaches = Math.max(0, Math.floor(body.freeNexusCaches))
+    }
+    if (typeof body.challengeWins === "number") {
+      updates.challengeWins = Math.max(0, Math.floor(body.challengeWins))
+    }
+    if (typeof body.challengeWinStreak === "number") {
+      updates.challengeWinStreak = Math.max(0, Math.floor(body.challengeWinStreak))
     }
     if (typeof body.questRefreshTokens === "number") {
       const tokens = Math.max(0, Math.min(3, Math.floor(body.questRefreshTokens)))

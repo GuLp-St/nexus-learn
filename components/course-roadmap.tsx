@@ -337,10 +337,12 @@ function ModuleLevelCard({
     setSelectedLesson({ index: lessonIndex, lesson })
   }
   
-  const handleStartLesson = (reset: boolean = false) => {
+  const handleStartLesson = (reset: boolean = false, viewOnly: boolean = false) => {
     if (!selectedLesson) return
     const url = `/journey/${course.id}/modules/${moduleIndex}/lessons/${selectedLesson.index}`
-    if (reset) {
+    if (viewOnly) {
+      router.push(`${url}?view=true`)
+    } else if (reset) {
       router.push(`${url}?reset=true`)
     } else {
       router.push(url)
@@ -1007,7 +1009,7 @@ function ModuleLevelCard({
           <div className="bg-background/60 backdrop-blur-sm rounded-lg p-6 border-2 border-muted">
             <Lock className="h-16 w-16 text-muted-foreground mb-4 mx-auto" />
             <p className="text-lg font-semibold text-foreground text-center">
-              Pass previous module (&gt;50%) to unlock
+              Pass the previous module quiz with at least 50% score to unlock
             </p>
           </div>
         </div>
@@ -1042,7 +1044,7 @@ function ModuleLevelCard({
               <>
                 <Button
                   variant="outline"
-                  onClick={() => handleStartLesson(false)}
+                  onClick={() => handleStartLesson(false, true)}
                   className="w-full sm:w-auto"
                 >
                   <Eye className="h-4 w-4 mr-2" />

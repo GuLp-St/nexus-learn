@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { BookOpen, Play, Trash2, Star, Target, Plus } from "lucide-react"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { BookOpen, Play, Trash2, Star, Target, Plus, Sparkles, Library } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -16,10 +16,30 @@ import { getUserCourses, CourseWithProgress } from "@/lib/course-utils"
 import { getUserCourseLimits, type CourseLimitInfo } from "@/lib/course-limit-utils"
 import { removeCourseFromLibrary } from "@/lib/library-utils"
 import { CompletedCoursesModal } from "@/components/completed-courses-modal"
+import { invalidateAISuggestionCache } from "@/components/ai-suggested-course-card"
 import { checkPublishRequirements, PublishRequirements } from "@/lib/publish-utils"
 import { getCompletedCourses } from "@/lib/completion-utils"
 import { RatingModal } from "@/components/rating-modal"
 import { Upload, AlertCircle, CheckCircle2, XCircle, Trophy as TrophyIcon, Image as ImageIcon } from "lucide-react"
+import { JourneyBoard } from "@/components/journey-board"
+import {
+  getJourneySettings,
+  createJourneyFolder,
+  renameJourneyFolder,
+  deleteJourneyFolder,
+  moveCourseToFolder,
+  setJourneyViewType,
+  setJourneySortBy,
+  setActiveFolder,
+  type JourneySettings,
+} from "@/lib/journey-settings-utils"
+import { computeJourneyStatsFromCourses } from "@/lib/journey-stats-utils"
+import { canSelectCourseForChallenge } from "@/lib/quiz-access-utils"
+import type { JourneyViewType } from "@/lib/journey-settings-utils"
+import { JOURNEY_CARD_ACTION_BTN } from "@/lib/journey-card-layout"
+import { sendMessage } from "@/lib/chat-utils"
+import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -28,6 +48,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+
+const DEFAULT_JOURNEY_SETTINGS: JourneySettings = {
+  folders: [],
+  courseFolderMap: {},
+  viewType: "icon-lg",
+  sortBy: "lastAccessed",
+  activeFolderId: null,
+}
 
 const colorGradients = [
   "from-blue-500 to-cyan-500",
@@ -40,7 +68,21 @@ const colorGradients = [
   "from-yellow-500 to-orange-500",
 ]
 
-const CourseCard = ({ course, index, onRemove, onRate, userId }: { course: CourseWithProgress; index: number; onRemove: () => void; onRate: () => void; userId: string }) => {
+const CourseCard = ({
+  course,
+  index,
+  onRemove,
+  onRate,
+  userId,
+  viewType = "icon-lg",
+}: {
+  course: CourseWithProgress
+  index: number
+  onRemove: () => void
+  onRate: () => void
+  userId: string
+  viewType?: JourneyViewType
+}) => {
   const router = useRouter()
   const initials = course.title
     .split(" ")
@@ -107,197 +149,229 @@ const CourseCard = ({ course, index, onRemove, onRate, userId }: { course: Cours
     }
   }, [isPublished, isOwnCourse, userId, course.id])
 
+  const sourceBadge = isOwnCourse ? (
+    <Badge className="text-[10px] gap-1 shrink-0 bg-black/70 text-white border-0 shadow-md backdrop-blur-sm">
+      <Sparkles className="h-3 w-3" />
+      Generated
+    </Badge>
+  ) : (
+    <Badge className="text-[10px] gap-1 shrink-0 bg-black/70 text-white border-0 shadow-md backdrop-blur-sm">
+      <Library className="h-3 w-3" />
+      Added
+    </Badge>
+  )
+
+  const showPublish = isOwnCourse && !isPublished
+
+  const actionBtnClass = cn(
+    "inline-flex items-center justify-center gap-1 rounded-md border bg-background font-medium transition-colors",
+    JOURNEY_CARD_ACTION_BTN
+  )
+
+  if (viewType === "list") {
+    return (
+      <div
+        className="group flex h-full items-center gap-3 rounded-lg border p-3 hover:bg-accent/30 transition-colors cursor-pointer"
+        onClick={() => router.push(`/journey/${course.id}`)}
+      >
+        <div
+          className={cn(
+            "shrink-0 h-10 w-10 rounded overflow-hidden bg-muted flex items-center justify-center text-xs font-bold text-white bg-gradient-to-br",
+            !course.imageUrl && color
+          )}
+        >
+          {course.imageUrl ? (
+            <img src={course.imageUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initials
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-semibold text-sm truncate">{course.title}</h3>
+            {sourceBadge}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {course.userProgress?.progress || 0}% · {completedModulesCount}/{course.modules.length} modules
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {showPublish && (
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => router.push(`/journey/${course.id}/publish`)}>
+              <Upload className="h-3 w-3" />
+            </Button>
+          )}
+          {course.userProgress?.lastAccessedModule !== undefined && (
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() =>
+                router.push(
+                  `/journey/${course.id}/modules/${course.userProgress?.lastAccessedModule}/lessons/${course.userProgress?.lastAccessedLesson}`
+                )
+              }
+            >
+              <Play className="h-3 w-3" />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={onRemove}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const footerCompact = viewType === "icon-sm" || viewType === "icon-md"
+
   return (
-    <Card className="group overflow-hidden transition-all hover:shadow-lg hover:border-primary/50 relative flex flex-col">
-      {/* Course Image / Header */}
-      <div 
-        className="relative aspect-video w-full cursor-pointer overflow-hidden bg-muted"
+    <Card
+      className={cn(
+        "group h-full overflow-hidden transition-all hover:shadow-lg hover:border-primary/50 relative grid grid-rows-[minmax(0,1fr)_auto] py-0 gap-0",
+        viewType === "icon-sm" && "text-sm"
+      )}
+    >
+      <div
+        className="relative min-h-0 overflow-hidden bg-muted cursor-pointer"
         onClick={() => router.push(`/journey/${course.id}`)}
       >
         {course.imageUrl ? (
-          <div 
-            className="h-full w-full transition-transform duration-500 group-hover:scale-105"
-            style={{
-              transform: `scale(${course.imageConfig?.scale || 1})`
+          <img
+            src={course.imageUrl}
+            alt={course.title}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src =
+                "https://images.unsplash.com/photo-1501504905252-473c47e087f8?auto=format&fit=crop&q=80&w=800"
             }}
-          >
-            <img 
-              src={course.imageUrl} 
-              alt={course.title} 
-              className="h-full w-full"
-              style={{
-                objectFit: course.imageConfig?.fit || "cover",
-                transform: `scale(${course.imageConfig?.scale || 1}) translate(${course.imageConfig?.position ? course.imageConfig.position.x - 50 : 0}%, ${course.imageConfig?.position ? course.imageConfig.position.y - 50 : 0}%)`
-              }}
-              onError={(e) => {
-                // Fallback if image fails to load
-                (e.target as any).src = `https://images.unsplash.com/photo-1501504905252-473c47e087f8?auto=format&fit=crop&q=80&w=800`
-              }}
-            />
-          </div>
+          />
         ) : (
           <div
-            className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${color} text-4xl font-bold text-white shadow-sm`}
+            className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br ${color} font-bold text-white shadow-sm ${
+              viewType === "icon-sm" ? "text-xl" : viewType === "icon-md" ? "text-2xl" : "text-3xl"
+            }`}
           >
             {initials}
           </div>
         )}
-        
-        {/* Overlay for actions */}
+
         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-        
-        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0 duration-200">
+
+        <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
           <Button
             variant="secondary"
             size="icon"
-            className="h-8 w-8 bg-background/90 backdrop-blur-sm text-muted-foreground hover:text-destructive shadow-lg"
+            className="h-7 w-7 bg-background/90 backdrop-blur-sm text-muted-foreground hover:text-destructive shadow-lg"
             onClick={(e) => {
               e.stopPropagation()
               onRemove()
             }}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>
 
-        {isNew && (
-          <Badge className="absolute top-2 left-2 bg-primary text-primary-foreground shadow-lg">
-            New
-          </Badge>
-        )}
+        <div className="absolute top-1.5 left-1.5 flex gap-1 flex-wrap max-w-[75%] z-10">
+          {isNew && (
+            <Badge className="bg-primary text-primary-foreground shadow-lg text-[10px]">New</Badge>
+          )}
+          {sourceBadge}
+        </div>
 
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/30">
-          <div 
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/20">
+          <div
             className="h-full bg-primary transition-all duration-1000 ease-out"
             style={{ width: `${course.userProgress?.progress || 0}%` }}
           />
         </div>
       </div>
 
-      <CardContent className="p-4 flex-1 flex flex-col">
-        <div className="flex-1 space-y-3">
-          <div className="space-y-1">
-            <h3 
-              className="font-bold text-lg leading-tight group-hover:text-primary transition-colors cursor-pointer line-clamp-1"
-              onClick={() => router.push(`/journey/${course.id}`)}
-            >
-              {course.title}
-            </h3>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{course.userProgress?.progress || 0}% Complete</span>
-              <span>{completedModulesCount}/{course.modules.length} Modules</span>
-            </div>
-          </div>
+      <div className={cn("border-t bg-card", footerCompact ? "px-1.5 py-1 space-y-0.5" : "px-2 py-1.5 space-y-1")}>
+        <h3
+          className={cn(
+            "font-semibold leading-tight group-hover:text-primary transition-colors cursor-pointer line-clamp-1",
+            viewType === "icon-sm" ? "text-[11px]" : viewType === "icon-md" ? "text-xs" : "text-sm"
+          )}
+          onClick={() => router.push(`/journey/${course.id}`)}
+        >
+          {course.title}
+        </h3>
+        {!footerCompact && (
+          <p className="text-[10px] text-muted-foreground truncate">
+            {course.userProgress?.progress || 0}% · {completedModulesCount}/{course.modules.length} modules
+          </p>
+        )}
 
-          <div className="flex flex-wrap gap-2">
-            {course.userProgress?.lastAccessedModule !== undefined && course.userProgress?.lastAccessedLesson !== undefined && (
-              <Button
-                variant="default"
-                size="sm"
-                className="h-8 text-xs flex-1"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  router.push(`/journey/${course.id}/modules/${course.userProgress?.lastAccessedModule}/lessons/${course.userProgress?.lastAccessedLesson}`)
-                }}
-              >
-                <Play className="h-3 w-3 mr-1 fill-current" />
-                Resume
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs flex-1"
-              onClick={() => router.push(`/journey/${course.id}`)}
-            >
-              Details
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-4 pt-4 border-t space-y-2">
-          {isOwnCourse && !isPublished && (
-            <Button
-              variant="outline"
-              size="sm"
-              className={`w-full text-xs transition-colors ${
-                expandedPublish 
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary" 
-                  : "border-primary/30 text-primary hover:bg-primary/5"
-              }`}
+        <div className="flex flex-col gap-0.5">
+          {showPublish && viewType === "icon-lg" && (
+            <button
+              type="button"
+              className={cn(
+                actionBtnClass,
+                expandedPublish && "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+              )}
               onClick={(e) => {
                 e.stopPropagation()
                 setExpandedPublish(!expandedPublish)
               }}
             >
-              <Upload className="h-3 w-3 mr-1" />
-              {expandedPublish ? "Hide Requirements" : "Publish Course"}
-            </Button>
+              <Upload className="h-3 w-3 shrink-0" />
+              {expandedPublish ? "Hide" : "Publish"}
+            </button>
           )}
 
-          {isOwnCourse && !isPublished && expandedPublish && (
-            <div className="space-y-2 rounded-lg bg-muted/50 p-3">
-              {checkingReqs ? (
-                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                  <Spinner className="h-3 w-3" />
-                  Checking...
-                </div>
-              ) : publishReqs ? (
-                <div className="space-y-2">
-                  <div className="space-y-1 text-[10px] text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      {publishReqs.courseCompleted ? (
-                        <CheckCircle2 className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <AlertCircle className="h-3 w-3 text-red-500" />
-                      )}
-                      <span>Completed (100%)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {publishReqs.quizPassed ? (
-                        <CheckCircle2 className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <AlertCircle className="h-3 w-3 text-red-500" />
-                      )}
-                      <span>Final quiz &gt;70%</span>
-                    </div>
-                  </div>
-                  {publishReqs.canPublish && (
-                    <Link href={`/journey/${course.id}/publish`} className="block w-full">
-                      <Button size="sm" className="w-full text-[10px] h-7">
-                        Go to Publish Page
-                      </Button>
-                    </Link>
-                  )}
-                </div>
-              ) : null}
-            </div>
+          {showPublish && viewType !== "icon-lg" && (
+            <Link href={`/journey/${course.id}/publish`} className="block no-underline" onClick={(e) => e.stopPropagation()}>
+              <span className={actionBtnClass}>
+                <Upload className="h-3 w-3 shrink-0" />
+                Publish
+              </span>
+            </Link>
           )}
 
-          {isPublished && !isOwnCourse && canReview && !hasRated && (
-            <div className="space-y-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full text-xs text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50"
-                onClick={() => {
-                  setShowReviewHint(true)
-                  setTimeout(() => setShowReviewHint(false), 3000)
-                  onRate()
-                }}
-              >
-                <Star className="h-3 w-3 mr-1" />
-                Rate Course
-              </Button>
-              {showReviewHint && (
-                <p className="text-[10px] text-center text-muted-foreground">
-                  Help others by rating!
-                </p>
+          {showPublish && viewType === "icon-lg" && expandedPublish && publishReqs && (
+            <div className="text-[10px] text-muted-foreground space-y-0.5">
+              <div className="flex items-center gap-1">
+                {publishReqs.courseCompleted ? <CheckCircle2 className="h-3 w-3 text-green-500" /> : <AlertCircle className="h-3 w-3 text-red-500" />}
+                100% complete
+              </div>
+              <div className="flex items-center gap-1">
+                {publishReqs.quizPassed ? <CheckCircle2 className="h-3 w-3 text-green-500" /> : <AlertCircle className="h-3 w-3 text-red-500" />}
+                Final quiz &gt;70%
+              </div>
+              {publishReqs.canPublish && (
+                <Link href={`/journey/${course.id}/publish`} className="block no-underline pt-0.5" onClick={(e) => e.stopPropagation()}>
+                  <span className={actionBtnClass}>Go to publish</span>
+                </Link>
               )}
             </div>
           )}
+
+          {isOwnCourse && isPublished && (
+            <Link href={`/journey/${course.id}/republish`} className="block no-underline" onClick={(e) => e.stopPropagation()}>
+              <span className={actionBtnClass}>
+                <Upload className="h-3 w-3 shrink-0" />
+                Push updates
+              </span>
+            </Link>
+          )}
+
+          {isPublished && !isOwnCourse && canReview && !hasRated && !footerCompact && (
+            <button
+              type="button"
+              className={cn(actionBtnClass, "text-yellow-700 hover:bg-yellow-50")}
+              onClick={(e) => {
+                e.stopPropagation()
+                onRate()
+              }}
+            >
+              <Star className="h-3 w-3 shrink-0" />
+              Rate
+            </button>
+          )}
         </div>
-      </CardContent>
+      </div>
     </Card>
   )
 }
@@ -338,8 +412,23 @@ export default function JourneyPage() {
     courseTitle: "",
   })
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, loading: authLoading } = useAuth()
   const { setPageContext } = useChatContext()
+  const [journeySettings, setJourneySettings] = useState<JourneySettings>(DEFAULT_JOURNEY_SETTINGS)
+
+  const selectionAction = searchParams.get("action") as "share" | "challenge" | null
+  const selectionFriendId = searchParams.get("friendId")
+  const selectionFriendName = searchParams.get("friendName")
+    ? decodeURIComponent(searchParams.get("friendName")!)
+    : "friend"
+
+  const boardCourses = useMemo(() => {
+    if (selectionAction === "challenge") {
+      return courses.filter(canSelectCourseForChallenge)
+    }
+    return courses
+  }, [courses, selectionAction])
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -356,14 +445,16 @@ export default function JourneyPage() {
 
     try {
       setLoading(true)
-      const [fetchedCourses, completedRecords, limits] = await Promise.all([
+      const [fetchedCourses, completedRecords, limits, settings] = await Promise.all([
         getUserCourses(user.uid),
         getCompletedCourses(user.uid),
         getUserCourseLimits(user.uid),
+        getJourneySettings(user.uid),
       ])
       
       setCourses(fetchedCourses)
       setCourseLimits(limits)
+      setJourneySettings(settings)
 
       // Fetch new tracking metrics
       const { getUserTrackingMetrics } = await import("@/lib/tracking-utils")
@@ -414,9 +505,91 @@ export default function JourneyPage() {
     }
   }, [courses, loading, user, stats, setPageContext])
 
-  // Split courses into My Courses and Added Courses
+  // Split for limits only (display is unified)
   const myCourses = courses.filter(c => c.userProgress?.isOwnCourse === true)
   const addedCourses = courses.filter(c => c.userProgress?.isOwnCourse === false)
+
+  const statsCourses = useMemo(() => {
+    if (journeySettings.activeFolderId) {
+      const folder = journeySettings.folders.find((f) => f.id === journeySettings.activeFolderId)
+      if (folder) return courses.filter((c) => folder.courseIds.includes(c.id))
+    }
+    return courses
+  }, [courses, journeySettings.activeFolderId, journeySettings.folders])
+
+  const displayStats = useMemo(
+    () => computeJourneyStatsFromCourses(statsCourses),
+    [statsCourses]
+  )
+
+  const refreshJourneySettings = useCallback(async () => {
+    if (!user) return
+    const settings = await getJourneySettings(user.uid)
+    setJourneySettings(settings)
+  }, [user])
+
+  const openChatWithFriend = (friendId: string, friendName: string) => {
+    router.push(
+      `/friends?openChat=${encodeURIComponent(friendId)}&friendName=${encodeURIComponent(friendName)}`
+    )
+  }
+
+  const handleSelectionCourse = async (course: CourseWithProgress) => {
+    if (!user || !selectionFriendId || !selectionAction) return
+    try {
+      if (selectionAction === "share") {
+        await sendMessage(user.uid, selectionFriendId, "", "course_share", course.id)
+        toast.success(`Shared "${course.title}" with ${selectionFriendName}`)
+        openChatWithFriend(selectionFriendId, selectionFriendName)
+        return
+      }
+
+      if (selectionAction === "challenge") {
+        if (!canSelectCourseForChallenge(course)) {
+          toast.error("Complete at least one module to challenge on this course")
+          return
+        }
+        router.push(
+          `/friends?openChat=${encodeURIComponent(selectionFriendId)}&friendName=${encodeURIComponent(selectionFriendName)}&challengeCourseId=${encodeURIComponent(course.id)}`
+        )
+      }
+    } catch {
+      toast.error("Failed to complete action")
+    }
+  }
+
+  const folderHandlers = user
+    ? {
+        onCreateFolder: async (name: string) => {
+          await createJourneyFolder(user.uid, name)
+          await refreshJourneySettings()
+        },
+        onRenameFolder: async (folderId: string, name: string) => {
+          await renameJourneyFolder(user.uid, folderId, name)
+          await refreshJourneySettings()
+        },
+        onDeleteFolder: async (folderId: string) => {
+          await deleteJourneyFolder(user.uid, folderId)
+          await refreshJourneySettings()
+        },
+        onMoveCourse: async (courseId: string, folderId: string | null) => {
+          await moveCourseToFolder(user.uid, courseId, folderId)
+          await refreshJourneySettings()
+        },
+        onViewTypeChange: async (viewType: JourneySettings["viewType"]) => {
+          await setJourneyViewType(user.uid, viewType)
+          setJourneySettings((s) => ({ ...s, viewType }))
+        },
+        onSortByChange: async (sortBy: JourneySettings["sortBy"]) => {
+          await setJourneySortBy(user.uid, sortBy)
+          setJourneySettings((s) => ({ ...s, sortBy }))
+        },
+        onActiveFolderChange: async (folderId: string | null) => {
+          await setActiveFolder(user.uid, folderId)
+          setJourneySettings((s) => ({ ...s, activeFolderId: folderId }))
+        },
+      }
+    : null
 
   const handleRemoveClick = async (course: CourseWithProgress) => {
     setRemoveDialog({
@@ -452,12 +625,25 @@ export default function JourneyPage() {
     }
   }
 
+  const renderCourseCard = (course: CourseWithProgress, index: number, viewType: JourneyViewType) => (
+    <CourseCard
+      key={course.id}
+      course={course}
+      index={index}
+      onRemove={() => handleRemoveClick(course)}
+      onRate={() => setRatingModal({ open: true, courseId: course.id, courseTitle: course.title })}
+      userId={user!.uid}
+      viewType={viewType}
+    />
+  )
+
   const handleRemoveConfirm = async () => {
     if (!user || !removeDialog.courseId) return
 
     try {
       setRemoving(true)
       await removeCourseFromLibrary(user.uid, removeDialog.courseId)
+      invalidateAISuggestionCache(user.uid)
       await fetchData()
       setRemoveDialog({ 
         open: false, 
@@ -498,9 +684,11 @@ export default function JourneyPage() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-3xl font-bold tracking-tight text-foreground">My Journey</h2>
-                {courseLimits && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Generated {courseLimits.generated}/{courseLimits.maxGenerated} · Added {courseLimits.added}/{courseLimits.maxAdded} · Level {courseLimits.level}
+                {selectionAction && (
+                  <p className="text-sm text-primary mt-1">
+                    {selectionAction === "challenge"
+                      ? `Select a course with an unlocked module quiz to challenge ${selectionFriendName}`
+                      : `Select a course to share with ${selectionFriendName}`}
                   </p>
                 )}
               </div>
@@ -519,8 +707,10 @@ export default function JourneyPage() {
                   <div className="flex items-center gap-2">
                     <TrophyIcon className="h-5 w-5 text-yellow-500" />
                     <div>
-                      <p className="text-2xl font-bold text-foreground">{stats.modulesMastered}</p>
-                      <p className="text-xs text-muted-foreground">Modules Mastered</p>
+                      <p className="text-2xl font-bold text-foreground">{displayStats.modulesMastered}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Modules Mastered{journeySettings.activeFolderId ? " (folder)" : ""}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -530,8 +720,10 @@ export default function JourneyPage() {
                   <div className="flex items-center gap-2">
                     <Target className="h-5 w-5 text-blue-500" />
                     <div>
-                      <p className="text-2xl font-bold text-foreground">{stats.performanceRating}%</p>
-                      <p className="text-xs text-muted-foreground">Performance</p>
+                      <p className="text-2xl font-bold text-foreground">{displayStats.performanceRating}%</p>
+                      <p className="text-xs text-muted-foreground">
+                        Performance{journeySettings.activeFolderId ? " (folder)" : ""}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -541,50 +733,31 @@ export default function JourneyPage() {
                   <div className="flex items-center gap-2">
                     <Star className="h-5 w-5 text-purple-500" />
                     <div>
-                      <p className="text-2xl font-bold text-foreground">{stats.gradeS}</p>
-                      <p className="text-xs text-muted-foreground">Grade S</p>
+                      <p className="text-2xl font-bold text-foreground">{displayStats.gradeS}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Grade S{journeySettings.activeFolderId ? " (folder)" : ""}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* My Courses */}
-            {myCourses.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-xl font-semibold text-foreground">My Courses</h3>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {myCourses.map((course, index) => (
-                    <CourseCard
-                      key={course.id}
-                      course={course}
-                      index={index}
-                      onRemove={() => handleRemoveClick(course)}
-                      onRate={() => setRatingModal({ open: true, courseId: course.id, courseTitle: course.title })}
-                      userId={user.uid}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Added Courses */}
-            {addedCourses.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-xl font-semibold text-foreground">Added Courses</h3>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {addedCourses.map((course, index) => (
-                    <CourseCard
-                      key={course.id}
-                      course={course}
-                      index={index + myCourses.length}
-                      onRemove={() => handleRemoveClick(course)}
-                      onRate={() => setRatingModal({ open: true, courseId: course.id, courseTitle: course.title })}
-                      userId={user.uid}
-                    />
-                  ))}
-                </div>
-              </div>
+            {courses.length > 0 && folderHandlers && (
+              <JourneyBoard
+                allCourses={boardCourses}
+                settings={journeySettings}
+                courseLimits={courseLimits}
+                selectionMode={selectionAction}
+                onSelectCourse={selectionAction ? handleSelectionCourse : undefined}
+                selectionEmptyMessage={
+                  selectionAction === "challenge" && boardCourses.length === 0
+                    ? "No courses with an unlocked module quiz yet. Complete a module to challenge a friend."
+                    : undefined
+                }
+                renderCourse={renderCourseCard}
+                {...folderHandlers}
+              />
             )}
 
             {/* Empty State */}
@@ -651,6 +824,7 @@ export default function JourneyPage() {
           userId={user.uid}
         />
       )}
+
     </div>
   )
 }

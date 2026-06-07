@@ -2,7 +2,7 @@ import { extractFileOnServer, extractPdfPageScreenshots } from "@/lib/extract-fi
 import { collectMaterialPagesFromAnalysis } from "@/lib/material-pages"
 import { analyzeCourseFromFiles, type FileProcessedData } from "@/lib/gemini-upload"
 import { generateCourseSkeleton } from "@/lib/gemini"
-import { uploadCourseMaterialImagesBatch } from "@/lib/upload-actions"
+import { uploadDataUrisToUploadthing } from "@/lib/uploadthing-server"
 import { DEFAULT_COURSE_IMAGE_URL } from "@/lib/image-constants"
 import {
   buildProcessedImagesForMaterial,
@@ -83,7 +83,7 @@ export async function runUploadCourseCreationPipeline(
         "uploading-images",
         `Uploading images ${i + 1}–${Math.min(i + IMAGE_BATCH_SIZE, allImages.length)} of ${allImages.length}…`
       )
-      const batchResults = await uploadCourseMaterialImagesBatch(batch.map((img) => img.base64))
+      const batchResults = await uploadDataUrisToUploadthing(batch.map((img) => img.base64))
       batchResults.forEach((uploaded, batchIdx) => {
         const originalIndex = batch[batchIdx].index
         materialImages.push({ ...uploaded, index: originalIndex })
@@ -117,7 +117,7 @@ export async function runUploadCourseCreationPipeline(
       const pageImages = await extractPdfPageScreenshots(buffer, pages)
       for (const img of pageImages) {
         try {
-          const batchResults = await uploadCourseMaterialImagesBatch([img.base64])
+          const batchResults = await uploadDataUrisToUploadthing([img.base64])
           if (batchResults[0]) {
             const pageNum = img.pageNumber ?? img.index
             materialImages.push({ ...batchResults[0], index: pageNum })

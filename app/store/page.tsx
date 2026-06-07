@@ -27,6 +27,8 @@ import { getStyleShards, getFreeNexusCaches, STYLE_SHARDS_PER_NEXUS_CACHE } from
 import { WallpaperRenderer } from "@/components/wallpapers/wallpaper-renderer"
 import { getNameColorClass, getNameColorStyle } from "@/lib/name-color-classes"
 import { useTheme } from "@/components/theme-provider"
+import { cn } from "@/lib/utils"
+import { RgbThemePreviewDemo } from "@/components/rgb-theme-preview-demo"
 
 export default function StorePage() {
   const { user, nickname, refreshProfile, loading: authLoading } = useAuth()
@@ -48,18 +50,16 @@ export default function StorePage() {
   const [freeNexusCaches, setFreeNexusCaches] = useState(0)
   const tabsListRef = useRef<HTMLDivElement>(null)
 
+  // Live RGB chroma on the page while previewing the theme
   useEffect(() => {
-    if (tabsListRef.current) {
-      const activeTab = tabsListRef.current.querySelector('[data-state="active"]')
-      if (activeTab) {
-        activeTab.scrollIntoView({
-          behavior: "smooth",
-          block: "nearest",
-          inline: "center",
-        })
-      }
+    const isRgbPreview = previewOpen && previewCosmetic?.id === "theme-rgb"
+    if (isRgbPreview) {
+      document.body.classList.add("theme-rgb-chroma")
+    } else {
+      document.body.classList.remove("theme-rgb-chroma")
     }
-  }, [selectedCategory])
+    return () => document.body.classList.remove("theme-rgb-chroma")
+  }, [previewOpen, previewCosmetic?.id])
 
   useEffect(() => {
     if (authLoading) return
@@ -308,19 +308,15 @@ export default function StorePage() {
   }
 
   const getThemePreviewStyle = (cosmetic: Cosmetic) => {
-    if (cosmetic.id === "theme-rgb") {
-      return { animation: "rgb-cycle 10s infinite linear" }
-    }
+    if (cosmetic.id === "theme-rgb") return {}
     if (cosmetic.id === "theme-noir") {
-      return { backgroundColor: "var(--foreground)" } // Contrast color
+      return { backgroundColor: "var(--foreground)" }
     }
     return { backgroundColor: cosmetic.config?.primary || "var(--primary)" }
   }
 
   const getThemeTextColor = (cosmetic: Cosmetic) => {
-    if (cosmetic.id === "theme-rgb") {
-      return { animation: "rgb-cycle-text 10s infinite linear" }
-    }
+    if (cosmetic.id === "theme-rgb") return {}
     if (cosmetic.id === "theme-noir") {
       return { color: "var(--foreground)" }
     }
@@ -577,6 +573,8 @@ export default function StorePage() {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 border-none bg-transparent">
           {previewCosmetic && (
             <div className={`relative min-h-[500px] w-full flex flex-col items-center justify-center p-8 rounded-xl overflow-hidden shadow-2xl ${
+              previewCosmetic.id === "theme-rgb" ? "theme-rgb-chroma " : ""
+            } ${
               (() => {
                 const isPreviewingWallpaper = previewCosmetic.category === "wallpaper"
                 const wallpaperId = isPreviewingWallpaper ? previewCosmetic.id : userCosmetics?.wallpaper
@@ -609,7 +607,9 @@ export default function StorePage() {
                   ) : null
                 })()
               )}
-              <div className="z-10 w-full max-w-2xl bg-background/40 backdrop-blur-md rounded-2xl p-8 border border-white/10 shadow-xl space-y-8">
+              <div className={`z-10 w-full max-w-2xl bg-background/40 backdrop-blur-md rounded-2xl p-8 border border-white/10 shadow-xl space-y-8 ${
+                previewCosmetic.id === "theme-rgb" ? "theme-rgb-chroma" : ""
+              }`}>
                 <div className="text-center space-y-2">
                   <Badge className={`${getRarityColor(previewCosmetic.rarity)} mb-2`}>
                     {previewCosmetic.rarity.toUpperCase()}
@@ -622,8 +622,11 @@ export default function StorePage() {
                   </DialogDescription>
                 </div>
 
-                {/* Profile Header Preview */}
-                <div className={`flex flex-col items-center space-y-6 text-center py-4 rounded-xl transition-colors duration-500`} style={previewCosmetic.category === "theme" ? { border: `2px solid ${previewCosmetic.id === "theme-rgb" ? "transparent" : (previewCosmetic.id === "theme-noir" ? "var(--foreground)" : (previewCosmetic.config?.primary || "var(--primary)"))}` } : {}}>
+                {/* Profile Header Preview — RGB uses dedicated hue-rotate demo */}
+                {previewCosmetic.category === "theme" && previewCosmetic.id === "theme-rgb" ? (
+                  <RgbThemePreviewDemo />
+                ) : (
+                <div className={`flex flex-col items-center space-y-6 text-center py-4 rounded-xl transition-colors duration-500`} style={previewCosmetic.category === "theme" ? { border: `2px solid ${previewCosmetic.id === "theme-noir" ? "var(--foreground)" : (previewCosmetic.config?.primary || "var(--primary)")}` } : {}}>
                   {/* Avatar with Level Progress */}
                   <div className="relative h-40 w-40 flex items-center justify-center">
                     {/* Use CSS-based glitch ring when previewing glitch frame */}
@@ -651,12 +654,25 @@ export default function StorePage() {
                           strokeWidth="6"
                           fill="none"
                           strokeDasharray={`${2 * Math.PI * 76}`}
-                          strokeDashoffset={`${2 * Math.PI * 76 * 0.25}`} // Fixed 75% for preview
-                          className={`${getFrameXPClasses(
-                            previewCosmetic.category === "frame" ? previewCosmetic.id : userCosmetics?.avatarFrame
-                          )} transition-all duration-1000`}
+                          strokeDashoffset={`${2 * Math.PI * 76 * 0.25}`}
+                          className={cn(
+                            getFrameXPClasses(
+                              previewCosmetic.category === "frame"
+                                ? previewCosmetic.id
+                                : userCosmetics?.avatarFrame
+                            ),
+                            "transition-all duration-1000",
+                            previewCosmetic.category === "theme" &&
+                              previewCosmetic.id === "theme-rgb" &&
+                              "rgb-preview-stroke"
+                          )}
                           strokeLinecap="round"
-                          style={previewCosmetic.category === "theme" ? getThemeTextColor(previewCosmetic) : {}}
+                          style={
+                            previewCosmetic.category === "theme" &&
+                            previewCosmetic.id !== "theme-rgb"
+                              ? getThemeTextColor(previewCosmetic)
+                              : {}
+                          }
                         />
                       </svg>
                     )}
@@ -672,7 +688,22 @@ export default function StorePage() {
                     {renderStructuralXPFrame(
                       previewCosmetic.category === "frame" ? previewCosmetic.id : userCosmetics?.avatarFrame
                     )}
-                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full px-4 py-1 text-sm font-bold text-primary-foreground shadow-md z-10" style={previewCosmetic.category === "theme" ? getThemePreviewStyle(previewCosmetic) : { backgroundColor: "var(--primary)" }}>
+                    <div
+                      className={cn(
+                        "absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full px-4 py-1 text-sm font-bold shadow-md z-10 text-primary-foreground",
+                        previewCosmetic.category === "theme" && previewCosmetic.id === "theme-rgb"
+                          ? "rgb-preview-accent"
+                          : ""
+                      )}
+                      style={
+                        previewCosmetic.category === "theme" &&
+                        previewCosmetic.id !== "theme-rgb"
+                          ? getThemePreviewStyle(previewCosmetic)
+                          : previewCosmetic.category !== "theme"
+                            ? { backgroundColor: "var(--primary)" }
+                            : {}
+                      }
+                    >
                       Level 10
                     </div>
                   </div>
@@ -693,6 +724,7 @@ export default function StorePage() {
                     </p>
                   </div>
                 </div>
+                )}
 
                 <div className="pt-4">
                   <Button 

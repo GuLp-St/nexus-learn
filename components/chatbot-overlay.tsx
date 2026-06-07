@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, type CSSProperties } from "react"
-import { MessageSquare, Send, X, Loader2, Sparkles, RotateCcw } from "lucide-react"
+import { MessageSquare, Send, X, Loader2, Sparkles, Plus, Trash2, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -19,11 +19,25 @@ import {
   loadChatbotPosition,
   saveChatbotPosition,
 } from "@/lib/chatbot-position"
+import {
+  listChatbotSessions,
+  getOrCreateActiveSession,
+  createChatbotSession,
+  updateChatbotSession,
+  deleteChatbotSession,
+  setActiveSessionId,
+  titleFromFirstMessage,
+  type ChatbotSession,
+} from "@/lib/chatbot-sessions"
 
 export function ChatbotOverlay() {
   const [isOpen, setIsOpen] = useState(false)
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [sessions, setSessions] = useState<ChatbotSession[]>([])
+  const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null)
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
@@ -172,7 +186,12 @@ export function ChatbotOverlay() {
 
     // Add user message to chat
     const userMessage: ChatMessage = { role: "user", content: userMessageText }
-    setMessages((prev) => [...prev, userMessage])
+    const nextMessages = [...messages, userMessage]
+    setMessages(nextMessages)
+    if (activeSessionId && messages.length === 0) {
+      updateChatbotSession(activeSessionId, { title: titleFromFirstMessage(userMessageText) })
+      setSessions(listChatbotSessions())
+    }
     setIsLoading(true)
 
     try {
@@ -216,10 +235,51 @@ export function ChatbotOverlay() {
     }
   }
 
+  // Load chat sessions when panel opens
+  useEffect(() => {
+    if (!isOpen) return
+    const all = listChatbotSessions()
+    const active = getOrCreateActiveSession()
+    setSessions(all.length ? all : [active])
+    setActiveSessionIdState(active.id)
+    setMessages(active.messages)
+  }, [isOpen])
+
+  // Persist messages to active session
+  useEffect(() => {
+    if (!activeSessionId || !isOpen) return
+    updateChatbotSession(activeSessionId, { messages })
+    setSessions(listChatbotSessions())
+  }, [messages, activeSessionId, isOpen])
+
+  const switchSession = (session: ChatbotSession) => {
+    setActiveSessionId(session.id)
+    setActiveSessionIdState(session.id)
+    setMessages(session.messages)
+  }
+
   const handleNewChat = () => {
+    const session = createChatbotSession()
+    setSessions(listChatbotSessions())
+    setActiveSessionIdState(session.id)
     setMessages([])
     setError(null)
     setMessage("")
+  }
+
+  const handleDeleteSession = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    deleteChatbotSession(id)
+    const remaining = listChatbotSessions()
+    setSessions(remaining)
+    if (remaining[0]) {
+      switchSession(remaining[0])
+    } else {
+      const fresh = createChatbotSession()
+      setSessions([fresh])
+      setActiveSessionIdState(fresh.id)
+      setMessages([])
+    }
   }
 
   // Defer viewport-based position until after mount so SSR and first client render match.
@@ -288,7 +348,7 @@ export function ChatbotOverlay() {
               aria-label="Start new chat"
               title="New chat"
             >
-              <RotateCcw className="h-4 w-4" />
+              <Plus className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"
@@ -302,8 +362,62 @@ export function ChatbotOverlay() {
           </div>
         </div>
 
+        {sessions.length > 0 && (
+          <div className="flex gap-1 px-3 py-2 border-b border-border overflow-x-auto scrollbar-thin shrink-0">
+            {sessions.map((session) => (
+              <div
+                key={session.id}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs shrink-0 cursor-pointer ${
+                  session.id === activeSessionId ? "bg-primary/10 text-primary" : "hover:bg-accent"
+                }`}
+                onClick={() => switchSession(session)}
+              >
+                {renamingSessionId === session.id ? (
+                  <input
+                    className="bg-transparent border-b border-primary w-24 text-xs outline-none"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={() => {
+                      updateChatbotSession(session.id, { title: renameValue.trim() || session.title })
+                      setRenamingSessionId(null)
+                      setSessions(listChatbotSessions())
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur()
+                    }}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <>
+                    <span className="max-w-[100px] truncate">{session.title}</span>
+                    <button
+                      type="button"
+                      className="opacity-50 hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setRenamingSessionId(session.id)
+                        setRenameValue(session.title)
+                      }}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      className="opacity-50 hover:opacity-100 text-destructive"
+                      onClick={(e) => handleDeleteSession(session.id, e)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Chat History */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scrollbar-thin">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full space-y-6">
               <div className="text-center space-y-2">

@@ -17,6 +17,7 @@ import { formatRelativeTime } from "./date-utils"
 
 export type ActivityType =
   | "course_published"
+  | "course_republished"
   | "course_completed"
   | "badge_earned"
   | "leveled_up"
@@ -32,6 +33,7 @@ export interface CommunityActivity {
   metadata: {
     courseId?: string
     courseTitle?: string
+    contentVersion?: number
     badgeId?: string
     badgeName?: string
     newLevel?: number
@@ -158,6 +160,8 @@ export function formatActivityDescription(activity: CommunityActivity): string {
   switch (activityType) {
     case "course_published":
       return `${userNickname} published "${metadata.courseTitle || "a course"}"`
+    case "course_republished":
+      return `${userNickname} updated "${metadata.courseTitle || "a course"}"`
     case "course_completed":
       return `${userNickname} completed "${metadata.courseTitle || "a course"}"`
     case "badge_earned":

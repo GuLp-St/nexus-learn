@@ -21,6 +21,7 @@ import { QuizQuestion, fetchQuizQuestions, saveQuizQuestions, selectRandomQuesti
 import { generateModuleQuizQuestions, evaluateSubjectiveAnswer, checkObjectiveAnswer } from "@/lib/quiz-generator"
 import { useActivityTracking } from "@/hooks/use-activity-tracking"
 import { useXP } from "@/components/xp-context-provider"
+import { useQuizLeaveWarning } from "@/hooks/use-quiz-leave-warning"
 
 import {
   Dialog,
@@ -52,6 +53,7 @@ export default function ModuleQuizPage() {
   const quizStartTimeRef = useRef<number | null>(null)
   const isChallengeMode = challengeFriendId !== null
   const quizStartedRef = useRef(false) // Prevent double start
+  const handleSubmitRef = useRef<() => Promise<void>>(async () => {})
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
   const { setPageContext } = useChatContext()
@@ -498,6 +500,15 @@ export default function ModuleQuizPage() {
       setSubmitting(false)
     }
   }
+
+  useEffect(() => {
+    handleSubmitRef.current = handleSubmit
+  }, [handleSubmit])
+
+  useQuizLeaveWarning({
+    active: questions.length > 0 && !showResults && !submitting && !loading,
+    onLeave: () => handleSubmitRef.current(),
+  })
 
   if (generating) {
     return <LoadingScreen />

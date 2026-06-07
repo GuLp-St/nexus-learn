@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Search, Shield, Trash2, UserCog, Zap, Coins, BookOpen, VenetianMask, RefreshCw, Gem, Sparkles } from "lucide-react"
+import { Search, Shield, Trash2, UserCog, Zap, BookOpen, VenetianMask, RefreshCw, Gem, Sparkles, Trophy } from "lucide-react"
 import {
   AdminCourseProgressControls,
   type AdminCourseProgress,
@@ -50,6 +50,8 @@ export default function AdminUsersPage() {
   const [editQuestTokens, setEditQuestTokens] = useState("3")
   const [editStyleShards, setEditStyleShards] = useState("0")
   const [editFreeCaches, setEditFreeCaches] = useState("0")
+  const [editChallengeWins, setEditChallengeWins] = useState("0")
+  const [editChallengeWinStreak, setEditChallengeWinStreak] = useState("0")
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [impersonating, setImpersonating] = useState(false)
@@ -80,6 +82,8 @@ export default function AdminUsersPage() {
           questRefreshTokens?: number | null
           styleShards?: number
           freeNexusCaches?: number
+          challengeWins?: number
+          challengeWinStreak?: number
         }
         courses: UserCourse[]
       }>(
@@ -92,6 +96,8 @@ export default function AdminUsersPage() {
       )
       setEditStyleShards(String(data.user.styleShards ?? 0))
       setEditFreeCaches(String(data.user.freeNexusCaches ?? 0))
+      setEditChallengeWins(String(data.user.challengeWins ?? 0))
+      setEditChallengeWinStreak(String(data.user.challengeWinStreak ?? 0))
       setCourses(data.courses)
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, ...data.user } : u))
@@ -103,30 +109,21 @@ export default function AdminUsersPage() {
     }
   }
 
-  const saveBalances = async () => {
+  const saveAll = async () => {
     if (!selectedId) return
-    setSaving(true)
-    try {
-      await adminJson(`/api/admin/users/${selectedId}`, {
-        method: "PATCH",
-        body: {
-          xp: parseInt(editXp, 10),
-          nexon: parseInt(editNexon, 10),
-        },
-      })
-      toast.success("Balances updated")
-      await loadDetail(selectedId)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save")
-    } finally {
-      setSaving(false)
-    }
-  }
 
-  const saveStyleShards = async () => {
-    if (!selectedId) return
+    const xp = parseInt(editXp, 10)
+    const nexonVal = parseInt(editNexon, 10)
+    const challengeWins = parseInt(editChallengeWins, 10)
+    const challengeWinStreak = parseInt(editChallengeWinStreak, 10)
     const shards = parseInt(editStyleShards, 10)
     const freeCaches = parseInt(editFreeCaches, 10)
+    const tokens = parseInt(editQuestTokens, 10)
+
+    if ([xp, nexonVal, challengeWins, challengeWinStreak].some((n) => Number.isNaN(n) || n < 0)) {
+      toast.error("XP, Nexon, and challenge stats must be 0 or greater")
+      return
+    }
     if (Number.isNaN(shards) || shards < 0) {
       toast.error("Style Shards must be 0 or greater")
       return
@@ -135,35 +132,26 @@ export default function AdminUsersPage() {
       toast.error("Free Nexus Caches must be 0 or greater")
       return
     }
-    setSaving(true)
-    try {
-      await adminJson(`/api/admin/users/${selectedId}`, {
-        method: "PATCH",
-        body: { styleShards: shards, freeNexusCaches: freeCaches },
-      })
-      toast.success("Style Shards updated")
-      await loadDetail(selectedId)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const saveQuestTokens = async () => {
-    if (!selectedId) return
-    const tokens = parseInt(editQuestTokens, 10)
     if (Number.isNaN(tokens) || tokens < 0 || tokens > 3) {
       toast.error("Quest refresh tokens must be 0–3")
       return
     }
+
     setSaving(true)
     try {
       await adminJson(`/api/admin/users/${selectedId}`, {
         method: "PATCH",
-        body: { questRefreshTokens: tokens },
+        body: {
+          xp,
+          nexon: nexonVal,
+          challengeWins,
+          challengeWinStreak,
+          styleShards: shards,
+          freeNexusCaches: freeCaches,
+          questRefreshTokens: tokens,
+        },
       })
-      toast.success("Quest refresh tokens updated")
+      toast.success("User updated")
       await loadDetail(selectedId)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save")
@@ -312,6 +300,32 @@ export default function AdminUsersPage() {
 
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
+                          <Label htmlFor="admin-challenge-wins" className="flex items-center gap-1">
+                            <Trophy className="h-3.5 w-3.5" /> Challenge wins
+                          </Label>
+                          <Input
+                            id="admin-challenge-wins"
+                            type="number"
+                            min={0}
+                            value={editChallengeWins}
+                            onChange={(e) => setEditChallengeWins(e.target.value)}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="admin-challenge-streak" className="flex items-center gap-1">
+                            <Trophy className="h-3.5 w-3.5" /> Win streak
+                          </Label>
+                          <Input
+                            id="admin-challenge-streak"
+                            type="number"
+                            min={0}
+                            value={editChallengeWinStreak}
+                            onChange={(e) => setEditChallengeWinStreak(e.target.value)}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
                           <Label htmlFor="admin-xp" className="flex items-center gap-1">
                             <Zap className="h-3.5 w-3.5" /> XP
                           </Label>
@@ -337,8 +351,8 @@ export default function AdminUsersPage() {
                         </div>
                       </div>
 
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                        <div className="flex-1">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="sm:col-span-2">
                           <Label htmlFor="admin-quest-tokens" className="flex items-center gap-1">
                             <RefreshCw className="h-3.5 w-3.5" /> Quest refresh tokens (0–3)
                           </Label>
@@ -352,13 +366,7 @@ export default function AdminUsersPage() {
                             className="mt-1"
                           />
                         </div>
-                        <Button variant="outline" onClick={saveQuestTokens} disabled={saving}>
-                          Save tokens
-                        </Button>
-                      </div>
-
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                        <div className="flex-1">
+                        <div>
                           <Label htmlFor="admin-style-shards" className="flex items-center gap-1">
                             <Gem className="h-3.5 w-3.5" /> Style Shards
                           </Label>
@@ -371,7 +379,7 @@ export default function AdminUsersPage() {
                             className="mt-1"
                           />
                         </div>
-                        <div className="flex-1">
+                        <div>
                           <Label htmlFor="admin-free-caches" className="flex items-center gap-1">
                             <Sparkles className="h-3.5 w-3.5" /> Free Nexus Caches
                           </Label>
@@ -384,16 +392,13 @@ export default function AdminUsersPage() {
                             className="mt-1"
                           />
                         </div>
-                        <Button variant="outline" onClick={saveStyleShards} disabled={saving}>
-                          Save shards
-                        </Button>
                       </div>
 
+                      <Button onClick={saveAll} disabled={saving} className="w-full">
+                        Save
+                      </Button>
+
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <Button onClick={saveBalances} disabled={saving} className="w-full">
-                          <Coins className="h-4 w-4 mr-2" />
-                          Save balances
-                        </Button>
                         <Button variant="outline" onClick={toggleAdmin} disabled={saving} className="w-full">
                           <Shield className="h-4 w-4 mr-2" />
                           {selected.role === "admin" ? "Remove admin" : "Make admin"}

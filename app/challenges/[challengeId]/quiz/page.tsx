@@ -17,6 +17,11 @@ import {
   acceptChallenge,
   recordChallengeResult,
   getChallengeQuestions,
+  subscribeToChallenge,
+  markChallengeReady,
+  scheduleLiveMatchStart,
+  updateChallengeLiveProgress,
+  sendChallengeSabotage,
   Challenge,
 } from "@/lib/challenge-utils"
 import {
@@ -33,7 +38,17 @@ import { ChallengeQuizOverlay } from "@/components/challenge/challenge-quiz-over
 import { ChallengeTabAwayModal } from "@/components/challenge/challenge-tab-away-modal"
 import { useChallengeQuizFx } from "@/hooks/use-challenge-quiz-fx"
 import { calculatePerformanceScore } from "@/lib/challenge-scoring"
+import { buildQuestionHintContext } from "@/lib/quiz-hint-utils"
+import { useQuizLeaveWarning } from "@/hooks/use-quiz-leave-warning"
 import { toast } from "sonner"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Lightbulb, Zap as ZapIcon } from "lucide-react"
 
 const TAB_AWAY_GRACE_MS = 5000
 const LEAVE_CONFIRM_MESSAGE =
@@ -63,6 +78,11 @@ export default function ChallengeQuizPage() {
   const [elapsedTime, setElapsedTime] = useState(0)
   const [tabAwayOpen, setTabAwayOpen] = useState(false)
   const [tabAwaySeconds, setTabAwaySeconds] = useState(5)
+  const [liveCountdown, setLiveCountdown] = useState<number | null>(null)
+  const [accepting, setAccepting] = useState(false)
+  const [hintOpen, setHintOpen] = useState(false)
+  const [sabotageCooldown, setSabotageCooldown] = useState(false)
+  const liveStartTriggeredRef = useRef(false)
 
   const params = useParams()
   const router = useRouter()
@@ -73,6 +93,18 @@ export default function ChallengeQuizPage() {
 
   const isChallenger = challenge?.challengerId === user?.uid
   const isChallenged = challenge?.challengedId === user?.uid
+  const isLive = challenge?.settings?.mode === "live"
+  const challengeSettings = challenge?.settings
+
+  const opponentLiveIndex = isChallenger
+    ? challenge?.challengedLiveIndex
+    : challenge?.challengerLiveIndex
+
+  const sabotageActive =
+    isLive &&
+    !!challenge?.sabotageUntil &&
+    challenge.sabotageUntil.toMillis() > Date.now() &&
+    challenge.sabotageBy !== user?.uid
 
   const fx = useChallengeQuizFx(currentQuestionIndex, questions.length)
   const tabAwayDeadlineRef = useRef<number | null>(null)
@@ -131,61 +163,74 @@ export default function ChallengeQuizPage() {
     setPageContext,
   ])
 
-  const loadChallengeMeta = useCallback(async () => {
-    if (!user) return
-
-    const challengeData = await getChallenge(challengeId)
-    if (!challengeData) {
-      router.push("/friends")
-      return
-    }
-
-    const isC = challengeData.challengerId === user.uid
-    const isD = challengeData.challengedId === user.uid
-    if (!isC && !isD) {
-      router.push("/friends")
-      return
-    }
-
-    if (isC && challengeData.hasChallengerPlayed) {
-      router.push("/friends")
-      return
-    }
-    if (isD && challengeData.challengedScore !== null) {
-      router.push("/friends")
-      return
-    }
-    if (
-      challengeData.status === "rejected" ||
-      challengeData.status === "expired" ||
-      challengeData.status === "completed"
-    ) {
-      router.push("/friends")
-      return
-    }
-
-    const courseSnap = await getDoc(doc(db, "courses", challengeData.courseId))
-    setCourseTitle(courseSnap.data()?.title || "Course")
-
-    const opponentId = isC ? challengeData.challengedId : challengeData.challengerId
-    const opponentSnap = await getDoc(doc(db, "users", opponentId))
-    setFriendNickname(opponentSnap.data()?.nickname || "Friend")
-
-    setChallenge(challengeData)
-    setPhase("ready")
-  }, [challengeId, router, user])
-
   useEffect(() => {
     if (authLoading) return
     if (!user) {
       router.push("/auth")
       return
     }
-    loadChallengeMeta().catch(() => router.push("/friends"))
-  }, [authLoading, user, loadChallengeMeta, router])
+
+    const unsub = subscribeToChallenge(challengeId, (data) => {
+      if (!data) {
+        router.push("/friends")
+        return
+      }
+
+      const isC = data.challengerId === user.uid
+      const isD = data.challengedId === user.uid
+      if (!isC && !isD) {
+        router.push("/friends")
+        return
+      }
+
+      if (isC && data.hasChallengerPlayed) {
+        router.push("/friends")
+        return
+      }
+      if (isD && data.challengedScore !== null) {
+        router.push("/friends")
+        return
+      }
+      if (data.status === "rejected" || data.status === "expired" || data.status === "completed") {
+        router.push("/friends")
+        return
+      }
+
+      setChallenge(data)
+
+      if (phaseRef.current === "loading") {
+        void (async () => {
+          const courseSnap = await getDoc(doc(db, "courses", data.courseId))
+          setCourseTitle(courseSnap.data()?.title || "Course")
+          const opponentId = isC ? data.challengedId : data.challengerId
+          const opponentSnap = await getDoc(doc(db, "users", opponentId))
+          setFriendNickname(opponentSnap.data()?.nickname || "Friend")
+          setPhase("ready")
+        })()
+      }
+    })
+
+    return () => unsub()
+  }, [authLoading, user, challengeId, router])
 
   const beginQuiz = async () => {
     if (!user || !challenge) return
+    if (isLive) {
+      if (challenge.status !== "accepted") {
+        setStartError("Waiting for your opponent to accept the challenge.")
+        return
+      }
+      if (!challenge.challengerReady || !challenge.challengedReady) {
+        setStartError("Both players must mark ready before the duel starts.")
+        return
+      }
+      const startMs = challenge.liveStartAt?.toMillis()
+      if (startMs && Date.now() < startMs) {
+        setStartError("Match has not started yet.")
+        return
+      }
+    }
+
     setStarting(true)
     setStartError(null)
     submitLockRef.current = false
@@ -236,6 +281,71 @@ export default function ChallengeQuizPage() {
     }
   }
 
+  const handleMarkReady = async () => {
+    if (!user) return
+    try {
+      await markChallengeReady(challengeId, user.uid)
+      await scheduleLiveMatchStart(challengeId)
+      toast.success("You're ready!")
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Could not mark ready")
+    }
+  }
+
+  const handleAcceptInLobby = async () => {
+    if (!user) return
+    setAccepting(true)
+    setStartError(null)
+    try {
+      await acceptChallenge(challengeId, user.uid)
+      toast.success("Challenge accepted!")
+    } catch (error: unknown) {
+      setStartError(error instanceof Error ? error.message : "Could not accept")
+    } finally {
+      setAccepting(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!challenge || !isLive || phase !== "ready") return
+    if (
+      challenge.status === "accepted" &&
+      challenge.challengerReady &&
+      challenge.challengedReady
+    ) {
+      void scheduleLiveMatchStart(challengeId)
+    }
+  }, [challenge, isLive, phase, challengeId])
+
+  useEffect(() => {
+    if (!challenge?.liveStartAt || phase !== "ready" || !isLive) {
+      setLiveCountdown(null)
+      return
+    }
+
+    const tick = () => {
+      const msLeft = challenge.liveStartAt!.toMillis() - Date.now()
+      if (msLeft <= 0) {
+        setLiveCountdown(0)
+        if (!liveStartTriggeredRef.current) {
+          liveStartTriggeredRef.current = true
+          void beginQuiz()
+        }
+        return
+      }
+      setLiveCountdown(Math.ceil(msLeft / 1000))
+    }
+
+    tick()
+    const id = setInterval(tick, 200)
+    return () => clearInterval(id)
+  }, [challenge?.liveStartAt, phase, isLive])
+
+  useEffect(() => {
+    if (phase !== "playing" || !isLive || !user) return
+    void updateChallengeLiveProgress(challengeId, user.uid, currentQuestionIndex)
+  }, [phase, isLive, user, challengeId, currentQuestionIndex])
+
   useEffect(() => {
     if (phase !== "playing" || !quizStartTime) return
     const interval = setInterval(() => {
@@ -246,12 +356,16 @@ export default function ChallengeQuizPage() {
 
   const applyQuestionFeedback = useCallback(
     (score: QuestionScore) => {
+      if (challengeSettings?.immediateFeedback === false) return
       const isCorrect =
         score.correct || (score.marks !== undefined && score.marks >= 2)
-      if (isCorrect) fx.onCorrectAnswer()
-      else fx.onWrongAnswer()
+      if (isCorrect) {
+        if (challengeSettings?.combo !== false) fx.onCorrectAnswer()
+      } else {
+        fx.onWrongAnswer()
+      }
     },
-    [fx]
+    [fx, challengeSettings]
   )
 
   const gradeQuestion = useCallback(
@@ -362,6 +476,12 @@ export default function ChallengeQuizPage() {
   useEffect(() => {
     handleSubmitRef.current = handleSubmit
   }, [handleSubmit])
+
+  useQuizLeaveWarning({
+    active: phase === "playing" && questions.length > 0,
+    message: LEAVE_CONFIRM_MESSAGE,
+    onLeave: () => handleSubmitRef.current(),
+  })
 
   const confirmAndLeave = useCallback(
     async (href: string) => {
@@ -538,7 +658,11 @@ export default function ChallengeQuizPage() {
         courseTitle={courseTitle}
         starting={starting}
         startError={startError}
+        liveCountdown={liveCountdown}
         onStart={beginQuiz}
+        onMarkReady={handleMarkReady}
+        onAccept={handleAcceptInLobby}
+        accepting={accepting}
         onBack={() => router.push("/friends")}
       />
     )
@@ -600,6 +724,13 @@ export default function ChallengeQuizPage() {
         comboTimeLeft={fx.comboTimeLeft}
         timerPulse={fx.timerPulse}
         elapsedTime={elapsedTime}
+        showTimer={challengeSettings?.timer !== false}
+        showCombo={challengeSettings?.combo !== false}
+        showFlash={challengeSettings?.immediateFeedback !== false}
+        opponentNickname={isLive ? friendNickname : undefined}
+        opponentQuestion={isLive ? opponentLiveIndex ?? null : undefined}
+        opponentTotal={isLive ? questions.length : undefined}
+        sabotageActive={sabotageActive}
       />
       <SidebarNav currentPath="/friends" />
       <main className="flex-1">
@@ -632,7 +763,47 @@ export default function ChallengeQuizPage() {
 
             <Card>
               <CardContent className="p-6 space-y-6">
-                <h2 className="text-xl font-semibold">{currentQuestion.question}</h2>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-xl font-semibold flex-1">{currentQuestion.question}</h2>
+                  <div className="flex gap-2 shrink-0">
+                    {challengeSettings?.hint && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => setHintOpen(true)}
+                      >
+                        <Lightbulb className="h-4 w-4" />
+                        Hint
+                      </Button>
+                    )}
+                    {isLive && challengeSettings?.sabotage && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-orange-600 border-orange-500/40"
+                        disabled={sabotageCooldown}
+                        onClick={async () => {
+                          if (!user) return
+                          setSabotageCooldown(true)
+                          try {
+                            await sendChallengeSabotage(challengeId, user.uid)
+                            toast.success("Sabotage sent!")
+                          } catch (error: unknown) {
+                            toast.error(error instanceof Error ? error.message : "Sabotage failed")
+                          } finally {
+                            setTimeout(() => setSabotageCooldown(false), 30000)
+                          }
+                        }}
+                      >
+                        <ZapIcon className="h-4 w-4" />
+                        Sabotage
+                      </Button>
+                    )}
+                  </div>
+                </div>
 
                 {currentQuestion.type === "objective" && currentQuestion.options && (
                   <RadioGroup
@@ -653,14 +824,9 @@ export default function ChallengeQuizPage() {
                 )}
 
                 {currentQuestion.type === "subjective" && (
-                  <Textarea
-                    value={answers[currentQuestion.questionId]?.toString() || ""}
-                    onChange={(e) =>
-                      handleAnswerChange(currentQuestion.questionId, e.target.value)
-                    }
-                    placeholder="Type your answer here..."
-                    className="min-h-32"
-                  />
+                  <p className="text-sm text-muted-foreground">
+                    Subjective questions are not used in challenges.
+                  </p>
                 )}
 
                 <div className="flex justify-end">
@@ -696,6 +862,26 @@ export default function ChallengeQuizPage() {
           </div>
         </div>
       </main>
+
+      <Dialog open={hintOpen} onOpenChange={setHintOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lightbulb className="h-5 w-5 text-primary" />
+              Hint
+            </DialogTitle>
+            <DialogDescription>Clue without revealing the answer</DialogDescription>
+          </DialogHeader>
+          {currentQuestion && (
+            <div className="space-y-3 text-sm">
+              <p className="font-medium">{buildQuestionHintContext(currentQuestion).hint}</p>
+              <p className="text-muted-foreground border-t pt-3">
+                {buildQuestionHintContext(currentQuestion).conceptExplanation}
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -9,7 +9,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { LoadingScreen } from "@/components/ui/LoadingScreen"
 import Link from "next/link"
 import SidebarNav from "@/components/sidebar-nav"
-import { useAuth } from "@/components/auth-provider"
+import { useRequireAuth } from "@/hooks/use-require-auth"
 import { useChatContext } from "@/context/ChatContext"
 import { useXP } from "@/components/xp-context-provider"
 import { db } from "@/lib/firebase"
@@ -22,7 +22,7 @@ import {
   getLegacyLessonStreamFromCourse,
 } from "@/lib/lesson-stream-store"
 import { mergeLessonFactsIntoCourseModule } from "@/lib/lesson-stream-course-context"
-import { MarkdownRenderer } from "@/components/markdown-renderer"
+import { LessonBlockPanel } from "@/components/lesson-block-panel"
 import { getCourseWithProgress, updateUserProgress, CourseWithProgress, ensureUserProgress, getLessonStreamProgress } from "@/lib/course-utils"
 import { useActivityTracking } from "@/hooks/use-activity-tracking"
 import {
@@ -44,6 +44,7 @@ export default function LessonPage() {
   const [interactionResults, setInteractionResults] = useState<{ [index: number]: boolean }>({})
   const [completedInteractions, setCompletedInteractions] = useState<{ [index: number]: any }>({})
   const [viewMode, setViewMode] = useState<"interactive" | "review">("interactive")
+  const [readOnlyView, setReadOnlyView] = useState(false)
   const [resetLesson, setResetLesson] = useState(false)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
@@ -60,7 +61,7 @@ export default function LessonPage() {
   const observedFocusId = observedFocus?.id ?? null
   const params = useParams()
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useRequireAuth()
   const { setPageContext } = useChatContext()
   const { showXPAward } = useXP()
 
@@ -79,11 +80,7 @@ export default function LessonPage() {
   })
 
   useEffect(() => {
-    if (!user) {
-      router.push("/auth")
-      return
-    }
-
+    if (authLoading || !user) return
     // Update last accessed module and lesson
     const updateLastAccessed = async () => {
       if (user) {
@@ -105,7 +102,7 @@ export default function LessonPage() {
         // Fetch course with progress
         const courseWithProgress = await getCourseWithProgress(courseId, user.uid)
         if (!courseWithProgress) {
-          router.push("/")
+          router.push("/journey")
           return
         }
 
@@ -124,11 +121,17 @@ export default function LessonPage() {
         const lessonData = (lesson as any)
         let savedBlockIndex = 0
 
-        // Detect reset flag from URL (e.g. ?reset=true)
+        // Detect reset / read-only view flags from URL
         let resetRequested = false
+        let viewOnlyRequested = false
         if (typeof window !== "undefined") {
           const searchParams = new URLSearchParams(window.location.search)
           resetRequested = searchParams.get("reset") === "true"
+          viewOnlyRequested = searchParams.get("view") === "true"
+        }
+        if (viewOnlyRequested) {
+          setReadOnlyView(true)
+          setViewMode("review")
         }
 
         // Check for saved stream progress
@@ -187,7 +190,9 @@ export default function LessonPage() {
         }
 
         if (existingStream) {
-          const validatedBlockIndex = Math.min(savedBlockIndex, existingStream.blocks.length - 1)
+          const validatedBlockIndex = viewOnlyRequested
+            ? existingStream.blocks.length - 1
+            : Math.min(savedBlockIndex, existingStream.blocks.length - 1)
           setLessonStream(existingStream)
           setCurrentBlockIndex(Math.max(0, validatedBlockIndex))
           setLoading(false)
@@ -304,7 +309,7 @@ export default function LessonPage() {
     }
 
     fetchCourseAndLesson()
-      }, [courseId, moduleIndex, lessonIndex, router, user, currentBlockIndex])
+  }, [courseId, moduleIndex, lessonIndex, router, user, currentBlockIndex, authLoading])
 
   // Save scroll position on scroll
   useEffect(() => {
@@ -740,7 +745,7 @@ export default function LessonPage() {
     return <LoadingScreen />
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-center space-y-4">
@@ -856,23 +861,28 @@ export default function LessonPage() {
 
           {/* Stream Blocks */}
           <div className="space-y-6">
-            {lessonStream.blocks.slice(0, currentBlockIndex + 1).map((block, index) => {
+            {(readOnlyView ? lessonStream.blocks : lessonStream.blocks.slice(0, currentBlockIndex + 1)).map((block, index) => {
               const isCompletedInteraction = completedInteractions[index]
-              // Treat blocks with saved interaction data as "past" so they render in review mode,
-              // even if they are at the current index (e.g. the last interaction block)
-              const isPastBlock = index < currentBlockIndex || (!!isCompletedInteraction && index === currentBlockIndex)
+              const isPastBlock = readOnlyView
+                ? true
+                : index < currentBlockIndex || (!!isCompletedInteraction && index === currentBlockIndex)
               
               if (isPastBlock) {
                 // Show previous blocks (read-only)
                 if (block.type === "text") {
-                  const content = (block as TextBlock).content
                   return (
-                    <NexusFocusRegion key={index} id={`block-${index}`} type="text-block" content={content}>
-                      <Card className="opacity-60">
-                        <CardContent className="p-6">
-                          <MarkdownRenderer content={content} />
-                        </CardContent>
-                      </Card>
+                    <NexusFocusRegion key={index} id={`block-${index}`} type="text-block" content={(block as TextBlock).content}>
+                      <LessonBlockPanel
+                        block={block as TextBlock}
+                        blockIndex={index}
+                        userId={user!.uid}
+                        courseId={courseId}
+                        moduleIndex={moduleIndex}
+                        lessonIndex={lessonIndex}
+                        isPast={!readOnlyView}
+                        readOnly={readOnlyView}
+                        borderClass=""
+                      />
                     </NexusFocusRegion>
                   )
                 }
@@ -885,21 +895,18 @@ export default function LessonPage() {
 
               // Current block
               if (block.type === "text") {
-                const content = (block as TextBlock).content
                 return (
-                  <NexusFocusRegion key={index} id={`block-${index}`} type="text-block" content={content}>
-                    <Card className="border-2 border-primary">
-                      <CardContent className="p-6">
-                        <MarkdownRenderer content={content} />
-                        {canContinue && (
-                          <div className="mt-4">
-                            <Button onClick={handleContinue} className="w-full">
-                              Continue
-                            </Button>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                  <NexusFocusRegion key={index} id={`block-${index}`} type="text-block" content={(block as TextBlock).content}>
+                    <LessonBlockPanel
+                      block={block as TextBlock}
+                      blockIndex={index}
+                      userId={user!.uid}
+                      courseId={courseId}
+                      moduleIndex={moduleIndex}
+                      lessonIndex={lessonIndex}
+                      canContinue={canContinue}
+                      onContinue={handleContinue}
+                    />
                   </NexusFocusRegion>
                 )
               }
@@ -973,7 +980,7 @@ export default function LessonPage() {
     switch (completedInteraction.type) {
       case "swipe":
         return (
-          <Card key={index} className="opacity-80 border-2">
+          <Card key={index} className={readOnlyView ? "border-2" : "opacity-80 border-2"}>
             <CardContent className="p-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -993,7 +1000,7 @@ export default function LessonPage() {
         )
       case "reorder":
         return (
-          <Card key={index} className="opacity-80 border-2">
+          <Card key={index} className={readOnlyView ? "border-2" : "opacity-80 border-2"}>
             <CardContent className="p-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -1017,7 +1024,7 @@ export default function LessonPage() {
         )
       case "matching":
         return (
-          <Card key={index} className="opacity-80 border-2">
+          <Card key={index} className={readOnlyView ? "border-2" : "opacity-80 border-2"}>
             <CardContent className="p-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -1052,7 +1059,7 @@ export default function LessonPage() {
         )
       case "fill_blank":
         return (
-          <Card key={index} className="opacity-80 border-2">
+          <Card key={index} className={readOnlyView ? "border-2" : "opacity-80 border-2"}>
             <CardContent className="p-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -1071,7 +1078,7 @@ export default function LessonPage() {
         )
       case "bug_hunter":
         return (
-          <Card key={index} className="opacity-80 border-2">
+          <Card key={index} className={readOnlyView ? "border-2" : "opacity-80 border-2"}>
             <CardContent className="p-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -1091,7 +1098,7 @@ export default function LessonPage() {
         )
       case "chat_sim":
         return (
-          <Card key={index} className="opacity-80 border-2">
+          <Card key={index} className={readOnlyView ? "border-2" : "opacity-80 border-2"}>
             <CardContent className="p-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">

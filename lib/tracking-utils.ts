@@ -11,49 +11,75 @@ export async function updateUserTrackingMetrics(userId: string): Promise<{
   gradeS: number
 }> {
   try {
-    // Get all quiz attempts
+    const modulesMasteredSet = new Set<string>()
+    let totalQuizScore = 0
+    let totalQuizMaxScore = 0
+    let perfectFinalQuizzes = 0
+
+    // Quiz attempts (real plays)
     const attemptsQuery = query(
       collection(db, "quizAttempts"),
       where("userId", "==", userId)
     )
     const attemptsSnapshot = await getDocs(attemptsQuery)
 
-    // Track modules with 100% scores (once per module)
-    const modulesMasteredSet = new Set<string>()
-    let totalQuizScore = 0
-    let totalQuizMaxScore = 0
-    let perfectFinalQuizzes = 0
-
     attemptsSnapshot.forEach((docSnap) => {
       const attempt = docSnap.data() as QuizAttempt
-      
-      // Only count completed quizzes
-      if (!attempt.completedAt || (attempt as any).abandoned) {
+
+      if (!attempt.completedAt || (attempt as { abandoned?: boolean }).abandoned) {
         return
       }
 
-      // Calculate score percentage
-      const scorePercentage = attempt.maxScore > 0 
+      const scorePercentage = attempt.maxScore > 0
         ? Math.round((attempt.totalScore / attempt.maxScore) * 100)
         : 0
 
-      // Modules Mastered: 100% on module quiz (once per module)
       if (attempt.quizType === "module" && attempt.moduleIndex !== null && attempt.moduleIndex !== undefined) {
         if (scorePercentage === 100) {
-          const moduleKey = `${attempt.courseId}-${attempt.moduleIndex}`
-          modulesMasteredSet.add(moduleKey)
+          modulesMasteredSet.add(`${attempt.courseId}-${attempt.moduleIndex}`)
         }
       }
 
-      // Performance Rating: average percentage across all module and final quizzes
       if (attempt.quizType === "module" || attempt.quizType === "course") {
         totalQuizScore += attempt.totalScore
         totalQuizMaxScore += attempt.maxScore
       }
 
-      // Grade S: count of perfect final quiz scores
       if (attempt.quizType === "course" && scorePercentage === 100) {
         perfectFinalQuizzes++
+      }
+    })
+
+    // Progress records (admin-set scores, completions without attempts)
+    const progressQuery = query(
+      collection(db, "userCourseProgress"),
+      where("userId", "==", userId)
+    )
+    const progressSnapshot = await getDocs(progressQuery)
+
+    progressSnapshot.forEach((docSnap) => {
+      const progress = docSnap.data()
+      const courseId = progress.courseId as string
+      const moduleQuizScores = (progress.moduleQuizScores || {}) as Record<string, number>
+      const finalQuizScore = progress.finalQuizScore as number | null | undefined
+
+      for (const [modKey, rawScore] of Object.entries(moduleQuizScores)) {
+        const score = Number(rawScore)
+        if (score >= 100) {
+          modulesMasteredSet.add(`${courseId}-${modKey}`)
+        }
+        if (score > 0) {
+          totalQuizScore += score
+          totalQuizMaxScore += 100
+        }
+      }
+
+      if (finalQuizScore !== null && finalQuizScore !== undefined) {
+        totalQuizScore += finalQuizScore
+        totalQuizMaxScore += 100
+        if (finalQuizScore >= 100) {
+          perfectFinalQuizzes++
+        }
       }
     })
 
@@ -62,7 +88,6 @@ export async function updateUserTrackingMetrics(userId: string): Promise<{
       ? Math.round((totalQuizScore / totalQuizMaxScore) * 100)
       : 0
 
-    // Update user document
     const userRef = doc(db, "users", userId)
     await updateDoc(userRef, {
       modulesMastered,

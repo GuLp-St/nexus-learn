@@ -21,6 +21,18 @@ export function canAccessModuleQuiz(course: CourseWithProgress, moduleIndex: num
 }
 
 /**
+ * True when at least one module quiz is unlocked (all lessons in that module completed).
+ */
+export function hasAnyUnlockedModuleQuiz(course: CourseWithProgress): boolean {
+  return course.modules.some((_, idx) => canAccessModuleQuiz(course, idx))
+}
+
+/** Courses eligible for friend challenges on the journey picker */
+export function canSelectCourseForChallenge(course: CourseWithProgress): boolean {
+  return hasAnyUnlockedModuleQuiz(course)
+}
+
+/**
  * Check if a lesson quiz is available (lesson must be completed)
  */
 export function canAccessLessonQuiz(course: CourseWithProgress, moduleIndex: number, lessonIndex: number): boolean {

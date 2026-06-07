@@ -289,6 +289,23 @@
   transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Minimal scrollbars for chat and dense lists */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 35%, transparent) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
+  border-radius: 9999px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* ============================================
    COSMETIC STYLES
    ============================================ */
@@ -339,6 +356,17 @@
 }
 
 .theme-rgb-chroma .stroke-primary {
+  animation: rgb-cycle-stroke 10s infinite linear !important;
+}
+
+.theme-rgb-chroma .rgb-preview-accent,
+.rgb-preview-accent {
+  animation: rgb-cycle 10s infinite linear !important;
+  color: white !important;
+}
+
+.theme-rgb-chroma .rgb-preview-stroke,
+.rgb-preview-stroke {
   animation: rgb-cycle-stroke 10s infinite linear !important;
 }
 
