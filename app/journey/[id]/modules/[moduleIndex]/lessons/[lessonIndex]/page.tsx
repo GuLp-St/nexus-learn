@@ -879,6 +879,9 @@ export default function LessonPage() {
                         courseId={courseId}
                         moduleIndex={moduleIndex}
                         lessonIndex={lessonIndex}
+                        courseTitle={course?.title}
+                        moduleTitle={module?.title}
+                        lessonTitle={lesson?.title}
                         isPast={!readOnlyView}
                         readOnly={readOnlyView}
                         borderClass=""
@@ -904,6 +907,9 @@ export default function LessonPage() {
                       courseId={courseId}
                       moduleIndex={moduleIndex}
                       lessonIndex={lessonIndex}
+                      courseTitle={course?.title}
+                      moduleTitle={module?.title}
+                      lessonTitle={lesson?.title}
                       canContinue={canContinue}
                       onContinue={handleContinue}
                     />

@@ -18,11 +18,23 @@ function initFirebaseAdmin(): admin.app.App {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim()
 
   if (serviceAccountJson) {
-    const cred = JSON.parse(serviceAccountJson) as admin.ServiceAccount
-    return admin.initializeApp({
-      credential: admin.credential.cert(cred),
-      projectId: cred.projectId || projectId,
-    })
+    try {
+      const cred = JSON.parse(serviceAccountJson) as admin.ServiceAccount
+      return admin.initializeApp({
+        credential: admin.credential.cert(cred),
+        projectId: cred.projectId || projectId,
+      })
+    } catch {
+      throw new Error(
+        "FIREBASE_SERVICE_ACCOUNT_JSON is invalid JSON. Paste the full service account key from Firebase Console."
+      )
+    }
+  }
+
+  if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT_JSON is not configured. Add it to your Vercel environment variables."
+    )
   }
 
   return admin.initializeApp({

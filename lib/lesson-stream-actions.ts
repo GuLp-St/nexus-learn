@@ -8,6 +8,7 @@ import {
   type LessonMaterialImage,
 } from "./lesson-material-images"
 import { isCloudflareConfigured } from "./cloudflare-keys"
+import { ensureTextBlockReferences } from "./lesson-block-references"
 
 export async function generateLessonStreamWithImages(
   lessonTitle: string,
@@ -20,6 +21,7 @@ export async function generateLessonStreamWithImages(
     lessonSummary?: string
     moduleSummary?: string
     processedImages?: LessonMaterialImage[]
+    defaultFileName?: string
   }
 ): Promise<LessonStream> {
   let stream = await generateLessonStream(
@@ -29,6 +31,14 @@ export async function generateLessonStreamWithImages(
     sourceContext
   )
 
+  stream = ensureTextBlockReferences(stream, {
+    references: sourceContext?.references,
+    courseTitle,
+    moduleTitle,
+    lessonTitle,
+    defaultFileName: sourceContext?.defaultFileName,
+  })
+
   const materialImages = sourceContext?.processedImages ?? []
 
   if (materialImages.length > 0) {
@@ -37,12 +47,18 @@ export async function generateLessonStreamWithImages(
   }
 
   if (await isCloudflareConfigured()) {
-    return enrichLessonStreamWithImages(stream, {
+    stream = await enrichLessonStreamWithImages(stream, {
       lessonTitle,
       courseTitle,
       moduleTitle,
     })
   }
 
-  return stream
+  return ensureTextBlockReferences(stream, {
+    references: sourceContext?.references,
+    courseTitle,
+    moduleTitle,
+    lessonTitle,
+    defaultFileName: sourceContext?.defaultFileName,
+  })
 }

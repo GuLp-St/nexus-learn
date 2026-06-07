@@ -1,3 +1,4 @@
+import "@/lib/pdf-server-polyfills"
 import { PDFParse } from "pdf-parse"
 import mammoth from "mammoth"
 import JSZip from "jszip"

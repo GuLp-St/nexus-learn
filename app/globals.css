@@ -1215,6 +1215,22 @@
   animation: challenge-timer-flash-keyframes 0.12s ease-out;
 }
 
+@keyframes challenge-sabotage-swirl {
+  0% { transform: rotate(0deg) scale(1); filter: hue-rotate(0deg); }
+  50% { transform: rotate(2deg) scale(1.02); filter: hue-rotate(30deg); }
+  100% { transform: rotate(-2deg) scale(1); filter: hue-rotate(-20deg); }
+}
+
+.challenge-sabotage-swirl {
+  background: radial-gradient(circle at 30% 40%, rgba(255, 120, 0, 0.15), transparent 55%),
+    radial-gradient(circle at 70% 60%, rgba(120, 80, 255, 0.12), transparent 50%);
+  animation: challenge-sabotage-swirl 0.8s ease-in-out infinite alternate;
+}
+
+.challenge-sabotage-blur {
+  backdrop-filter: blur(8px) saturate(1.4);
+}
+
 /* Hide scrollbar utility */
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {

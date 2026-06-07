@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Challenge } from "@/lib/challenge-utils"
+import { Challenge, isPoweredChallenge, normalizeChallengeSettings } from "@/lib/challenge-utils"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 import { Zap, Clock, AlertTriangle, Loader2, Users, CheckCircle2 } from "lucide-react"
 
@@ -36,7 +36,8 @@ export function ChallengeReadyRoom({
   accepting,
   onBack,
 }: ChallengeReadyRoomProps) {
-  const isLive = challenge.settings?.mode === "live"
+  const settings = normalizeChallengeSettings(challenge.settings)
+  const isPowered = isPoweredChallenge(settings)
   const needsAccept = !isChallenger && challenge.status === "pending"
   const bet = challenge.betAmount || 0
   const quizLabel =
@@ -46,39 +47,30 @@ export function ChallengeReadyRoom({
 
   const myReady = isChallenger ? challenge.challengerReady : challenge.challengedReady
   const oppReady = isChallenger ? challenge.challengedReady : challenge.challengerReady
-  const waitingAccept = isLive && isChallenger && challenge.status === "pending"
+  const waitingAccept = isPowered && isChallenger && challenge.status === "pending"
   const bothReady = !!challenge.challengerReady && !!challenge.challengedReady
-  const canSyncStart = isLive && bothReady && challenge.status === "accepted"
+  const canSyncStart = isPowered && bothReady && challenge.status === "accepted"
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md border-2 border-primary/20 shadow-xl">
-        <CardContent className="p-8 space-y-6">
-          <div className="text-center space-y-2">
-            <Zap className="h-10 w-10 text-primary mx-auto" />
-            <h1 className="text-2xl font-bold">
-              {isLive ? "Live Duel Lobby" : "Challenge Ready Room"}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {isChallenger
-                ? `You challenged ${friendNickname}`
-                : `${friendNickname} challenged you`}
+      <Card className="w-full max-w-sm border-2 border-primary/20 shadow-xl">
+        <CardContent className="p-5 space-y-4">
+          <div className="text-center space-y-1">
+            <Zap className="h-8 w-8 text-primary mx-auto" />
+            <h1 className="text-lg font-bold truncate">{courseTitle}</h1>
+            <p className="text-xs text-muted-foreground">
+              {isChallenger ? `vs ${friendNickname}` : `from ${friendNickname}`}
             </p>
-            <div className="flex flex-wrap justify-center gap-1.5 pt-1">
-              {isLive && <Badge variant="secondary">Live 1v1</Badge>}
-              {challenge.settings?.hint && <Badge variant="outline">Hints</Badge>}
-              {challenge.settings?.sabotage && isLive && (
-                <Badge variant="outline">Sabotage</Badge>
-              )}
-              {challenge.settings?.timer && <Badge variant="outline">Timer</Badge>}
-              {challenge.settings?.combo && <Badge variant="outline">Combo</Badge>}
-              {challenge.settings?.immediateFeedback && (
-                <Badge variant="outline">Flash feedback</Badge>
-              )}
+            <div className="flex flex-wrap justify-center gap-1 pt-1">
+              <Badge variant="secondary" className="text-[10px] capitalize">{settings.gameMode}</Badge>
+              {settings.timer && <Badge variant="outline" className="text-[10px]">Timer</Badge>}
+              <Badge variant="outline" className="text-[10px]">Combo</Badge>
+              {settings.immediateFeedback && <Badge variant="outline" className="text-[10px]">Flash</Badge>}
+              {isPowered && <Badge variant="outline" className="text-[10px]">3 actions</Badge>}
             </div>
           </div>
 
-          <div className="rounded-lg bg-muted/50 p-4 space-y-2 text-sm">
+          <div className="rounded-lg bg-muted/50 p-3 space-y-1.5 text-xs">
             <p>
               <span className="text-muted-foreground">Course: </span>
               <span className="font-semibold">{courseTitle}</span>
@@ -106,7 +98,7 @@ export function ChallengeReadyRoom({
             </p>
           </div>
 
-          {isLive && (
+          {isPowered && (
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-primary flex items-center gap-1.5">
                 <Users className="h-3.5 w-3.5" />
@@ -186,7 +178,7 @@ export function ChallengeReadyRoom({
               </Button>
             )}
 
-            {isLive ? (
+            {isPowered ? (
               <>
                 {!needsAccept && !myReady && onMarkReady && (
                   <Button size="lg" className="w-full gap-2" onClick={onMarkReady} disabled={starting || waitingAccept}>

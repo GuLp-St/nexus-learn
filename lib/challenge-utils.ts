@@ -4,25 +4,53 @@ import { awardXP, XPAwardResult } from "./xp-utils"
 import { QuizQuestion } from "./quiz-utils"
 import { calculatePerformanceScore, filterObjectiveQuestions } from "./challenge-scoring"
 import { fetchQuizQuestionsByIds, saveQuizQuestions } from "./quiz-utils"
+import type { PowerActionType, PowerEffectsBucket } from "./challenge-powered-actions"
+import { enrichQuestionsForPoweredMode } from "./challenge-question-enrichment"
+
+export type ChallengeGameMode = "classic" | "powered"
 
 export interface ChallengeSettings {
-  mode: "async" | "live"
+  gameMode: ChallengeGameMode
   timer: boolean
   bpm: boolean
   immediateFeedback: boolean
+  /** Combo is always enabled in challenges */
   combo: boolean
-  hint: boolean
-  sabotage: boolean
+  /** @deprecated use gameMode === "powered" */
+  mode?: "async" | "live"
+  hint?: boolean
+  sabotage?: boolean
 }
 
+export const CHALLENGE_ACTIONS_PER_PLAYER = 3
+
 export const DEFAULT_CHALLENGE_SETTINGS: ChallengeSettings = {
-  mode: "async",
+  gameMode: "classic",
   timer: true,
   bpm: false,
   immediateFeedback: true,
   combo: true,
-  hint: false,
-  sabotage: false,
+}
+
+export function isPoweredChallenge(settings?: ChallengeSettings): boolean {
+  if (!settings) return false
+  if (settings.gameMode === "powered") return true
+  return !!(settings.hint || settings.sabotage)
+}
+
+/** Normalize legacy challenge documents */
+export function normalizeChallengeSettings(raw?: Partial<ChallengeSettings>): ChallengeSettings {
+  if (!raw) return { ...DEFAULT_CHALLENGE_SETTINGS }
+  const gameMode: ChallengeGameMode =
+    raw.gameMode ??
+    (raw.hint || raw.sabotage || raw.mode === "live" ? "powered" : "classic")
+  return {
+    gameMode,
+    timer: raw.timer ?? true,
+    bpm: raw.bpm ?? false,
+    immediateFeedback: raw.immediateFeedback ?? true,
+    combo: true,
+  }
 }
 
 export interface Challenge {
@@ -59,6 +87,12 @@ export interface Challenge {
   challengerReady?: boolean
   challengedReady?: boolean
   sabotageBy?: string | null
+  challengerActionsLeft?: number
+  challengedActionsLeft?: number
+  challengerComboStreak?: number
+  challengedComboStreak?: number
+  challengerEffects?: PowerEffectsBucket
+  challengedEffects?: PowerEffectsBucket
   /** Live duel: current question index per player (0-based) */
   challengerLiveIndex?: number | null
   challengedLiveIndex?: number | null
@@ -190,6 +224,10 @@ export async function createChallenge(
 
     generatedQuestions = filterObjectiveQuestions(generatedQuestions, questionTarget)
 
+    if (isPoweredChallenge(settings)) {
+      generatedQuestions = await enrichQuestionsForPoweredMode(generatedQuestions)
+    }
+
     // Save questions to Firestore so they are permanent and accessible by both players
     await saveQuizQuestions(generatedQuestions)
     const questionIds = generatedQuestions.map(q => q.questionId)
@@ -218,8 +256,8 @@ export async function createChallenge(
       expirationHours,
       hasChallengerPlayed: false,
       hasChallengedAccepted: false,
-      settings,
-      ...(settings.mode === "live"
+      settings: { ...settings, combo: true },
+      ...(isPoweredChallenge(settings)
         ? {
             challengerReady: false,
             challengedReady: false,
@@ -228,6 +266,12 @@ export async function createChallenge(
             liveStartAt: null,
             sabotageUntil: null,
             sabotageBy: null,
+            challengerActionsLeft: CHALLENGE_ACTIONS_PER_PLAYER,
+            challengedActionsLeft: CHALLENGE_ACTIONS_PER_PLAYER,
+            challengerComboStreak: 0,
+            challengedComboStreak: 0,
+            challengerEffects: {},
+            challengedEffects: {},
           }
         : {}),
       createdAt: serverTimestamp(),
@@ -824,8 +868,8 @@ export async function markChallengeReady(challengeId: string, userId: string): P
   if (!snap.exists()) throw new Error("Challenge not found")
 
   const data = snap.data() as Challenge
-  if (data.settings?.mode !== "live") {
-    throw new Error("Ready room is only for live challenges")
+  if (!isPoweredChallenge(normalizeChallengeSettings(data.settings))) {
+    throw new Error("Ready room is only for Powered challenges")
   }
 
   const isChallenger = userId === data.challengerId
@@ -845,7 +889,8 @@ export async function scheduleLiveMatchStart(challengeId: string): Promise<void>
   if (!snap.exists()) return
 
   const data = snap.data() as Challenge
-  if (data.settings?.mode !== "live") return
+  const settings = normalizeChallengeSettings(data.settings)
+  if (!isPoweredChallenge(settings)) return
   if (data.status !== "accepted") return
   if (!data.challengerReady || !data.challengedReady) return
   if (data.liveStartAt) return
@@ -865,24 +910,152 @@ export async function updateChallengeLiveProgress(
   if (!snap.exists()) return
 
   const data = snap.data() as Challenge
-  if (data.settings?.mode !== "live") return
+  const settings = normalizeChallengeSettings(data.settings)
+  if (!isPoweredChallenge(settings)) return
 
   const isChallenger = userId === data.challengerId
   await updateDoc(ref, isChallenger ? { challengerLiveIndex: questionIndex } : { challengedLiveIndex: questionIndex })
 }
 
-/** Brief screen-blur sabotage on opponent (live + sabotage enabled) */
-export async function sendChallengeSabotage(challengeId: string, fromUserId: string): Promise<void> {
+function effectsKeyForUser(isChallenger: boolean): "challengerEffects" | "challengedEffects" {
+  return isChallenger ? "challengerEffects" : "challengedEffects"
+}
+
+function comboKeyForUser(isChallenger: boolean): "challengerComboStreak" | "challengedComboStreak" {
+  return isChallenger ? "challengerComboStreak" : "challengedComboStreak"
+}
+
+/** Use a Powered-mode action (3 per player per match) */
+export async function useChallengePowerAction(
+  challengeId: string,
+  fromUserId: string,
+  action: PowerActionType,
+  context: {
+    currentQuestionId: string
+    nextQuestionId?: string
+    extraOptions?: string[]
+  }
+): Promise<void> {
   const ref = doc(db, "challenges", challengeId)
   const snap = await getDoc(ref)
   if (!snap.exists()) throw new Error("Challenge not found")
 
   const data = snap.data() as Challenge
-  if (data.settings?.mode !== "live") throw new Error("Sabotage only works in live duels")
-  if (!data.settings?.sabotage) throw new Error("Sabotage is disabled for this challenge")
+  const settings = normalizeChallengeSettings(data.settings)
+  if (!isPoweredChallenge(settings)) throw new Error("Actions only work in Powered mode")
 
-  const until = Timestamp.fromDate(new Date(Date.now() + 5000))
-  await updateDoc(ref, { sabotageUntil: until, sabotageBy: fromUserId })
+  const isChallenger = fromUserId === data.challengerId
+  const isChallenged = fromUserId === data.challengedId
+  if (!isChallenger && !isChallenged) throw new Error("Not part of this challenge")
+
+  const actionsKey = isChallenger ? "challengerActionsLeft" : "challengedActionsLeft"
+  const actionsLeft = data[actionsKey] ?? CHALLENGE_ACTIONS_PER_PLAYER
+  if (actionsLeft <= 0) throw new Error("No actions remaining")
+
+  const opponentIsChallenger = !isChallenger
+  const selfEffectsKey = effectsKeyForUser(isChallenger)
+  const oppEffectsKey = effectsKeyForUser(opponentIsChallenger)
+  const selfComboKey = comboKeyForUser(isChallenger)
+  const oppComboKey = comboKeyForUser(opponentIsChallenger)
+
+  const selfEffects: PowerEffectsBucket = { ...(data[selfEffectsKey] ?? {}) }
+  const oppEffects: PowerEffectsBucket = { ...(data[oppEffectsKey] ?? {}) }
+
+  const patch: Record<string, unknown> = {
+    [actionsKey]: actionsLeft - 1,
+  }
+
+  switch (action) {
+    case "add_more_answers": {
+      const targetId = context.nextQuestionId ?? context.currentQuestionId
+      if (!targetId) throw new Error("No target question")
+      const extras = context.extraOptions ?? []
+      if (extras.length === 0) throw new Error("No extra answers available for this question")
+      patch[oppEffectsKey] = {
+        ...oppEffects,
+        extraOptionsByQuestionId: {
+          ...oppEffects.extraOptionsByQuestionId,
+          [targetId]: extras,
+        },
+      }
+      break
+    }
+    case "combo_breaker":
+      patch[oppComboKey] = 0
+      break
+    case "swap_harder": {
+      const targetId = context.nextQuestionId ?? context.currentQuestionId
+      if (!targetId) throw new Error("No target question")
+      patch[oppEffectsKey] = {
+        ...oppEffects,
+        swappedQuestionByQuestionId: {
+          ...oppEffects.swappedQuestionByQuestionId,
+          [targetId]: "hard",
+        },
+      }
+      break
+    }
+    case "distort_screen": {
+      const until = Timestamp.fromDate(new Date(Date.now() + 5000))
+      patch.sabotageUntil = until
+      patch.sabotageBy = fromUserId
+      break
+    }
+    case "remove_wrong":
+      patch[selfEffectsKey] = {
+        ...selfEffects,
+        removedWrongByQuestionId: {
+          ...selfEffects.removedWrongByQuestionId,
+          [context.currentQuestionId]: true,
+        },
+      }
+      break
+    case "combo_shield":
+      patch[selfEffectsKey] = { ...selfEffects, comboShield: true }
+      break
+    case "swap_easier":
+      patch[selfEffectsKey] = {
+        ...selfEffects,
+        swappedQuestionByQuestionId: {
+          ...selfEffects.swappedQuestionByQuestionId,
+          [context.currentQuestionId]: "easy",
+        },
+      }
+      break
+    case "combo_switcher": {
+      const myStreak = data[selfComboKey] ?? 0
+      const oppStreak = data[oppComboKey] ?? 0
+      patch[selfComboKey] = oppStreak
+      patch[oppComboKey] = myStreak
+      break
+    }
+    default:
+      throw new Error("Unknown action")
+  }
+
+  await updateDoc(ref, patch)
+}
+
+/** @deprecated use useChallengePowerAction with distort_screen */
+export async function sendChallengeSabotage(challengeId: string, fromUserId: string): Promise<void> {
+  await useChallengePowerAction(challengeId, fromUserId, "distort_screen", {
+    currentQuestionId: "",
+  })
+}
+
+/** Sync live combo streak for powered challenges */
+export async function updateChallengeComboStreak(
+  challengeId: string,
+  userId: string,
+  streak: number
+): Promise<void> {
+  const ref = doc(db, "challenges", challengeId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) return
+  const data = snap.data() as Challenge
+  if (!isPoweredChallenge(normalizeChallengeSettings(data.settings))) return
+  const key = userId === data.challengerId ? "challengerComboStreak" : "challengedComboStreak"
+  await updateDoc(ref, { [key]: streak })
 }
 
 /**

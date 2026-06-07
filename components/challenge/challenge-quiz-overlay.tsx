@@ -44,10 +44,16 @@ export function ChallengeQuizOverlay({
   return (
     <>
       {sabotageActive && (
-        <div
-          className="pointer-events-none fixed inset-0 z-[70] backdrop-blur-md bg-black/30"
-          aria-hidden
-        />
+        <>
+          <div
+            className="pointer-events-none fixed inset-0 z-[70] backdrop-blur-md bg-black/30 challenge-sabotage-blur"
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none fixed inset-0 z-[71] opacity-40 mix-blend-screen challenge-sabotage-swirl"
+            aria-hidden
+          />
+        </>
       )}
 
       {showFlash && answerFx === "correct" && (

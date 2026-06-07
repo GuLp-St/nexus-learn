@@ -24,6 +24,11 @@ export interface QuizQuestion {
   }
   sourceFactId?: string // For objective questions - links to fact in accumulatedContext
   sourceFactIds?: string[] // For subjective questions - links to multiple facts
+  /** Extra wrong answers pre-generated for Powered sabotage "add more answer" */
+  extraOptions?: string[]
+  /** Alternate difficulty variants for Powered swap actions */
+  alternateEasy?: { question: string; options: string[]; correctAnswer: string | number | boolean }
+  alternateHard?: { question: string; options: string[]; correctAnswer: string | number | boolean }
   createdAt?: Timestamp
 }
 

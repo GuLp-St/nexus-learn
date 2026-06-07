@@ -410,18 +410,27 @@ export default function CreateCourseUnified() {
       }
       setActiveJobId(start.jobId)
 
-      const formData = new FormData()
-      formData.append("userId", user.uid)
-      formData.append("jobId", start.jobId)
-      formData.append("difficulty", uploadDifficulty)
-      formData.append("toneInstruction", toneInstruction)
-      uploadedFiles.forEach((file) => formData.append("files", file))
+      const { uploadCourseMaterialFiles } = await import(
+        "@/lib/course-material-file-upload-client"
+      )
+      const uploadedRefs = await uploadCourseMaterialFiles(uploadedFiles, setProgressDetail)
+
+      setProgressDetail("Processing your materials…")
 
       const idToken = await user.getIdToken()
       const res = await fetch("/api/course-creation/upload", {
         method: "POST",
-        headers: { Authorization: `Bearer ${idToken}` },
-        body: formData,
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.uid,
+          jobId: start.jobId,
+          difficulty: uploadDifficulty,
+          toneInstruction,
+          files: uploadedRefs,
+        }),
       })
       const rawText = await res.text()
       let payload: { error?: string; courseId?: string } = {}

@@ -1,0 +1,12 @@
+{
+  "functions": {
+    "app/api/course-creation/upload/route.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    },
+    "app/api/course-creation/ai/route.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    }
+  }
+}

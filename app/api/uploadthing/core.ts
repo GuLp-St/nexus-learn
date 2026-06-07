@@ -15,13 +15,13 @@ export const ourFileRouter = {
       console.log("Upload complete for avatarImage:", file.ufsUrl);
       return { fileUrl: file.ufsUrl };
     }),
-  courseMaterials: f({
-    blob: { maxFileSize: "8MB", maxFileCount: 10 },
-  })
-    .onUploadComplete(async ({ metadata, file }) => {
-      console.log("Upload complete for courseMaterials:", file.ufsUrl);
-      return { fileUrl: file.ufsUrl };
-    }),
+  courseMaterials: f(
+    { blob: { maxFileSize: "8MB", maxFileCount: 10 } },
+    { awaitServerData: false }
+  ).onUploadComplete(async ({ metadata, file }) => {
+    console.log("Upload complete for courseMaterials:", file.ufsUrl);
+    return { fileUrl: file.ufsUrl };
+  }),
 } satisfies FileRouter;
 
 export type OurFileRouter = typeof ourFileRouter;

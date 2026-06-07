@@ -793,7 +793,7 @@ Requirements:
 - STRICT BLOCK ORDER: alternate text → interaction → text → interaction. First block MUST be "text". Never two text or two interactions in a row.
 - Randomize interaction types — vary swipe, reorder, fill_blank, bug_hunter, matching, chat_sim.
 - Generate exactly 7 facts in the "facts" array.
-- Each text block SHOULD include a "reference" when grounded in source material: use url for web sources, or fileName+page for uploaded materials
+- EVERY text block MUST include a "reference" object: use url for web sources, or fileName+page for uploaded materials. Never omit reference on a text block.
 - Images (0 or 1 per text block, never required on every block):
   - If uploaded material images are listed: add markdown ![description](url) only on text blocks where a visual clearly helps. Use a different image per block when multiple are provided. Do NOT use illustrationPrompt on blocks that already embed an uploaded image.
   - If NO uploaded images: add illustrationPrompt on text blocks where an AI diagram would help (0–1 per block, typically 1–3 per lesson). Omit illustrationPrompt on other blocks.

@@ -20,6 +20,9 @@ interface LessonBlockPanelProps {
   courseId: string
   moduleIndex: number
   lessonIndex: number
+  courseTitle?: string
+  moduleTitle?: string
+  lessonTitle?: string
   isPast?: boolean
   readOnly?: boolean
   canContinue?: boolean
@@ -39,6 +42,9 @@ export function LessonBlockPanel({
   canContinue,
   onContinue,
   borderClass = "border-2 border-primary",
+  courseTitle,
+  moduleTitle,
+  lessonTitle,
 }: LessonBlockPanelProps) {
   const [noteOpen, setNoteOpen] = useState(false)
   const [note, setNote] = useState("")
@@ -102,35 +108,39 @@ export function LessonBlockPanel({
     setHasConflict(false)
   }
 
-  const ref = block.reference
+  const ref = block.reference ?? {
+    label: lessonTitle
+      ? `${lessonTitle}${moduleTitle ? ` · ${moduleTitle}` : ""}`
+      : courseTitle || "Course material",
+  }
 
   return (
     <Card className={isPast && !readOnly ? "opacity-60" : readOnly ? "border" : borderClass}>
       <CardContent className="p-6 space-y-3">
         <MarkdownRenderer content={block.content} />
 
-        {ref && (
-          <div className="text-xs text-muted-foreground border-t pt-2">
-            <span className="font-medium">Reference: </span>
+        <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
+            <span className="font-medium text-foreground">Source: </span>
             {ref.url ? (
               <a
                 href={ref.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-primary hover:underline inline-flex items-center gap-1"
+                className="text-primary hover:underline inline-flex items-center gap-1 font-medium"
               >
-                {ref.label}
-                <ExternalLink className="h-3 w-3" />
+                {ref.label || ref.url}
+                <ExternalLink className="h-3 w-3 shrink-0" />
               </a>
-            ) : (
-              <span>
+            ) : ref.fileName ? (
+              <span className="text-foreground font-medium">
                 {ref.fileName}
-                {ref.page ? `, page ${ref.page}` : ""}
+                {ref.page ? ` · page ${ref.page}` : ""}
                 {ref.label ? ` — ${ref.label}` : ""}
               </span>
+            ) : (
+              <span className="text-foreground font-medium">{ref.label}</span>
             )}
-          </div>
-        )}
+        </div>
 
         <div>
           <button

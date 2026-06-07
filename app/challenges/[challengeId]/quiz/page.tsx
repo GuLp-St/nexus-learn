@@ -21,9 +21,16 @@ import {
   markChallengeReady,
   scheduleLiveMatchStart,
   updateChallengeLiveProgress,
-  sendChallengeSabotage,
+  useChallengePowerAction,
+  updateChallengeComboStreak,
+  isPoweredChallenge,
+  normalizeChallengeSettings,
+  CHALLENGE_ACTIONS_PER_PLAYER,
   Challenge,
 } from "@/lib/challenge-utils"
+import { applyPowerEffectsToQuestion } from "@/lib/challenge-powered-actions"
+import type { PowerActionType } from "@/lib/challenge-powered-actions"
+import { ChallengeActionsPanel } from "@/components/challenge/challenge-actions-panel"
 import {
   QuizQuestion,
   createQuizAttempt,
@@ -48,7 +55,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Lightbulb, Zap as ZapIcon } from "lucide-react"
+import { Lightbulb } from "lucide-react"
 
 const TAB_AWAY_GRACE_MS = 5000
 const LEAVE_CONFIRM_MESSAGE =
@@ -81,7 +88,7 @@ export default function ChallengeQuizPage() {
   const [liveCountdown, setLiveCountdown] = useState<number | null>(null)
   const [accepting, setAccepting] = useState(false)
   const [hintOpen, setHintOpen] = useState(false)
-  const [sabotageCooldown, setSabotageCooldown] = useState(false)
+  const [actionBusy, setActionBusy] = useState(false)
   const liveStartTriggeredRef = useRef(false)
 
   const params = useParams()
@@ -93,15 +100,26 @@ export default function ChallengeQuizPage() {
 
   const isChallenger = challenge?.challengerId === user?.uid
   const isChallenged = challenge?.challengedId === user?.uid
-  const isLive = challenge?.settings?.mode === "live"
-  const challengeSettings = challenge?.settings
+  const challengeSettings = normalizeChallengeSettings(challenge?.settings)
+  const isPowered = isPoweredChallenge(challengeSettings)
+  const actionsLeft = isChallenger
+    ? (challenge?.challengerActionsLeft ?? CHALLENGE_ACTIONS_PER_PLAYER)
+    : (challenge?.challengedActionsLeft ?? CHALLENGE_ACTIONS_PER_PLAYER)
+
+  const selfEffects = isChallenger
+    ? challenge?.challengerEffects
+    : challenge?.challengedEffects
+
+  const liveComboStreak = isChallenger
+    ? challenge?.challengerComboStreak
+    : challenge?.challengedComboStreak
 
   const opponentLiveIndex = isChallenger
     ? challenge?.challengedLiveIndex
     : challenge?.challengerLiveIndex
 
   const sabotageActive =
-    isLive &&
+    isPowered &&
     !!challenge?.sabotageUntil &&
     challenge.sabotageUntil.toMillis() > Date.now() &&
     challenge.sabotageBy !== user?.uid
@@ -215,7 +233,7 @@ export default function ChallengeQuizPage() {
 
   const beginQuiz = async () => {
     if (!user || !challenge) return
-    if (isLive) {
+    if (isPowered) {
       if (challenge.status !== "accepted") {
         setStartError("Waiting for your opponent to accept the challenge.")
         return
@@ -307,7 +325,7 @@ export default function ChallengeQuizPage() {
   }
 
   useEffect(() => {
-    if (!challenge || !isLive || phase !== "ready") return
+    if (!challenge || !isPowered || phase !== "ready") return
     if (
       challenge.status === "accepted" &&
       challenge.challengerReady &&
@@ -315,10 +333,10 @@ export default function ChallengeQuizPage() {
     ) {
       void scheduleLiveMatchStart(challengeId)
     }
-  }, [challenge, isLive, phase, challengeId])
+  }, [challenge, isPowered, phase, challengeId])
 
   useEffect(() => {
-    if (!challenge?.liveStartAt || phase !== "ready" || !isLive) {
+    if (!challenge?.liveStartAt || phase !== "ready" || !isPowered) {
       setLiveCountdown(null)
       return
     }
@@ -339,12 +357,12 @@ export default function ChallengeQuizPage() {
     tick()
     const id = setInterval(tick, 200)
     return () => clearInterval(id)
-  }, [challenge?.liveStartAt, phase, isLive])
+  }, [challenge?.liveStartAt, phase, isPowered])
 
   useEffect(() => {
-    if (phase !== "playing" || !isLive || !user) return
+    if (phase !== "playing" || !isPowered || !user) return
     void updateChallengeLiveProgress(challengeId, user.uid, currentQuestionIndex)
-  }, [phase, isLive, user, challengeId, currentQuestionIndex])
+  }, [phase, isPowered, user, challengeId, currentQuestionIndex])
 
   useEffect(() => {
     if (phase !== "playing" || !quizStartTime) return
@@ -355,18 +373,42 @@ export default function ChallengeQuizPage() {
   }, [phase, quizStartTime])
 
   const applyQuestionFeedback = useCallback(
-    (score: QuestionScore) => {
+    async (score: QuestionScore, questionId: string) => {
       if (challengeSettings?.immediateFeedback === false) return
       const isCorrect =
         score.correct || (score.marks !== undefined && score.marks >= 2)
       if (isCorrect) {
-        if (challengeSettings?.combo !== false) fx.onCorrectAnswer()
+        if (challengeSettings?.combo !== false) {
+          const nextStreak = fx.comboStreak + 1
+          fx.onCorrectAnswer()
+          if (isPowered && user) {
+            void updateChallengeComboStreak(challengeId, user.uid, nextStreak)
+          }
+        }
+      } else if (selfEffects?.comboShield) {
+        const ref = doc(db, "challenges", challengeId)
+        const key = isChallenger ? "challengerEffects" : "challengedEffects"
+        const { updateDoc: firestoreUpdate } = await import("firebase/firestore")
+        await firestoreUpdate(ref, {
+          [key]: { ...selfEffects, comboShield: false },
+        })
+        toast.message("Combo shield blocked the break!")
       } else {
         fx.onWrongAnswer()
+        if (isPowered && user) {
+          void updateChallengeComboStreak(challengeId, user.uid, 0)
+        }
       }
     },
-    [fx, challengeSettings]
+    [fx, challengeSettings, isPowered, user, challengeId, isChallenger, selfEffects]
   )
+
+  useEffect(() => {
+    if (!isPowered || liveComboStreak === undefined) return
+    if (liveComboStreak === 0 && fx.comboStreak > 0) {
+      fx.resetActiveCombo()
+    }
+  }, [liveComboStreak, isPowered, fx])
 
   const gradeQuestion = useCallback(
     async (question: QuizQuestion): Promise<QuestionScore | null> => {
@@ -573,9 +615,30 @@ export default function ChallengeQuizPage() {
     setAnswers((prev) => ({ ...prev, [questionId]: answer }))
   }
 
+  const handlePowerAction = async (action: PowerActionType) => {
+    if (!user || !challenge) return
+    const raw = questions[currentQuestionIndex]
+    if (!raw) return
+    const next = questions[currentQuestionIndex + 1]
+    setActionBusy(true)
+    try {
+      await useChallengePowerAction(challengeId, user.uid, action, {
+        currentQuestionId: raw.questionId,
+        nextQuestionId: next?.questionId,
+        extraOptions: next?.extraOptions,
+      })
+      toast.success("Action used!")
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Action failed")
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
   const handleNext = async () => {
     const q = questions[currentQuestionIndex]
     if (!q || gradingNext || submitting) return
+    const displayQ = applyPowerEffectsToQuestion(q, selfEffects)
 
     const userAnswer = answers[q.questionId]
     if (userAnswer === undefined || userAnswer === "") {
@@ -585,14 +648,14 @@ export default function ChallengeQuizPage() {
 
     setGradingNext(true)
     try {
-      const graded = await gradeQuestion(q)
+      const graded = await gradeQuestion(displayQ)
       if (!graded) {
         toast.error("Select or enter an answer before continuing.")
         return
       }
 
       setScores((prev) => ({ ...prev, [q.questionId]: graded }))
-      applyQuestionFeedback(graded)
+      void applyQuestionFeedback(graded, q.questionId)
 
       await new Promise((r) => setTimeout(r, 400))
 
@@ -607,6 +670,7 @@ export default function ChallengeQuizPage() {
   const handleFinalSubmit = async () => {
     const q = questions[currentQuestionIndex]
     if (!q || gradingNext || submitting) return
+    const displayQ = applyPowerEffectsToQuestion(q, selfEffects)
 
     const userAnswer = answers[q.questionId]
     if (userAnswer === undefined || userAnswer === "") {
@@ -617,13 +681,13 @@ export default function ChallengeQuizPage() {
     if (!scores[q.questionId]) {
       setGradingNext(true)
       try {
-        const graded = await gradeQuestion(q)
+        const graded = await gradeQuestion(displayQ)
         if (!graded) {
           toast.error("Select or enter an answer before submitting.")
           return
         }
         setScores((prev) => ({ ...prev, [q.questionId]: graded }))
-        applyQuestionFeedback(graded)
+        void applyQuestionFeedback(graded, q.questionId)
         await new Promise((r) => setTimeout(r, 400))
       } finally {
         setGradingNext(false)
@@ -709,9 +773,20 @@ export default function ChallengeQuizPage() {
     )
   }
 
-  const currentQuestion = questions[currentQuestionIndex]
+  const rawQuestion = questions[currentQuestionIndex]
+  const currentQuestion = rawQuestion
+    ? applyPowerEffectsToQuestion(rawQuestion, selfEffects)
+    : null
   const progress = ((currentQuestionIndex + 1) / questions.length) * 100
   const isLastQuestion = currentQuestionIndex === questions.length - 1
+
+  if (!currentQuestion) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Spinner className="h-8 w-8" />
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-background relative">
@@ -727,9 +802,9 @@ export default function ChallengeQuizPage() {
         showTimer={challengeSettings?.timer !== false}
         showCombo={challengeSettings?.combo !== false}
         showFlash={challengeSettings?.immediateFeedback !== false}
-        opponentNickname={isLive ? friendNickname : undefined}
-        opponentQuestion={isLive ? opponentLiveIndex ?? null : undefined}
-        opponentTotal={isLive ? questions.length : undefined}
+        opponentNickname={isPowered ? friendNickname : undefined}
+        opponentQuestion={isPowered ? opponentLiveIndex ?? null : undefined}
+        opponentTotal={isPowered ? questions.length : undefined}
         sabotageActive={sabotageActive}
       />
       <SidebarNav currentPath="/friends" />
@@ -766,41 +841,24 @@ export default function ChallengeQuizPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-xl font-semibold flex-1">{currentQuestion.question}</h2>
                   <div className="flex gap-2 shrink-0">
-                    {challengeSettings?.hint && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5"
-                        onClick={() => setHintOpen(true)}
-                      >
-                        <Lightbulb className="h-4 w-4" />
-                        Hint
-                      </Button>
-                    )}
-                    {isLive && challengeSettings?.sabotage && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 text-orange-600 border-orange-500/40"
-                        disabled={sabotageCooldown}
-                        onClick={async () => {
-                          if (!user) return
-                          setSabotageCooldown(true)
-                          try {
-                            await sendChallengeSabotage(challengeId, user.uid)
-                            toast.success("Sabotage sent!")
-                          } catch (error: unknown) {
-                            toast.error(error instanceof Error ? error.message : "Sabotage failed")
-                          } finally {
-                            setTimeout(() => setSabotageCooldown(false), 30000)
-                          }
-                        }}
-                      >
-                        <ZapIcon className="h-4 w-4" />
-                        Sabotage
-                      </Button>
+                    {isPowered && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 h-8"
+                          onClick={() => setHintOpen(true)}
+                        >
+                          <Lightbulb className="h-4 w-4" />
+                          Hint
+                        </Button>
+                        <ChallengeActionsPanel
+                          actionsLeft={actionsLeft}
+                          disabled={actionBusy}
+                          onAction={handlePowerAction}
+                        />
+                      </>
                     )}
                   </div>
                 </div>
