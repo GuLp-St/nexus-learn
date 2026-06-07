@@ -24,6 +24,7 @@ import {
 import { mergeLessonFactsIntoCourseModule } from "@/lib/lesson-stream-course-context"
 import { LessonBlockPanel } from "@/components/lesson-block-panel"
 import { getCourseWithProgress, updateUserProgress, CourseWithProgress, ensureUserProgress, getLessonStreamProgress } from "@/lib/course-utils"
+import { getNextLessonAfterCurrent, pregenerateLesson } from "@/lib/pregenerate-lesson"
 import { useActivityTracking } from "@/hooks/use-activity-tracking"
 import {
   SwipeInteractionComponent,
@@ -80,6 +81,20 @@ export default function LessonPage() {
     lessonIndex,
     enabled: !!user && !!course && !!lessonStream,
   })
+
+  useEffect(() => {
+    if (!user || !course || readOnlyView) return
+    const isModuleUnlocked = (mi: number) => {
+      if (mi === 0) return true
+      const score = course.userProgress?.moduleQuizScores?.[mi - 1]
+      return typeof score === "number" && score > 50
+    }
+    const target = getNextLessonAfterCurrent(course, moduleIndex, lessonIndex, isModuleUnlocked)
+    if (!target) return
+    void pregenerateLesson(user.uid, course, target.moduleIndex, target.lessonIndex).catch((err) =>
+      console.error("Background lesson pregenerate failed:", err)
+    )
+  }, [user, course, moduleIndex, lessonIndex, readOnlyView])
 
   useEffect(() => {
     if (authLoading || !user) return

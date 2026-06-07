@@ -5,11 +5,8 @@ import {
   generateCourseQuizQuestions,
   generateModuleQuizQuestions,
 } from "./quiz-generator"
-import {
-  saveQuizQuestions,
-  selectRandomQuestions,
-  type QuizQuestion,
-} from "./quiz-utils"
+import { selectRandomQuestions, type QuizQuestion } from "./quiz-utils"
+import { saveQuizQuestionsAdmin } from "./quiz-prep-server"
 
 const MODULE_QUIZ_COUNT = 10
 const FINAL_QUIZ_COUNT = 20
@@ -60,6 +57,6 @@ export async function runQuizPrepPipeline(
     throw new Error("No questions available")
   }
 
-  await saveQuizQuestions(generatedQuestions)
+  await saveQuizQuestionsAdmin(generatedQuestions)
   return generatedQuestions.map((q) => q.questionId)
 }

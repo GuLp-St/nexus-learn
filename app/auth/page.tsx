@@ -1,9 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth"
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, getRedirectResult } from "firebase/auth"
 import { auth, db } from "@/lib/firebase"
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore"
+import { doc, setDoc, serverTimestamp } from "firebase/firestore"
+import { ensureGoogleUserProfile, signInWithGoogle } from "@/lib/google-auth"
+import { getAuthErrorMessage } from "@/lib/auth-errors"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -52,6 +54,36 @@ export default function AuthPage() {
     }
   }, [user, loading])
 
+  // Complete Google redirect sign-in when returning from Google
+  useEffect(() => {
+    let cancelled = false
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (cancelled || !result?.user) return
+        const savedNickname =
+          typeof sessionStorage !== "undefined"
+            ? sessionStorage.getItem("google-signup-nickname") ?? undefined
+            : undefined
+        if (savedNickname) sessionStorage.removeItem("google-signup-nickname")
+        await ensureGoogleUserProfile(result.user, {
+          nickname: savedNickname || nickname,
+        })
+        const returnUrl = sessionStorage.getItem("auth-return-url")
+        sessionStorage.removeItem("auth-return-url")
+        router.push(returnUrl && returnUrl !== "/auth" ? returnUrl : "/")
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        const code = err && typeof err === "object" ? (err as { code?: string }).code : undefined
+        if (code && code !== "auth/null-user") {
+          setError(getAuthErrorMessage(err, "Google sign-in failed"))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [router, nickname])
+
   // Redirect if already logged in — restore previous page when possible
   useEffect(() => {
     if (!loading && user) {
@@ -73,37 +105,21 @@ export default function AuthPage() {
 
   const handleGoogleAuth = async () => {
     setError("")
+    if (activeTab === "signup" && !nickname.trim()) {
+      setError("Choose a nickname to complete sign up with Google")
+      return
+    }
     setIsSubmitting(true)
     try {
-      const provider = new GoogleAuthProvider()
-      const result = await signInWithPopup(auth, provider)
-      const gUser = result.user
-      const userRef = doc(db, "users", gUser.uid)
-      const existing = await getDoc(userRef)
-
-      if (!existing.exists()) {
-        if (activeTab === "signup" && !nickname.trim()) {
-          setError("Choose a nickname to complete sign up with Google")
-          setIsSubmitting(false)
-          return
-        }
-        await setDoc(userRef, {
-          nickname: nickname.trim() || gUser.displayName?.split(" ")[0] || "Learner",
-          email: gUser.email,
-          xp: 0,
-          dailyLoginStreak: 0,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        })
-        const { checkAndAwardDailyLoginXP } = await import("@/lib/xp-utils")
-        await checkAndAwardDailyLoginXP(gUser.uid)
+      const { method } = await signInWithGoogle({ nickname })
+      if (method === "redirect") {
+        return
       }
-
       const returnUrl = sessionStorage.getItem("auth-return-url")
       sessionStorage.removeItem("auth-return-url")
       router.push(returnUrl && returnUrl !== "/auth" ? returnUrl : "/")
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Google sign-in failed")
+      setError(getAuthErrorMessage(err, "Google sign-in failed"))
     } finally {
       setIsSubmitting(false)
     }
@@ -119,8 +135,8 @@ export default function AuthPage() {
       const returnUrl = sessionStorage.getItem("auth-return-url")
       sessionStorage.removeItem("auth-return-url")
       router.push(returnUrl && returnUrl !== "/auth" ? returnUrl : "/")
-    } catch (err: any) {
-      setError(err.message || "Failed to sign in")
+    } catch (err: unknown) {
+      setError(getAuthErrorMessage(err, "Failed to sign in"))
     } finally {
       setIsSubmitting(false)
     }
@@ -166,8 +182,8 @@ export default function AuthPage() {
       await checkAndAwardDailyLoginXP(user.uid)
 
       router.push("/")
-    } catch (err: any) {
-      setError(err.message || "Failed to sign up")
+    } catch (err: unknown) {
+      setError(getAuthErrorMessage(err, "Failed to sign up"))
     } finally {
       setIsSubmitting(false)
     }

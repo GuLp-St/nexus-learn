@@ -5,6 +5,25 @@ import type { LessonMaterialImage } from "./lesson-material-images"
 import { getUserLessonStream, saveUserLessonStream } from "./lesson-stream-store"
 import type { CourseWithProgress } from "./course-utils"
 
+/** Lesson immediately after the one the user is currently viewing. */
+export function getNextLessonAfterCurrent(
+  course: CourseWithProgress,
+  moduleIndex: number,
+  lessonIndex: number,
+  isModuleUnlocked: (moduleIndex: number) => boolean
+): { moduleIndex: number; lessonIndex: number } | null {
+  const mod = course.modules[moduleIndex]
+  if (!mod) return null
+  if (lessonIndex + 1 < mod.lessons.length) {
+    return { moduleIndex, lessonIndex: lessonIndex + 1 }
+  }
+  const nextMod = moduleIndex + 1
+  if (nextMod < course.modules.length && isModuleUnlocked(nextMod)) {
+    return { moduleIndex: nextMod, lessonIndex: 0 }
+  }
+  return null
+}
+
 export function getPregenerateTarget(
   nextLesson: { moduleIndex: number; lessonIndex: number } | null,
   course: CourseWithProgress,

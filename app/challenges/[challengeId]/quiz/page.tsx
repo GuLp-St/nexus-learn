@@ -885,7 +885,7 @@ export default function ChallengeQuizPage() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-screen bg-background relative">
+    <div className="flex flex-col lg:flex-row h-dvh min-h-0 bg-background relative overflow-hidden">
       <ChallengeTabAwayModal open={tabAwayOpen} secondsLeft={tabAwaySeconds} />
       <ChallengeQuizOverlay
         answerFx={fx.answerFx}
@@ -899,9 +899,9 @@ export default function ChallengeQuizPage() {
         sabotageActive={sabotageActive}
       />
       <SidebarNav currentPath="/friends" />
-      <main className="flex-1 max-h-dvh overflow-hidden">
-        <div className="p-2 sm:p-4 lg:p-8 h-full">
-          <div className="mx-auto max-w-3xl h-full flex flex-col gap-2 sm:gap-4">
+      <main className="flex-1 min-h-0 overflow-hidden">
+        <div className="p-2 sm:p-4 lg:p-8 h-full min-h-0">
+          <div className="mx-auto max-w-3xl h-full min-h-0 flex flex-col gap-2 sm:gap-4">
             <div className="flex items-center gap-2 shrink-0">
               <Button
                 variant="ghost"
@@ -949,36 +949,40 @@ export default function ChallengeQuizPage() {
               </div>
             )}
 
-            <Card className={cn("flex-1 min-h-0 flex flex-col", questionShake && "challenge-question-shake")}>
-              <CardContent className="p-3 sm:p-5 space-y-3 sm:space-y-4 flex-1 flex flex-col">
-                <h2 className="text-base sm:text-xl font-semibold leading-snug">{currentQuestion.question}</h2>
+            <Card className={cn("flex-1 min-h-0 flex flex-col overflow-hidden", questionShake && "challenge-question-shake")}>
+              <CardContent className="p-3 sm:p-5 flex-1 min-h-0 flex flex-col gap-2 sm:gap-3">
+                <h2 className="text-base sm:text-xl font-semibold leading-snug shrink-0">
+                  {currentQuestion.question}
+                </h2>
 
-                {currentQuestion.type === "objective" && currentQuestion.options && (
-                  <RadioGroup
-                    value={answers[currentQuestion.questionId]?.toString() || ""}
-                    onValueChange={(value) =>
-                      handleAnswerChange(currentQuestion.questionId, value)
-                    }
-                    className="space-y-2"
-                  >
-                    {currentQuestion.options.map((option, idx) => (
-                      <div key={idx} className="flex items-center space-x-2">
-                        <RadioGroupItem value={option} id={`option-${idx}`} />
-                        <Label htmlFor={`option-${idx}`} className="cursor-pointer flex-1 text-sm">
-                          {option}
-                        </Label>
-                      </div>
-                    ))}
-                  </RadioGroup>
-                )}
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-0.5">
+                  {currentQuestion.type === "objective" && currentQuestion.options && (
+                    <RadioGroup
+                      value={answers[currentQuestion.questionId]?.toString() || ""}
+                      onValueChange={(value) =>
+                        handleAnswerChange(currentQuestion.questionId, value)
+                      }
+                      className="space-y-2"
+                    >
+                      {currentQuestion.options.map((option, idx) => (
+                        <div key={idx} className="flex items-start space-x-2">
+                          <RadioGroupItem value={option} id={`option-${idx}`} className="mt-0.5" />
+                          <Label htmlFor={`option-${idx}`} className="cursor-pointer flex-1 text-sm leading-snug">
+                            {option}
+                          </Label>
+                        </div>
+                      ))}
+                    </RadioGroup>
+                  )}
 
-                {currentQuestion.type === "subjective" && (
-                  <p className="text-sm text-muted-foreground">
-                    Subjective questions are not used in challenges.
-                  </p>
-                )}
+                  {currentQuestion.type === "subjective" && (
+                    <p className="text-sm text-muted-foreground">
+                      Subjective questions are not used in challenges.
+                    </p>
+                  )}
+                </div>
 
-                <div className="flex items-center justify-between gap-2 mt-auto pt-1">
+                <div className="flex items-center justify-between gap-2 shrink-0 pt-2 border-t border-border/50">
                   {challengeSettings?.timer !== false ? (
                     <div
                       className={cn(

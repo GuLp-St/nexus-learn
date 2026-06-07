@@ -90,5 +90,14 @@ export async function runAiCourseCreationPipeline(
     console.error("Failed to send course ready notification:", err)
   }
 
+  try {
+    const { pregenerateFirstLessonForCourse } = await import("./pregenerate-lesson-server")
+    void pregenerateFirstLessonForCourse(userId, courseId).catch((err) =>
+      console.error("First lesson pregenerate failed:", err)
+    )
+  } catch (err) {
+    console.error("Failed to start first lesson pregenerate:", err)
+  }
+
   return courseId
 }

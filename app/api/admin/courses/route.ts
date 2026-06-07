@@ -18,10 +18,10 @@ export async function GET(request: NextRequest) {
         .collection("courses")
         .where("isPublic", "==", true)
         .orderBy("publishedAt", "desc")
-        .limit(100)
+        .limit(500)
         .get()
     } catch {
-      snap = await db.collection("courses").where("isPublic", "==", true).limit(100).get()
+      snap = await db.collection("courses").where("isPublic", "==", true).limit(500).get()
     }
 
     const courses = snap.docs.map((d) => {

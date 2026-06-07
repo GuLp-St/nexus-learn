@@ -1,7 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
-import { Globe, Trash2, EyeOff, Pencil } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Globe, Trash2, EyeOff, Pencil, Search, ArrowUpDown } from "lucide-react"
 import SidebarNav from "@/components/sidebar-nav"
 import { AdminGuard } from "@/components/admin/admin-guard"
 import { UniversalImagePicker } from "@/components/universal-image-picker"
@@ -10,6 +10,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -48,9 +55,19 @@ const DEFAULT_IMAGE_CONFIG: ImageConfig = {
   scale: 1,
 }
 
+type SortKey =
+  | "published_desc"
+  | "published_asc"
+  | "title_asc"
+  | "title_desc"
+  | "adds_desc"
+  | "rating_desc"
+
 export default function AdminCoursesPage() {
   const [courses, setCourses] = useState<PublicCourse[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [sortBy, setSortBy] = useState<SortKey>("published_desc")
   const [editCourse, setEditCourse] = useState<PublicCourse | null>(null)
   const [editTitle, setEditTitle] = useState("")
   const [editDesc, setEditDesc] = useState("")
@@ -127,6 +144,48 @@ export default function AdminCoursesPage() {
     }
   }
 
+  const filteredCourses = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    let list = courses
+    if (q) {
+      list = courses.filter((c) => {
+        const haystack = [
+          c.title,
+          c.description,
+          c.id,
+          c.createdBy ?? "",
+          ...(c.tags ?? []),
+        ]
+          .join(" ")
+          .toLowerCase()
+        return haystack.includes(q)
+      })
+    }
+    const sorted = [...list]
+    switch (sortBy) {
+      case "title_asc":
+        sorted.sort((a, b) => a.title.localeCompare(b.title))
+        break
+      case "title_desc":
+        sorted.sort((a, b) => b.title.localeCompare(a.title))
+        break
+      case "adds_desc":
+        sorted.sort((a, b) => b.addedCount - a.addedCount)
+        break
+      case "rating_desc":
+        sorted.sort((a, b) => b.averageRating - a.averageRating)
+        break
+      case "published_asc":
+        sorted.sort((a, b) => (a.publishedAt ?? 0) - (b.publishedAt ?? 0))
+        break
+      case "published_desc":
+      default:
+        sorted.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0))
+        break
+    }
+    return sorted
+  }, [courses, searchQuery, sortBy])
+
   const deleteCourse = async () => {
     if (!deleteId) return
     setSaving(true)
@@ -166,7 +225,37 @@ export default function AdminCoursesPage() {
                 <CardDescription>Edit metadata, unpublish, or permanently delete.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {courses.map((c) => (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search title, tags, ID, creator…"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
+                    <SelectTrigger className="w-full sm:w-[200px]">
+                      <ArrowUpDown className="h-4 w-4 mr-2 shrink-0" />
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="published_desc">Newest published</SelectItem>
+                      <SelectItem value="published_asc">Oldest published</SelectItem>
+                      <SelectItem value="title_asc">Title A → Z</SelectItem>
+                      <SelectItem value="title_desc">Title Z → A</SelectItem>
+                      <SelectItem value="adds_desc">Most adds</SelectItem>
+                      <SelectItem value="rating_desc">Highest rating</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {!loading && searchQuery && (
+                  <p className="text-xs text-muted-foreground">
+                    Showing {filteredCourses.length} of {courses.length} courses
+                  </p>
+                )}
+                {filteredCourses.map((c) => (
                   <div
                     key={c.id}
                     className="rounded-lg border border-border p-4 space-y-2"
@@ -231,6 +320,11 @@ export default function AdminCoursesPage() {
                 {!loading && courses.length === 0 && (
                   <p className="text-center text-sm text-muted-foreground py-8">
                     No published courses yet
+                  </p>
+                )}
+                {!loading && courses.length > 0 && filteredCourses.length === 0 && (
+                  <p className="text-center text-sm text-muted-foreground py-8">
+                    No courses match your search
                   </p>
                 )}
               </CardContent>

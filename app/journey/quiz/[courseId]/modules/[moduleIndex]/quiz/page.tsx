@@ -10,7 +10,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { QuizPreparingView } from "@/components/quiz-preparing-view"
-import { startQuizPrepInBackground, subscribeToQuizPrepJob } from "@/lib/quiz-prep-client"
+import { subscribeToQuizPrepJob } from "@/lib/quiz-prep-client"
+import { findActiveQuizPrepJob } from "@/lib/quiz-prep-job"
+import { startAttemptFromPrepJob } from "@/lib/quiz-prep-load"
 import Link from "next/link"
 import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
@@ -268,24 +270,41 @@ export default function ModuleQuizPage() {
           }
         }
 
-        setGenerating(true)
-        quizStartedRef.current = true
-        const idToken = await user.getIdToken()
-        const jobId = await startQuizPrepInBackground(
+        const prepJob = await findActiveQuizPrepJob(
           user.uid,
           courseId,
           "module",
-          moduleIndex,
-          courseWithProgress.title,
-          idToken
+          moduleIndex
         )
-        setPrepJobId(jobId)
+
+        if (prepJob?.status === "completed" && prepJob.questionIds?.length) {
+          quizStartedRef.current = true
+          const { questions: qs, attemptId: aid } = await startAttemptFromPrepJob(
+            user.uid,
+            courseId,
+            "module",
+            moduleIndex,
+            prepJob
+          )
+          setQuestions(qs)
+          setAttemptId(aid)
+          setLoading(false)
+          return
+        }
+
+        if (prepJob && (prepJob.status === "pending" || prepJob.status === "running")) {
+          quizStartedRef.current = true
+          setPrepJobId(prepJob.id)
+          setGenerating(true)
+          setLoading(false)
+          return
+        }
+
+        router.push(`/journey/${courseId}`)
       } catch (error) {
         console.error("Error loading quiz:", error)
         setError(error instanceof Error ? error.message : "Failed to load quiz.")
-      } finally {
         setLoading(false)
-        setGenerating(false)
       }
     }
 
@@ -309,26 +328,20 @@ export default function ModuleQuizPage() {
 
       prepLoadedRef.current = true
       try {
-        const restored = await fetchQuizQuestionsByIds(courseId, job.questionIds)
-        if (restored.length === 0) {
-          throw new Error("Failed to load generated questions")
-        }
-        setQuestions(restored)
+        const { questions: qs, attemptId: aid } = await startAttemptFromPrepJob(
+          user.uid,
+          courseId,
+          "module",
+          moduleIndex,
+          job
+        )
+        setQuestions(qs)
+        setAttemptId(aid)
         if (isChallengeMode) {
           const startTime = Date.now()
           setQuizStartTime(startTime)
           quizStartTimeRef.current = startTime
         }
-        const newAttemptId = await createQuizAttempt(
-          user.uid,
-          courseId,
-          "module",
-          restored.map((q) => q.questionId),
-          moduleIndex,
-          null,
-          false
-        )
-        setAttemptId(newAttemptId)
       } catch (err) {
         console.error("Error loading prepared quiz:", err)
         setError(err instanceof Error ? err.message : "Failed to load quiz questions.")

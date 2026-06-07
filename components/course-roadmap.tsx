@@ -24,7 +24,15 @@ import { useXP } from "@/components/xp-context-provider"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 import { getUserNexon, spendNexon } from "@/lib/nexon-utils"
 import { db } from "@/lib/firebase"
-import { doc, updateDoc } from "firebase/firestore"
+import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore"
+import { startQuizPrepInBackground } from "@/lib/quiz-prep-client"
+import type { QuizPrepJob } from "@/lib/quiz-prep-job"
+import {
+  getQuizPrepFor,
+  isQuizPrepGenerating,
+  isQuizPrepReady,
+  quizPrepKey,
+} from "@/lib/quiz-prep-roadmap"
 import {
   getEffectiveModuleQuizScore,
   isModuleQuizPassed,
@@ -175,7 +183,8 @@ interface ModuleLevelCardProps {
   pregenerateTarget?: { moduleIndex: number; lessonIndex: number } | null
   pregeneratedLessons: Set<string>
   pregeneratingLesson: string | null
-  onPregenerate: (moduleIndex: number, lessonIndex: number) => void
+  moduleQuizPrep?: QuizPrepJob
+  onRequestModuleQuizStart: (moduleIndex: number) => Promise<void>
   incompleteAttempt: (QuizAttempt & { courseTitle?: string }) | null
   onRefresh?: () => void
 }
@@ -193,7 +202,8 @@ function ModuleLevelCard({
   pregenerateTarget,
   pregeneratedLessons,
   pregeneratingLesson,
-  onPregenerate,
+  moduleQuizPrep,
+  onRequestModuleQuizStart,
   incompleteAttempt,
   onRefresh,
 }: ModuleLevelCardProps) {
@@ -377,18 +387,14 @@ function ModuleLevelCard({
     const isPregenerated = pregeneratedLessons.has(key)
     const isPregenerating = pregeneratingLesson === key
 
-    if (isLockedLesson && isPregenerateTarget) {
-      if (isPregenerating) return
-      if (isPregenerated) {
-        toast.message("Complete your current lesson first — the next one is ready!")
-        return
-      }
-      onPregenerate(moduleIndex, lessonIndex)
-      return
-    }
-
     if (isLockedLesson) {
-      toast.error("Finish previous lesson first.")
+      if (isPregenerateTarget && isPregenerating) {
+        toast.message("Next lesson is being prepared…")
+      } else if (isPregenerateTarget && isPregenerated) {
+        toast.message("Complete your current lesson first — the next one is ready!")
+      } else {
+        toast.error("Finish previous lesson first.")
+      }
       return
     }
     
@@ -425,28 +431,32 @@ function ModuleLevelCard({
     setShowQuizModal(true)
   }
 
-  const handleStartQuiz = () => {
-    // If this quiz is active, go directly to resume
+  const handleStartQuiz = async () => {
     if (isOngoingThisQuiz) {
       router.push(`/journey/quiz/${course.id}/modules/${moduleIndex}/quiz`)
       return
     }
 
-    // If another quiz is active, show conflict modal
     if (incompleteAttempt && !isOngoingThisQuiz) {
       setShowConflictModal(true)
       return
     }
 
-    // Check cooldown
     if (cooldownRemaining > 0) {
       toast.error(`Quiz is on cooldown. Please wait ${formatCooldownTime(cooldownRemaining)}`)
       return
     }
 
-    // Otherwise, start the quiz
-    router.push(`/journey/quiz/${course.id}/modules/${moduleIndex}/quiz`)
+    if (isQuizPrepGenerating(moduleQuizPrep)) {
+      toast.message("Quiz is generating — you'll get a notification when it's ready.")
+      return
+    }
+
+    await onRequestModuleQuizStart(moduleIndex)
   }
+
+  const moduleQuizGenerating = isQuizPrepGenerating(moduleQuizPrep)
+  const moduleQuizReady = isQuizPrepReady(moduleQuizPrep)
 
     return (
     <motion.div
@@ -683,10 +693,10 @@ function ModuleLevelCard({
                     </span>
                   </div>
                 )}
-                {isPregenerateTarget && isLockedLesson && !isPregenerating && (
+                {isPregenerateTarget && isLockedLesson && !isPregenerating && isPregenerated && (
                   <div className="absolute left-1/2 top-full mt-2 z-20 -translate-x-1/2 pointer-events-none">
                     <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-md whitespace-nowrap">
-                      {isPregenerated ? "Ready" : "Pregenerate"}
+                      Ready
                     </span>
                   </div>
                 )}
@@ -959,12 +969,22 @@ function ModuleLevelCard({
                 className="w-full sm:w-auto"
                 onClick={() => {
                   setShowQuizModal(false)
-                  handleStartQuiz()
+                  void handleStartQuiz()
                 }}
-                disabled={!allLessonsCompleted || isLocked}
+                disabled={!allLessonsCompleted || isLocked || moduleQuizGenerating}
               >
-                <Play className="h-4 w-4 mr-2" />
-                {isOngoingThisQuiz ? "Resume Quiz" : "Start Quiz"}
+                {moduleQuizGenerating ? (
+                  <Spinner className="h-4 w-4 mr-2" />
+                ) : (
+                  <Play className="h-4 w-4 mr-2" />
+                )}
+                {isOngoingThisQuiz
+                  ? "Resume Quiz"
+                  : moduleQuizGenerating
+                    ? "Generating…"
+                    : moduleQuizReady
+                      ? "Start Quiz"
+                      : "Start Quiz"}
               </Button>
             )}
           </DialogFooter>
@@ -1175,11 +1195,22 @@ interface FinalExamCardProps {
   quizAttempts: QuizAttempt[]
   isLocked: boolean
   allModulesPassed: boolean
+  courseQuizPrep?: QuizPrepJob
+  onRequestFinalQuizStart: () => Promise<void>
   incompleteAttempt: (QuizAttempt & { courseTitle?: string }) | null
   onRefresh?: () => void
 }
 
-function FinalExamCard({ course, quizAttempts, isLocked, allModulesPassed, incompleteAttempt, onRefresh }: FinalExamCardProps) {
+function FinalExamCard({
+  course,
+  quizAttempts,
+  isLocked,
+  allModulesPassed,
+  courseQuizPrep,
+  onRequestFinalQuizStart,
+  incompleteAttempt,
+  onRefresh,
+}: FinalExamCardProps) {
   const router = useRouter()
   const { user } = useAuth()
   const { showXPAward } = useXP()
@@ -1317,33 +1348,36 @@ function FinalExamCard({ course, quizAttempts, isLocked, allModulesPassed, incom
     }
   }
 
-  const handleStartQuiz = () => {
+  const handleStartQuiz = async () => {
     if (isLocked) {
       toast.error("Complete all modules with >50% to unlock the final exam!")
       return
     }
 
-    // If this quiz is active, go directly to resume
     if (isOngoingThisQuiz) {
       router.push(`/journey/quiz/${course.id}/quiz`)
       return
     }
 
-    // If another quiz is active, show conflict modal
     if (incompleteAttempt && !isOngoingThisQuiz) {
       setShowConflictModal(true)
       return
     }
 
-    // Check cooldown
     if (cooldownRemaining > 0) {
       toast.error(`Quiz is on cooldown. Please wait ${formatCooldownTime(cooldownRemaining)}`)
       return
     }
 
-    // Otherwise, start the quiz
-    router.push(`/journey/quiz/${course.id}/quiz`)
+    if (isQuizPrepGenerating(courseQuizPrep)) {
+      toast.message("Quiz is generating — you'll get a notification when it's ready.")
+      return
+    }
+
+    await onRequestFinalQuizStart()
   }
+
+  const finalQuizGenerating = isQuizPrepGenerating(courseQuizPrep)
 
     return (
     <motion.div
@@ -1524,10 +1558,19 @@ function FinalExamCard({ course, quizAttempts, isLocked, allModulesPassed, incom
             ) : (
               <Button
                 className="bg-yellow-500 hover:bg-yellow-600 text-yellow-950 font-bold px-8 shadow-lg shadow-yellow-500/20"
-                onClick={handleStartQuiz}
+                onClick={() => void handleStartQuiz()}
+                disabled={finalQuizGenerating}
               >
-                <Play className="h-4 w-4 mr-2" />
-                {isOngoingThisQuiz ? "Resume Quiz" : "Start Quiz"}
+                {finalQuizGenerating ? (
+                  <Spinner className="h-4 w-4 mr-2" />
+                ) : (
+                  <Play className="h-4 w-4 mr-2" />
+                )}
+                {isOngoingThisQuiz
+                  ? "Resume Quiz"
+                  : finalQuizGenerating
+                    ? "Generating…"
+                    : "Start Quiz"}
               </Button>
             )}
           </div>
@@ -1680,6 +1723,8 @@ export function CourseRoadmap({ course }: CourseRoadmapProps) {
   const [incompleteAttempt, setIncompleteAttempt] = useState<(QuizAttempt & { courseTitle?: string }) | null>(null)
   const [pregeneratedLessons, setPregeneratedLessons] = useState<Set<string>>(new Set())
   const [pregeneratingLesson, setPregeneratingLesson] = useState<string | null>(null)
+  const [quizPrepJobs, setQuizPrepJobs] = useState<Record<string, QuizPrepJob>>({})
+  const autoPregenStartedRef = useRef<Set<string>>(new Set())
   const activeCardRef = useRef<HTMLDivElement>(null)
   
   if (!course.userProgress) return null
@@ -1755,22 +1800,78 @@ export function CourseRoadmap({ course }: CourseRoadmapProps) {
     })
   }, [user, course.id, pregenerateTarget?.moduleIndex, pregenerateTarget?.lessonIndex])
 
-  const handlePregenerate = async (moduleIndex: number, lessonIndex: number) => {
+  useEffect(() => {
     if (!user) return
-    const key = lessonKey(moduleIndex, lessonIndex)
-    if (pregeneratingLesson || pregeneratedLessons.has(key)) return
+    const q = query(
+      collection(db, "quizPrepJobs"),
+      where("userId", "==", user.uid),
+      where("courseId", "==", course.id)
+    )
+    return onSnapshot(q, (snap) => {
+      const map: Record<string, QuizPrepJob> = {}
+      snap.docs.forEach((d) => {
+        const job = { id: d.id, ...d.data() } as QuizPrepJob
+        map[quizPrepKey(job.kind, job.moduleIndex)] = job
+      })
+      setQuizPrepJobs(map)
+    })
+  }, [user, course.id])
 
+  useEffect(() => {
+    if (!user || !pregenerateTarget) return
+    const key = lessonKey(pregenerateTarget.moduleIndex, pregenerateTarget.lessonIndex)
+    if (pregeneratedLessons.has(key) || autoPregenStartedRef.current.has(key)) return
+
+    autoPregenStartedRef.current.add(key)
     setPregeneratingLesson(key)
-    try {
-      await pregenerateLesson(user.uid, course, moduleIndex, lessonIndex)
-      setPregeneratedLessons((prev) => new Set(prev).add(key))
-      toast.success("Next lesson pregenerated — it will be ready when you finish the current one!")
-    } catch (err) {
-      console.error("Pregenerate failed:", err)
-      toast.error("Could not pregenerate lesson. Try again.")
-    } finally {
-      setPregeneratingLesson(null)
+    void pregenerateLesson(user.uid, course, pregenerateTarget.moduleIndex, pregenerateTarget.lessonIndex)
+      .then(() => {
+        setPregeneratedLessons((prev) => new Set(prev).add(key))
+      })
+      .catch((err) => {
+        console.error("Auto pregenerate failed:", err)
+        autoPregenStartedRef.current.delete(key)
+      })
+      .finally(() => {
+        setPregeneratingLesson((current) => (current === key ? null : current))
+      })
+  }, [
+    user,
+    course,
+    pregenerateTarget?.moduleIndex,
+    pregenerateTarget?.lessonIndex,
+    pregeneratedLessons,
+  ])
+
+  const requestModuleQuizStart = async (moduleIndex: number) => {
+    if (!user) return
+    const prep = getQuizPrepFor(quizPrepJobs, "module", moduleIndex)
+    if (isQuizPrepReady(prep)) {
+      router.push(`/journey/quiz/${course.id}/modules/${moduleIndex}/quiz`)
+      return
     }
+    const idToken = await user.getIdToken()
+    await startQuizPrepInBackground(
+      user.uid,
+      course.id,
+      "module",
+      moduleIndex,
+      course.title,
+      idToken
+    )
+    toast.message("Generating your quiz — feel free to check back later. We'll notify you when it's ready.")
+  }
+
+  const requestFinalQuizStart = async () => {
+    if (!user) return
+    const prep = getQuizPrepFor(quizPrepJobs, "course", null)
+    if (isQuizPrepReady(prep)) {
+      router.push(`/journey/quiz/${course.id}/quiz`)
+      return
+    }
+    const idToken = await user.getIdToken()
+    await startQuizPrepInBackground(user.uid, course.id, "course", null, course.title, idToken)
+    toast.message("Generating your quiz — feel free to check back later. We'll notify you when it's ready.")
   }
   
   // Find active module
@@ -1815,7 +1916,8 @@ export function CourseRoadmap({ course }: CourseRoadmapProps) {
               pregenerateTarget={pregenerateTarget}
               pregeneratedLessons={pregeneratedLessons}
               pregeneratingLesson={pregeneratingLesson}
-              onPregenerate={handlePregenerate}
+              moduleQuizPrep={getQuizPrepFor(quizPrepJobs, "module", moduleIndex)}
+              onRequestModuleQuizStart={requestModuleQuizStart}
               incompleteAttempt={incompleteAttempt}
               onRefresh={loadData}
             />
@@ -1830,6 +1932,8 @@ export function CourseRoadmap({ course }: CourseRoadmapProps) {
           quizAttempts={quizAttempts}
           isLocked={!allModulesPassed}
           allModulesPassed={allModulesPassed}
+          courseQuizPrep={getQuizPrepFor(quizPrepJobs, "course", null)}
+          onRequestFinalQuizStart={requestFinalQuizStart}
           incompleteAttempt={incompleteAttempt}
           onRefresh={loadData}
         />

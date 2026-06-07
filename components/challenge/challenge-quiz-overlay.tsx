@@ -97,7 +97,7 @@ export function ChallengeQuizOverlay({
       )}
 
       {showCombo && (comboStreak > 0 || peakComboMultiplier > 1) && (
-        <div className="fixed top-14 sm:top-20 right-2 sm:right-4 z-50 flex flex-col items-end gap-0.5 sm:gap-1 animate-in slide-in-from-right-4">
+        <div className="fixed top-14 sm:top-20 right-2 sm:right-4 z-50 w-[6.75rem] sm:w-[8.5rem] animate-in slide-in-from-right-4">
           <div className="rounded-lg bg-primary/90 text-primary-foreground px-2 py-1 sm:px-3 sm:py-2 shadow-lg border border-primary">
             <p className="text-[9px] sm:text-[10px] uppercase tracking-widest opacity-80">Combo</p>
             <p className="text-lg sm:text-2xl font-black tabular-nums">×{comboMultiplier.toFixed(1)}</p>
@@ -106,7 +106,7 @@ export function ChallengeQuizOverlay({
               <p className="text-[10px] opacity-80">Peak ×{peakComboMultiplier.toFixed(1)}</p>
             )}
           </div>
-          <div className="h-1.5 w-24 rounded-full bg-muted overflow-hidden">
+          <div className="mt-0.5 sm:mt-1 h-1.5 w-full rounded-full bg-muted overflow-hidden">
             <div
               className="h-full bg-orange-500 transition-all duration-75"
               style={{ width: `${comboPct}%` }}
