@@ -53,13 +53,47 @@ export function resolveBlockReferenceUrl(
 export function formatReferenceLabel(ref: ParsedReference): string {
   if (ref.fileName) {
     const base = ref.fileName
-    const page = ref.page != null ? ` · page ${ref.page}` : ""
-    const extra = ref.label && !ref.label.toLowerCase().includes(ref.fileName.toLowerCase())
-      ? ` — ${ref.label}`
-      : ""
-    return `${base}${page}${extra}`
+    const page = ref.page != null ? `, page ${ref.page}` : ""
+    return `${base}${page}`
   }
   return ref.label || "Course material"
+}
+
+/** APA-style citation text for AI-generated sources (no hyperlinks). */
+export function formatApaCitation(ref: ParsedReference): string {
+  const label = (ref.label || "Course material").trim()
+  if (!label) return "Course material. (n.d.)."
+
+  const yearMatch = label.match(/\((\d{4})\)/)
+  const year = yearMatch?.[1] ?? "n.d."
+
+  let title = label
+    .replace(/\(\d{4}\)/, "")
+    .replace(/^[\w\s,.-]+\.\s*/, "")
+    .trim()
+  if (!title) title = label
+
+  const authorGuess = label.split(/[.,(]/)[0]?.trim() || "Unknown author"
+  const hasAuthorInLabel = /^[A-Z][a-z]+,?\s+[A-Z]/.test(label) || label.includes(" et al")
+
+  const author = hasAuthorInLabel ? authorGuess : title.split(":")[0]?.trim() || authorGuess
+  const citationTitle = hasAuthorInLabel
+    ? title || label
+    : title.includes(":")
+      ? title
+      : title
+
+  return `${author}. (${year}). ${citationTitle}.`
+}
+
+export function formatBlockCitation(
+  ref: ParsedReference,
+  isUploadCourse: boolean
+): string {
+  if (isUploadCourse || ref.fileName) {
+    return formatReferenceLabel(ref)
+  }
+  return formatApaCitation(ref)
 }
 
 export function enrichReferenceWithMaterial(

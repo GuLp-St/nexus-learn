@@ -323,6 +323,21 @@ Requirements:
     return analysis
   } catch (error) {
     console.error("Error analyzing topic difficulty:", error)
+    const { isGeminiRateLimitError } = await import("./gemini-pool")
+    if (isGeminiRateLimitError(error)) {
+      try {
+        const text = await poolGenerateText(prompt)
+        let jsonText = text.trim()
+        const firstBrace = jsonText.indexOf("{")
+        const lastBrace = jsonText.lastIndexOf("}")
+        if (firstBrace !== -1 && lastBrace !== -1) {
+          jsonText = jsonText.substring(firstBrace, lastBrace + 1)
+        }
+        return JSON.parse(jsonText) as TopicDifficultyAnalysis
+      } catch (retryErr) {
+        console.error("Retry after rate limit failed:", retryErr)
+      }
+    }
     throw new Error("Failed to analyze topic difficulty. Please try again.")
   }
 }

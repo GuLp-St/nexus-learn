@@ -45,17 +45,11 @@ import { ChallengeQuizOverlay } from "@/components/challenge/challenge-quiz-over
 import { ChallengeTabAwayModal } from "@/components/challenge/challenge-tab-away-modal"
 import { useChallengeQuizFx } from "@/hooks/use-challenge-quiz-fx"
 import { calculatePerformanceScore } from "@/lib/challenge-scoring"
-import { buildQuestionHintContext } from "@/lib/quiz-hint-utils"
 import { useQuizLeaveWarning } from "@/hooks/use-quiz-leave-warning"
+import { useChallengeActionFx } from "@/hooks/use-challenge-action-fx"
 import { toast } from "sonner"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Lightbulb } from "lucide-react"
+import { Eye } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 const TAB_AWAY_GRACE_MS = 5000
 const LEAVE_CONFIRM_MESSAGE =
@@ -87,9 +81,11 @@ export default function ChallengeQuizPage() {
   const [tabAwaySeconds, setTabAwaySeconds] = useState(5)
   const [liveCountdown, setLiveCountdown] = useState<number | null>(null)
   const [accepting, setAccepting] = useState(false)
-  const [hintOpen, setHintOpen] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
+  const [questionShake, setQuestionShake] = useState(false)
   const liveStartTriggeredRef = useRef(false)
+  const prevOppEffectsRef = useRef<string>("")
+  const prevSelfEffectsRef = useRef<string>("")
 
   const params = useParams()
   const router = useRouter()
@@ -110,6 +106,10 @@ export default function ChallengeQuizPage() {
     ? challenge?.challengerEffects
     : challenge?.challengedEffects
 
+  const opponentEffects = isChallenger
+    ? challenge?.challengedEffects
+    : challenge?.challengerEffects
+
   const liveComboStreak = isChallenger
     ? challenge?.challengerComboStreak
     : challenge?.challengedComboStreak
@@ -125,6 +125,7 @@ export default function ChallengeQuizPage() {
     challenge.sabotageBy !== user?.uid
 
   const fx = useChallengeQuizFx(currentQuestionIndex, questions.length)
+  const actionFx = useChallengeActionFx()
   const tabAwayDeadlineRef = useRef<number | null>(null)
   const submitLockRef = useRef(false)
   const phaseRef = useRef(phase)
@@ -140,7 +141,7 @@ export default function ChallengeQuizPage() {
       return
     }
     const q = questions[currentQuestionIndex]
-    const chips = ["Give me a hint"]
+    const chips: string[] = []
     if (fx.comboStreak >= 3) {
       chips.push("What happens if I lose my combo?")
     } else {
@@ -410,6 +411,75 @@ export default function ChallengeQuizPage() {
     }
   }, [liveComboStreak, isPowered, fx])
 
+  useEffect(() => {
+    const activeQ = questions[currentQuestionIndex]
+    if (!isPowered || phase !== "playing" || !activeQ) return
+    const serialized = JSON.stringify(opponentEffects ?? {})
+    if (prevOppEffectsRef.current === serialized) return
+
+    const prev = prevOppEffectsRef.current
+      ? (JSON.parse(prevOppEffectsRef.current) as typeof opponentEffects)
+      : null
+    prevOppEffectsRef.current = serialized
+
+    if (!prev) return
+    const qid = activeQ.questionId
+
+    if (
+      opponentEffects?.tfExpandedByQuestionId?.[qid] &&
+      !prev.tfExpandedByQuestionId?.[qid]
+    ) {
+      actionFx.triggerActionFx("incoming_false_answers")
+      setQuestionShake(true)
+      setTimeout(() => setQuestionShake(false), 500)
+    } else if (
+      opponentEffects?.extraOptionsByQuestionId?.[qid] &&
+      !prev.extraOptionsByQuestionId?.[qid]
+    ) {
+      actionFx.triggerActionFx("incoming_false_answers")
+      setQuestionShake(true)
+      setTimeout(() => setQuestionShake(false), 500)
+    }
+
+    if (
+      opponentEffects?.swappedQuestionByQuestionId?.[qid] === "hard" &&
+      prev.swappedQuestionByQuestionId?.[qid] !== "hard"
+    ) {
+      actionFx.triggerActionFx("incoming_harder")
+      setQuestionShake(true)
+      setTimeout(() => setQuestionShake(false), 500)
+    }
+  }, [opponentEffects, isPowered, phase, questions, currentQuestionIndex, actionFx])
+
+  const prevSabotageRef = useRef(false)
+  useEffect(() => {
+    if (sabotageActive && !prevSabotageRef.current) {
+      actionFx.triggerActionFx("incoming_sabotage", 5000)
+    }
+    prevSabotageRef.current = !!sabotageActive
+  }, [sabotageActive, actionFx])
+
+  useEffect(() => {
+    const activeQ = questions[currentQuestionIndex]
+    if (!isPowered || phase !== "playing" || !activeQ) return
+    const serialized = JSON.stringify(selfEffects ?? {})
+    if (prevSelfEffectsRef.current === serialized) return
+
+    const prev = prevSelfEffectsRef.current
+      ? (JSON.parse(prevSelfEffectsRef.current) as typeof selfEffects)
+      : null
+    prevSelfEffectsRef.current = serialized
+
+    if (!prev) return
+    const qid = activeQ.questionId
+    if (
+      selfEffects?.removedWrongByQuestionId?.[qid] &&
+      !prev.removedWrongByQuestionId?.[qid]
+    ) {
+      actionFx.triggerActionFx("incoming_halve")
+    }
+  }, [selfEffects, isPowered, phase, questions, currentQuestionIndex, actionFx])
+
   const gradeQuestion = useCallback(
     async (question: QuizQuestion): Promise<QuestionScore | null> => {
       const userAnswer = answers[question.questionId]
@@ -619,15 +689,24 @@ export default function ChallengeQuizPage() {
     if (!user || !challenge) return
     const raw = questions[currentQuestionIndex]
     if (!raw) return
-    const next = questions[currentQuestionIndex + 1]
+
+    const oppIdx = opponentLiveIndex ?? 0
+    const targetQ = questions[oppIdx]
     setActionBusy(true)
     try {
       await useChallengePowerAction(challengeId, user.uid, action, {
         currentQuestionId: raw.questionId,
-        nextQuestionId: next?.questionId,
-        extraOptions: next?.extraOptions,
+        opponentQuestionIndex: oppIdx,
+        questionIds: questions.map((q) => q.questionId),
+        extraOptions: targetQ?.extraOptions,
+        isTrueFalse: targetQ?.objectiveType === "true-false",
+        hasTfExpanded: !!targetQ?.tfExpandedVariant,
       })
-      toast.success("Action used!")
+      actionFx.triggerActionFx(action)
+      if (action === "remove_wrong") {
+        setQuestionShake(true)
+        setTimeout(() => setQuestionShake(false), 500)
+      }
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Action failed")
     } finally {
@@ -793,6 +872,7 @@ export default function ChallengeQuizPage() {
       <ChallengeTabAwayModal open={tabAwayOpen} secondsLeft={tabAwaySeconds} />
       <ChallengeQuizOverlay
         answerFx={fx.answerFx}
+        actionFx={actionFx.actionFx}
         comboStreak={fx.comboStreak}
         comboMultiplier={fx.comboMultiplier}
         peakComboMultiplier={fx.peakComboMultiplier}
@@ -802,31 +882,40 @@ export default function ChallengeQuizPage() {
         showTimer={challengeSettings?.timer !== false}
         showCombo={challengeSettings?.combo !== false}
         showFlash={challengeSettings?.immediateFeedback !== false}
-        opponentNickname={isPowered ? friendNickname : undefined}
-        opponentQuestion={isPowered ? opponentLiveIndex ?? null : undefined}
-        opponentTotal={isPowered ? questions.length : undefined}
         sabotageActive={sabotageActive}
       />
       <SidebarNav currentPath="/friends" />
       <main className="flex-1">
         <div className="p-4 lg:p-8">
           <div className="mx-auto max-w-3xl space-y-6">
-            <div className="flex items-center gap-4">
+            <div className="flex items-start gap-3">
               <Button
                 variant="ghost"
                 size="icon"
+                className="shrink-0 mt-0.5"
                 onClick={() => void confirmAndLeave("/friends")}
                 aria-label="Leave challenge"
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <h1 className="text-2xl font-bold">Challenge Quiz</h1>
                 <p className="text-sm text-muted-foreground">
                   Question {currentQuestionIndex + 1} of {questions.length} — answers lock when
                   you press Next
                 </p>
               </div>
+              {isPowered && (
+                <div className="shrink-0 rounded-lg border bg-muted/40 px-3 py-1.5 text-right">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground flex items-center justify-end gap-1">
+                    <Eye className="h-3 w-3" />
+                    {friendNickname}
+                  </p>
+                  <p className="text-sm font-semibold tabular-nums">
+                    Q{(opponentLiveIndex ?? 0) + 1}/{questions.length}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="w-full bg-muted rounded-full h-2">
@@ -836,32 +925,9 @@ export default function ChallengeQuizPage() {
               />
             </div>
 
-            <Card>
+            <Card className={cn(questionShake && "challenge-question-shake")}>
               <CardContent className="p-6 space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-xl font-semibold flex-1">{currentQuestion.question}</h2>
-                  <div className="flex gap-2 shrink-0">
-                    {isPowered && (
-                      <>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 h-8"
-                          onClick={() => setHintOpen(true)}
-                        >
-                          <Lightbulb className="h-4 w-4" />
-                          Hint
-                        </Button>
-                        <ChallengeActionsPanel
-                          actionsLeft={actionsLeft}
-                          disabled={actionBusy}
-                          onAction={handlePowerAction}
-                        />
-                      </>
-                    )}
-                  </div>
-                </div>
+                <h2 className="text-xl font-semibold">{currentQuestion.question}</h2>
 
                 {currentQuestion.type === "objective" && currentQuestion.options && (
                   <RadioGroup
@@ -917,29 +983,19 @@ export default function ChallengeQuizPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {isPowered && (
+              <div className="flex justify-center">
+                <ChallengeActionsPanel
+                  actionsLeft={actionsLeft}
+                  disabled={actionBusy}
+                  onAction={handlePowerAction}
+                />
+              </div>
+            )}
           </div>
         </div>
       </main>
-
-      <Dialog open={hintOpen} onOpenChange={setHintOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Lightbulb className="h-5 w-5 text-primary" />
-              Hint
-            </DialogTitle>
-            <DialogDescription>Clue without revealing the answer</DialogDescription>
-          </DialogHeader>
-          {currentQuestion && (
-            <div className="space-y-3 text-sm">
-              <p className="font-medium">{buildQuestionHintContext(currentQuestion).hint}</p>
-              <p className="text-muted-foreground border-t pt-3">
-                {buildQuestionHintContext(currentQuestion).conceptExplanation}
-              </p>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

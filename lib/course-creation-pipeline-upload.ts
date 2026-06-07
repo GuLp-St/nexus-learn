@@ -18,6 +18,7 @@ import {
 import { pickMaterialCoverImage } from "@/lib/course-material-images"
 import { createCourseAndConsumeCredit } from "@/lib/create-course-with-credit"
 import { updateCourseCreationJob } from "@/lib/course-creation-job-server"
+import { createServerNotification } from "@/lib/notification-server"
 import { createCourseMaterial } from "@/lib/course-material-server"
 
 const IMAGE_BATCH_SIZE = 4
@@ -223,6 +224,16 @@ export async function runUploadCourseCreationPipeline(
     detail: "Your journey is ready!",
     courseId,
   })
+
+  try {
+    await createServerNotification(userId, "course_ready", {
+      courseId,
+      courseTitle: courseData.title,
+      jobType: "upload",
+    })
+  } catch (err) {
+    console.error("Failed to send course ready notification:", err)
+  }
 
   return courseId
 }

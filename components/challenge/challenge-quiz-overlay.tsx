@@ -2,11 +2,12 @@
 
 import { cn } from "@/lib/utils"
 import type { AnswerFx } from "@/hooks/use-challenge-quiz-fx"
+import type { ActionFxType } from "@/hooks/use-challenge-action-fx"
 import { COMBO_TIMEOUT_MS } from "@/lib/challenge-scoring"
-import { Users, Eye } from "lucide-react"
 
 interface ChallengeQuizOverlayProps {
   answerFx: AnswerFx
+  actionFx?: ActionFxType
   comboStreak: number
   comboMultiplier: number
   peakComboMultiplier: number
@@ -16,14 +17,35 @@ interface ChallengeQuizOverlayProps {
   showTimer?: boolean
   showCombo?: boolean
   showFlash?: boolean
-  opponentNickname?: string
-  opponentQuestion?: number | null
-  opponentTotal?: number
   sabotageActive?: boolean
+}
+
+function actionFxClass(actionFx: ActionFxType): string {
+  switch (actionFx) {
+    case "distort_screen":
+    case "incoming_sabotage":
+      return "challenge-action-fx-distort"
+    case "swap_harder":
+    case "incoming_harder":
+      return "challenge-action-fx-harder"
+    case "add_more_answers":
+    case "incoming_false_answers":
+      return "challenge-action-fx-false-answers"
+    case "remove_wrong":
+    case "incoming_halve":
+      return "challenge-action-fx-halve"
+    case "combo_breaker":
+      return "challenge-action-fx-break"
+    case "combo_shield":
+      return "challenge-action-fx-shield"
+    default:
+      return ""
+  }
 }
 
 export function ChallengeQuizOverlay({
   answerFx,
+  actionFx,
   comboStreak,
   comboMultiplier,
   peakComboMultiplier,
@@ -33,9 +55,6 @@ export function ChallengeQuizOverlay({
   showTimer = true,
   showCombo = true,
   showFlash = true,
-  opponentNickname,
-  opponentQuestion,
-  opponentTotal,
   sabotageActive,
 }: ChallengeQuizOverlayProps) {
   const comboPct =
@@ -46,14 +65,28 @@ export function ChallengeQuizOverlay({
       {sabotageActive && (
         <>
           <div
-            className="pointer-events-none fixed inset-0 z-[70] backdrop-blur-md bg-black/30 challenge-sabotage-blur"
+            className="pointer-events-none fixed inset-0 z-[70] bg-black/10 challenge-sabotage-blur"
             aria-hidden
           />
           <div
-            className="pointer-events-none fixed inset-0 z-[71] opacity-40 mix-blend-screen challenge-sabotage-swirl"
+            className="pointer-events-none fixed inset-0 z-[71] opacity-50 mix-blend-screen challenge-sabotage-swirl"
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none fixed inset-0 z-[72] challenge-sabotage-double-vision"
             aria-hidden
           />
         </>
+      )}
+
+      {actionFx && (
+        <div
+          className={cn(
+            "pointer-events-none fixed inset-0 z-[65] challenge-action-fx",
+            actionFxClass(actionFx)
+          )}
+          aria-hidden
+        />
       )}
 
       {showFlash && answerFx === "correct" && (
@@ -67,26 +100,6 @@ export function ChallengeQuizOverlay({
           className="pointer-events-none fixed inset-0 z-[60] challenge-screen-flash-wrong"
           aria-hidden
         />
-      )}
-
-      {opponentNickname != null && opponentTotal != null && opponentTotal > 0 && (
-        <div className="fixed top-20 left-4 z-50 max-w-[200px] rounded-lg border bg-background/95 px-3 py-2 shadow-lg backdrop-blur">
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground flex items-center gap-1">
-            <Eye className="h-3 w-3" />
-            {opponentNickname}
-          </p>
-          <p className="text-sm font-semibold tabular-nums">
-            Q{(opponentQuestion ?? 0) + 1} / {opponentTotal}
-          </p>
-          <div className="mt-1.5 h-1.5 w-full rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full bg-orange-500 transition-all duration-300"
-              style={{
-                width: `${Math.min(100, (((opponentQuestion ?? 0) + 1) / opponentTotal) * 100)}%`,
-              }}
-            />
-          </div>
-        </div>
       )}
 
       {showCombo && (comboStreak > 0 || peakComboMultiplier > 1) && (
@@ -119,13 +132,6 @@ export function ChallengeQuizOverlay({
           <span className="font-mono text-xl font-bold tabular-nums">
             {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, "0")}
           </span>
-        </div>
-      )}
-
-      {opponentNickname && opponentTotal != null && (
-        <div className="fixed bottom-6 right-4 z-50 hidden sm:flex items-center gap-1.5 text-[10px] text-muted-foreground bg-background/80 border rounded-full px-3 py-1.5 backdrop-blur">
-          <Users className="h-3 w-3" />
-          Live vs {opponentNickname}
         </div>
       )}
     </>

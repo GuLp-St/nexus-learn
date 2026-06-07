@@ -1217,18 +1217,72 @@
 
 @keyframes challenge-sabotage-swirl {
   0% { transform: rotate(0deg) scale(1); filter: hue-rotate(0deg); }
-  50% { transform: rotate(2deg) scale(1.02); filter: hue-rotate(30deg); }
-  100% { transform: rotate(-2deg) scale(1); filter: hue-rotate(-20deg); }
+  33% { transform: rotate(1.5deg) scale(1.01); filter: hue-rotate(20deg); }
+  66% { transform: rotate(-1.5deg) scale(0.99); filter: hue-rotate(-15deg); }
+  100% { transform: rotate(0.5deg) scale(1.005); filter: hue-rotate(10deg); }
 }
 
 .challenge-sabotage-swirl {
-  background: radial-gradient(circle at 30% 40%, rgba(255, 120, 0, 0.15), transparent 55%),
-    radial-gradient(circle at 70% 60%, rgba(120, 80, 255, 0.12), transparent 50%);
-  animation: challenge-sabotage-swirl 0.8s ease-in-out infinite alternate;
+  background:
+    radial-gradient(circle at 25% 35%, rgba(255, 120, 0, 0.12), transparent 45%),
+    radial-gradient(circle at 75% 65%, rgba(120, 80, 255, 0.1), transparent 45%),
+    conic-gradient(from 0deg at 50% 50%, rgba(255, 0, 128, 0.04), rgba(0, 200, 255, 0.04), rgba(255, 200, 0, 0.04), rgba(255, 0, 128, 0.04));
+  animation: challenge-sabotage-swirl 1.2s ease-in-out infinite alternate;
 }
 
 .challenge-sabotage-blur {
-  backdrop-filter: blur(8px) saturate(1.4);
+  backdrop-filter: blur(2px) saturate(1.2);
+}
+
+.challenge-sabotage-double-vision {
+  background: transparent;
+  box-shadow:
+    -3px 0 0 rgba(255, 80, 80, 0.25),
+    3px 0 0 rgba(80, 180, 255, 0.25);
+  animation: challenge-double-vision 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes challenge-double-vision {
+  0% { transform: translateX(0); opacity: 0.5; }
+  100% { transform: translateX(2px); opacity: 0.7; }
+}
+
+@keyframes challenge-action-pulse {
+  0% { opacity: 0; transform: scale(0.95); }
+  30% { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+.challenge-action-fx {
+  animation: challenge-action-pulse 0.9s ease-out forwards;
+}
+
+.challenge-action-fx-distort {
+  background: radial-gradient(circle, rgba(255, 100, 0, 0.15), transparent 70%);
+}
+
+.challenge-action-fx-harder {
+  background: radial-gradient(circle, rgba(180, 0, 80, 0.12), transparent 70%);
+}
+
+.challenge-action-fx-false-answers {
+  background: radial-gradient(circle, rgba(255, 180, 0, 0.12), transparent 70%);
+}
+
+.challenge-action-fx-halve {
+  background: radial-gradient(circle, rgba(0, 180, 120, 0.12), transparent 70%);
+}
+
+.challenge-action-fx-break {
+  background: radial-gradient(circle, rgba(200, 50, 50, 0.12), transparent 70%);
+}
+
+.challenge-action-fx-shield {
+  background: radial-gradient(circle, rgba(80, 140, 255, 0.15), transparent 70%);
+}
+
+.challenge-question-shake {
+  animation: challenge-shake-wrong 0.45s ease-in-out;
 }
 
 /* Hide scrollbar utility */

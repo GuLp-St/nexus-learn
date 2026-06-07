@@ -8,6 +8,7 @@ import { generateAndUploadImage } from "@/lib/upload-actions"
 import { DEFAULT_COURSE_IMAGE_URL } from "@/lib/image-constants"
 import { createCourseAndConsumeCredit } from "@/lib/create-course-with-credit"
 import { updateCourseCreationJob } from "@/lib/course-creation-job-server"
+import { createServerNotification } from "@/lib/notification-server"
 
 export async function runAiCourseCreationPipeline(
   userId: string,
@@ -78,6 +79,16 @@ export async function runAiCourseCreationPipeline(
     detail: "Your journey is ready!",
     courseId,
   })
+
+  try {
+    await createServerNotification(userId, "course_ready", {
+      courseId,
+      courseTitle: courseData.title,
+      jobType: "ai",
+    })
+  } catch (err) {
+    console.error("Failed to send course ready notification:", err)
+  }
 
   return courseId
 }

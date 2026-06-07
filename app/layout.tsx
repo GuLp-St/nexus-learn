@@ -13,6 +13,7 @@ import { QuestInitializer } from "@/components/quest-initializer"
 import { NexonToastHandler } from "@/components/nexon-toast-handler"
 import { LevelUpModalWrapper } from "@/components/level-up-modal-wrapper"
 import { ImpersonationBanner } from "@/components/impersonation-banner"
+import { CourseCreationWatcher } from "@/components/course-creation-watcher"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
@@ -57,6 +58,7 @@ export default function RootLayout({
                 <NexonToastHandler />
                 <LevelUpModalWrapper />
                 <ImpersonationBanner />
+                <CourseCreationWatcher />
                 {children}
                 <ChatbotOverlay />
               </ChatContextProvider>

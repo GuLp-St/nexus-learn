@@ -1,15 +1,14 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { ExternalLink, StickyNote, ChevronDown, ChevronUp } from "lucide-react"
+import { BookOpen, StickyNote, ChevronDown, ChevronUp } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import type { TextBlock } from "@/lib/gemini"
 import {
-  resolveBlockReferenceUrl,
-  formatReferenceLabel,
+  formatBlockCitation,
   type MaterialReferenceContext,
 } from "@/lib/lesson-reference-resolver"
 import {
@@ -54,6 +53,7 @@ export function LessonBlockPanel({
   materialContext,
 }: LessonBlockPanelProps) {
   const [noteOpen, setNoteOpen] = useState(false)
+  const [refOpen, setRefOpen] = useState(false)
   const [note, setNote] = useState("")
   const [hasConflict, setHasConflict] = useState(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -120,29 +120,31 @@ export function LessonBlockPanel({
       ? `${lessonTitle}${moduleTitle ? ` · ${moduleTitle}` : ""}`
       : courseTitle || "Course material",
   }
-  const linkUrl = resolveBlockReferenceUrl(ref, materialContext) ?? ref.url
-  const displayLabel = formatReferenceLabel(ref)
+  const isUploadCourse = !!(
+    materialContext?.sourceFiles?.length || ref.fileName
+  )
+  const citationText = formatBlockCitation(ref, isUploadCourse)
 
   return (
     <Card className={isPast && !readOnly ? "opacity-60" : readOnly ? "border" : borderClass}>
       <CardContent className="p-6 space-y-3">
         <MarkdownRenderer content={block.content} />
 
-        <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
-            <span className="font-medium text-foreground">Source: </span>
-            {linkUrl ? (
-              <a
-                href={linkUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline inline-flex items-center gap-1 font-medium"
-              >
-                {displayLabel}
-                <ExternalLink className="h-3 w-3 shrink-0" />
-              </a>
-            ) : (
-              <span className="text-foreground font-medium">{displayLabel}</span>
-            )}
+        <div>
+          <button
+            type="button"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setRefOpen((o) => !o)}
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            {refOpen ? "Hide reference" : "View reference"}
+            {refOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+          {refOpen && (
+            <div className="mt-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-foreground leading-relaxed">
+              {citationText}
+            </div>
+          )}
         </div>
 
         <div>

@@ -24,6 +24,7 @@ export type NotificationType =
   | "challenge_result"
   | "xp_award"
   | "quest_claimable"
+  | "course_ready"
 
 export interface Notification {
   id: string
@@ -56,6 +57,9 @@ export interface Notification {
     questTitle?: string
     xpReward?: number
     nexonReward?: number
+    // course_ready
+    courseTitle?: string
+    jobType?: "ai" | "upload"
   }
   read: boolean
   createdAt: Timestamp

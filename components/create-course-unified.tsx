@@ -58,7 +58,7 @@ import { CourseLimitDialog } from "@/components/course-limit-dialog"
 
 type CreateMode = "ai" | "upload"
 type MainTab = "create" | "browse"
-type WorkflowPhase = "idle" | "working" | "pick-difficulty"
+type WorkflowPhase = "idle" | "working" | "background" | "pick-difficulty"
 
 export default function CreateCourseUnified() {
   const router = useRouter()
@@ -260,20 +260,34 @@ export default function CreateCourseUnified() {
   const applyJobSnapshot = useCallback(
     (job: CourseCreationJob) => {
       if (job.status === "running" || job.status === "pending") {
-        setPhase("working")
         setProgressDetail(job.detail || "Working…")
+        setPhase((prev) => (prev === "idle" ? "working" : prev))
       }
       if (job.status === "completed" && job.courseId) {
-        router.push(`/journey/${job.courseId}`)
+        setPhase("idle")
+        setActiveJobId(null)
+        setProgressDetail("")
+        if (window.location.pathname.includes("/create-course")) {
+          router.push(`/journey/${job.courseId}`)
+        }
       }
       if (job.status === "failed") {
-        setError(job.error || "Course creation failed")
+        const errMsg = job.error || "Course creation failed"
+        if (!isGeminiRateLimitMessage(errMsg)) {
+          setError(errMsg)
+        }
         setPhase("idle")
         setActiveJobId(null)
       }
     },
     [router]
   )
+
+  function isGeminiRateLimitMessage(msg: string): boolean {
+    return /429|rate.?limit|quota|resource.?exhausted|overloaded|too many requests/i.test(
+      msg
+    )
+  }
 
   useEffect(() => {
     if (!user || !activeJobId) return
@@ -291,9 +305,9 @@ export default function CreateCourseUnified() {
     import("@/lib/course-creation-job-actions").then(({ fetchActiveCourseCreationJob }) => {
       fetchActiveCourseCreationJob(user.uid)
         .then((job) => {
-          if (job?.status === "running") {
+          if (job?.status === "running" || job?.status === "pending") {
             setActiveJobId(job.id)
-            setPhase("working")
+            setPhase("background")
             setProgressDetail(job.detail || "Resuming…")
             setCreateMode(job.type)
             setMainTab("create")
@@ -347,7 +361,7 @@ export default function CreateCourseUnified() {
       setActiveJobId(start.jobId)
 
       const idToken = await user.getIdToken()
-      const res = await fetch("/api/course-creation/ai", {
+      void fetch("/api/course-creation/ai", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -360,16 +374,12 @@ export default function CreateCourseUnified() {
           difficulty: difficulty ?? selectedDifficulty,
           difficultyAnalysis,
         }),
-      })
-      const payload = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        throw new Error(payload.error || "AI course creation failed")
-      }
-      if (payload.courseId) {
-        router.push(`/journey/${payload.courseId}`)
-      }
+      }).catch((err) => console.error("AI course creation request failed:", err))
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to create course")
+      const msg = err instanceof Error ? err.message : "Failed to create course"
+      if (!isGeminiRateLimitMessage(msg)) {
+        setError(msg)
+      }
       setPhase("idle")
       setActiveJobId(null)
     }
@@ -415,7 +425,10 @@ export default function CreateCourseUnified() {
         xpMultiplier: analysis.xpMultiplier || 1,
       })
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to analyze topic")
+      const msg = err instanceof Error ? err.message : "Failed to analyze topic"
+      if (!isGeminiRateLimitMessage(msg)) {
+        setError(msg)
+      }
       setPhase("idle")
     }
   }
@@ -453,7 +466,7 @@ export default function CreateCourseUnified() {
       setProgressDetail("Processing your materials…")
 
       const idToken = await user.getIdToken()
-      const res = await fetch("/api/course-creation/upload", {
+      void fetch("/api/course-creation/upload", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${idToken}`,
@@ -466,26 +479,12 @@ export default function CreateCourseUnified() {
           toneInstruction,
           files: uploadedRefs,
         }),
-      })
-      const rawText = await res.text()
-      let payload: { error?: string; courseId?: string } = {}
-      try {
-        payload = rawText ? JSON.parse(rawText) : {}
-      } catch {
-        payload = {}
-      }
-      if (!res.ok) {
-        throw new Error(
-          payload.error ||
-            (rawText && rawText.length < 200 ? rawText : null) ||
-            `Upload course creation failed (${res.status})`
-        )
-      }
-      if (payload.courseId) {
-        router.push(`/journey/${payload.courseId}`)
-      }
+      }).catch((err) => console.error("Upload course creation request failed:", err))
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to create course from upload")
+      const msg = err instanceof Error ? err.message : "Failed to create course from upload"
+      if (!isGeminiRateLimitMessage(msg)) {
+        setError(msg)
+      }
       setPhase("idle")
       setActiveJobId(null)
     }
@@ -501,7 +500,8 @@ export default function CreateCourseUnified() {
 
   if (!user) return null
 
-  const isWorking = phase === "working"
+  const isWorking = phase === "working" || phase === "background"
+  const isBackground = phase === "background"
   const uploadPreset = DIFFICULTY_STRUCTURE[uploadDifficulty]
 
   return (
@@ -526,27 +526,46 @@ export default function CreateCourseUnified() {
             )}
 
             {isWorking && (
-              <Card>
-                <CardContent className="p-8 text-center space-y-4">
-                  <ProcessingSpinner className="mx-auto" />
-                  <h3 className="text-lg font-semibold">Building your journey…</h3>
-                  <p className="text-sm text-muted-foreground">{progressDetail}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Please keep this tab open until your course is ready.
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCancelJob}
-                    disabled={cancelling}
-                  >
-                    {cancelling ? "Cancelling…" : "Cancel and go back"}
-                  </Button>
+              <Card className={isBackground ? "border-primary/30 bg-primary/5" : undefined}>
+                <CardContent className={cn("space-y-4", isBackground ? "p-4" : "p-8 text-center")}>
+                  {!isBackground && <ProcessingSpinner className="mx-auto" />}
+                  <div className={isBackground ? "flex items-start gap-3" : "space-y-2"}>
+                    {isBackground && <ProcessingSpinner className="h-5 w-5 shrink-0 mt-0.5" />}
+                    <div className="flex-1 min-w-0">
+                      <h3 className={cn("font-semibold", isBackground ? "text-sm" : "text-lg")}>
+                        Building your journey…
+                      </h3>
+                      <p className="text-sm text-muted-foreground">{progressDetail}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Feel free to browse elsewhere — you&apos;ll get a notification when it&apos;s
+                        done.
+                      </p>
+                    </div>
+                  </div>
+                  <div className={cn("flex gap-2", isBackground ? "justify-end" : "justify-center")}>
+                    {!isBackground && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setPhase("background")}
+                      >
+                        Browse elsewhere
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCancelJob}
+                      disabled={cancelling}
+                    >
+                      {cancelling ? "Cancelling…" : "Cancel"}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             )}
 
-            {!isWorking && (
+            {(!isWorking || isBackground) && (
               <Tabs
                 value={mainTab}
                 onValueChange={(v) => setMainTab(v as MainTab)}

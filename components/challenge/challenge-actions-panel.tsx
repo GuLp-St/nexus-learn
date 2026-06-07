@@ -49,7 +49,7 @@ export function ChallengeActionsPanel({
       </Button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-lg border bg-popover p-2 shadow-lg">
+        <div className="absolute left-1/2 -translate-x-1/2 top-full z-50 mt-1 w-56 rounded-lg border bg-popover p-2 shadow-lg">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-1 mb-1">
             Sabotage
           </p>

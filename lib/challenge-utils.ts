@@ -821,6 +821,17 @@ export async function getChallengeQuestions(challenge: Challenge): Promise<QuizQ
   )
 
   if (questions.length === questionIds.length) {
+    const settings = normalizeChallengeSettings(challenge.settings)
+    if (isPoweredChallenge(settings)) {
+      const needsEnrichment = questions.some(
+        (q) => q.type === "objective" && !q.extraOptions?.length
+      )
+      if (needsEnrichment) {
+        const enriched = await enrichQuestionsForPoweredMode(questions)
+        await saveQuizQuestions(enriched)
+        return enriched
+      }
+    }
     return questions
   }
 
@@ -849,6 +860,11 @@ export async function getChallengeQuestions(challenge: Challenge): Promise<QuizQ
 
   if (generated.length === 0) {
     throw new Error("Failed to generate challenge questions")
+  }
+
+  const settings = normalizeChallengeSettings(challenge.settings)
+  if (isPoweredChallenge(settings)) {
+    generated = await enrichQuestionsForPoweredMode(generated)
   }
 
   await saveQuizQuestions(generated)
@@ -932,8 +948,11 @@ export async function useChallengePowerAction(
   action: PowerActionType,
   context: {
     currentQuestionId: string
-    nextQuestionId?: string
+    opponentQuestionIndex: number
+    questionIds: string[]
     extraOptions?: string[]
+    isTrueFalse?: boolean
+    hasTfExpanded?: boolean
   }
 ): Promise<void> {
   const ref = doc(db, "challenges", challengeId)
@@ -967,16 +986,26 @@ export async function useChallengePowerAction(
 
   switch (action) {
     case "add_more_answers": {
-      const targetId = context.nextQuestionId ?? context.currentQuestionId
+      const targetId = context.questionIds[context.opponentQuestionIndex]
       if (!targetId) throw new Error("No target question")
-      const extras = context.extraOptions ?? []
-      if (extras.length === 0) throw new Error("No extra answers available for this question")
-      patch[oppEffectsKey] = {
-        ...oppEffects,
-        extraOptionsByQuestionId: {
-          ...oppEffects.extraOptionsByQuestionId,
-          [targetId]: extras,
-        },
+      if (context.isTrueFalse && context.hasTfExpanded) {
+        patch[oppEffectsKey] = {
+          ...oppEffects,
+          tfExpandedByQuestionId: {
+            ...oppEffects.tfExpandedByQuestionId,
+            [targetId]: true,
+          },
+        }
+      } else {
+        const extras = context.extraOptions ?? []
+        if (extras.length === 0) throw new Error("No extra answers available for this question")
+        patch[oppEffectsKey] = {
+          ...oppEffects,
+          extraOptionsByQuestionId: {
+            ...oppEffects.extraOptionsByQuestionId,
+            [targetId]: extras,
+          },
+        }
       }
       break
     }
@@ -984,12 +1013,20 @@ export async function useChallengePowerAction(
       patch[oppComboKey] = 0
       break
     case "swap_harder": {
-      const targetId = context.nextQuestionId ?? context.currentQuestionId
+      const swapped = oppEffects.swappedQuestionByQuestionId ?? {}
+      let targetIdx = context.opponentQuestionIndex
+      while (
+        targetIdx < context.questionIds.length &&
+        swapped[context.questionIds[targetIdx]] === "hard"
+      ) {
+        targetIdx++
+      }
+      const targetId = context.questionIds[targetIdx]
       if (!targetId) throw new Error("No target question")
       patch[oppEffectsKey] = {
         ...oppEffects,
         swappedQuestionByQuestionId: {
-          ...oppEffects.swappedQuestionByQuestionId,
+          ...swapped,
           [targetId]: "hard",
         },
       }
@@ -1040,6 +1077,8 @@ export async function useChallengePowerAction(
 export async function sendChallengeSabotage(challengeId: string, fromUserId: string): Promise<void> {
   await useChallengePowerAction(challengeId, fromUserId, "distort_screen", {
     currentQuestionId: "",
+    opponentQuestionIndex: 0,
+    questionIds: [],
   })
 }
 

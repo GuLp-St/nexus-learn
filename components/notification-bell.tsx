@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Bell, Zap, Trophy, UserPlus, Trash2, Gift } from "lucide-react"
+import { Bell, Zap, Trophy, UserPlus, Trash2, Gift, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/components/auth-provider"
 import {
@@ -80,6 +80,9 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
     } else if (notification.type === "challenge_result") {
       router.push("/friends")
       setIsOpen(false)
+    } else if (notification.type === "course_ready" && notification.data.courseId) {
+      router.push(`/journey/${notification.data.courseId}`)
+      setIsOpen(false)
     }
   }
 
@@ -114,6 +117,8 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
         return <Gift className="h-4 w-4" />
       case "xp_award":
         return <Trophy className="h-4 w-4" />
+      case "course_ready":
+        return <BookOpen className="h-4 w-4" />
       default:
         return <Bell className="h-4 w-4" />
     }
@@ -140,6 +145,8 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
         return `You earned ${notification.data.amount || 0} XP${notification.data.source ? ` from ${notification.data.source}` : ""}${
           notification.data.newLevel ? ` (Level ${notification.data.newLevel})` : ""
         }`
+      case "course_ready":
+        return `Your course "${notification.data.courseTitle || "Journey"}" is ready!`
       default:
         return "New notification"
     }
