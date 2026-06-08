@@ -54,6 +54,8 @@ type TestResult = {
 
 type TestStatus = "idle" | "testing" | "passed" | "failed"
 
+const KEYS_PER_PAGE = 10
+
 export default function AdminKeysPage() {
   const [data, setData] = useState<KeysResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -75,6 +77,8 @@ export default function AdminKeysPage() {
   const [cfModelTest, setCfModelTest] = useState<TestStatus>("idle")
   const [cfModelTestMsg, setCfModelTestMsg] = useState<string | null>(null)
   const [testingIndex, setTestingIndex] = useState<string | null>(null)
+  const [geminiPage, setGeminiPage] = useState(0)
+  const [cfPage, setCfPage] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -289,10 +293,6 @@ export default function AdminKeysPage() {
 
   const addCloudflareCredential = async () => {
     if (!cfAccountId.trim() || !cfApiToken.trim()) return
-    if (cfNewTest !== "passed") {
-      toast.error("Test the credential successfully before adding")
-      return
-    }
     setAdding(true)
     try {
       await adminJson("/api/admin/keys", {
@@ -474,7 +474,7 @@ export default function AdminKeysPage() {
                   {loading
                     ? "Loading…"
                     : data
-                      ? `Source: ${data.gemini.source}`
+                      ? `${data.gemini.keys.length} key${data.gemini.keys.length === 1 ? "" : "s"} · Source: ${data.gemini.source}`
                       : ""}
                   {data?.gemini.envFallback && (
                     <span className="block mt-1 text-amber-600 dark:text-amber-400">
@@ -527,49 +527,90 @@ export default function AdminKeysPage() {
                   Today ({today}): request counts per pooled call.
                 </p>
 
-                {data?.gemini.keys.map((k) => (
-                  <div
-                    key={k.index}
-                    className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-start sm:justify-between"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-mono text-sm">{k.masked}</p>
-                      <UsageBadges
-                        requests={k.todayRequests}
-                        rateLimits={k.todayRateLimits}
-                      />
-                      <Input
-                        placeholder="Admin note (optional)"
-                        defaultValue={k.note ?? ""}
-                        className="mt-2 h-8 text-xs"
-                        onBlur={(e) => {
-                          if (e.target.value !== (k.note ?? "")) {
-                            saveGeminiNote(k.index, e.target.value)
-                          }
-                        }}
-                      />
-                    </div>
-                    <div className="flex gap-1 shrink-0 self-end sm:self-start">
-                      <Button
-                        variant="outline"
-                        size="icon-sm"
-                        title="Test stored key"
-                        disabled={testingIndex !== null}
-                        onClick={() => testStoredGeminiKey(k.index)}
+                <div className="max-h-[50vh] overflow-y-auto space-y-2 pr-1">
+                  {data?.gemini.keys
+                    .slice(
+                      geminiPage * KEYS_PER_PAGE,
+                      (geminiPage + 1) * KEYS_PER_PAGE
+                    )
+                    .map((k) => (
+                      <div
+                        key={k.index}
+                        className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-start sm:justify-between"
                       >
-                        <FlaskConical className="h-4 w-4" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-mono text-sm">{k.masked}</p>
+                          <UsageBadges
+                            requests={k.todayRequests}
+                            rateLimits={k.todayRateLimits}
+                          />
+                          <Input
+                            placeholder="Admin note (optional)"
+                            defaultValue={k.note ?? ""}
+                            className="mt-2 h-8 text-xs"
+                            onBlur={(e) => {
+                              if (e.target.value !== (k.note ?? "")) {
+                                saveGeminiNote(k.index, e.target.value)
+                              }
+                            }}
+                          />
+                        </div>
+                        <div className="flex gap-1 shrink-0 self-end sm:self-start">
+                          <Button
+                            variant="outline"
+                            size="icon-sm"
+                            title="Test stored key"
+                            disabled={testingIndex !== null}
+                            onClick={() => testStoredGeminiKey(k.index)}
+                          >
+                            <FlaskConical className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-destructive"
+                            onClick={() => removeGeminiKey(k.index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+
+                {data && data.gemini.keys.length > KEYS_PER_PAGE && (
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      Page {geminiPage + 1} of{" "}
+                      {Math.ceil(data.gemini.keys.length / KEYS_PER_PAGE)}
+                    </span>
+                    <div className="flex gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={geminiPage === 0}
+                        onClick={() => setGeminiPage((p) => p - 1)}
+                      >
+                        Previous
                       </Button>
                       <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-destructive"
-                        onClick={() => removeGeminiKey(k.index)}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={
+                          (geminiPage + 1) * KEYS_PER_PAGE >=
+                          data.gemini.keys.length
+                        }
+                        onClick={() => setGeminiPage((p) => p + 1)}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        Next
                       </Button>
                     </div>
                   </div>
-                ))}
+                )}
 
                 {!loading && data && data.gemini.keys.length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-4">
@@ -624,7 +665,11 @@ export default function AdminKeysPage() {
                   Cloudflare Workers AI
                 </CardTitle>
                 <CardDescription>
-                  {loading ? "Loading…" : data ? `Source: ${data.cloudflare.source}` : ""}
+                  {loading
+                    ? "Loading…"
+                    : data
+                      ? `${data.cloudflare.accounts.length} credential${data.cloudflare.accounts.length === 1 ? "" : "s"} · Source: ${data.cloudflare.source}`
+                      : ""}
                   {data?.cloudflare.envFallback && (
                     <span className="block mt-1 text-amber-600 dark:text-amber-400">
                       Env fallback when Firestore list is empty.
@@ -634,55 +679,93 @@ export default function AdminKeysPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-xs text-muted-foreground">
-                  Today ({today}): usage per credential. Test verifies token + account access.
+                  Today ({today}): usage per credential. Testing is optional for Cloudflare.
                 </p>
 
-                {data?.cloudflare.accounts.map((acc) => (
-                  <div
-                    key={acc.index}
-                    className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-start sm:justify-between"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-mono text-sm">Account: {acc.maskedAccountId}</p>
-                      <p className="font-mono text-xs text-muted-foreground mt-0.5">
-                        Token: {acc.maskedToken}
-                      </p>
-                      <UsageBadges
-                        requests={acc.todayRequests}
-                        rateLimits={acc.todayRateLimits}
-                      />
-                      <Input
-                        placeholder="Admin note (optional)"
-                        defaultValue={acc.note ?? ""}
-                        className="mt-2 h-8 text-xs"
-                        onBlur={(e) => {
-                          if (e.target.value !== (acc.note ?? "")) {
-                            saveCloudflareNote(acc.index, e.target.value)
-                          }
-                        }}
-                      />
-                    </div>
-                    <div className="flex gap-1 shrink-0 self-end sm:self-start">
-                      <Button
-                        variant="outline"
-                        size="icon-sm"
-                        title="Test credential"
-                        disabled={testingIndex !== null}
-                        onClick={() => testStoredCloudflareCredential(acc.index)}
+                <div className="max-h-[50vh] overflow-y-auto space-y-2 pr-1">
+                  {data?.cloudflare.accounts
+                    .slice(cfPage * KEYS_PER_PAGE, (cfPage + 1) * KEYS_PER_PAGE)
+                    .map((acc) => (
+                      <div
+                        key={acc.index}
+                        className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-start sm:justify-between"
                       >
-                        <FlaskConical className="h-4 w-4" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-mono text-sm">Account: {acc.maskedAccountId}</p>
+                          <p className="font-mono text-xs text-muted-foreground mt-0.5">
+                            Token: {acc.maskedToken}
+                          </p>
+                          <UsageBadges
+                            requests={acc.todayRequests}
+                            rateLimits={acc.todayRateLimits}
+                          />
+                          <Input
+                            placeholder="Admin note (optional)"
+                            defaultValue={acc.note ?? ""}
+                            className="mt-2 h-8 text-xs"
+                            onBlur={(e) => {
+                              if (e.target.value !== (acc.note ?? "")) {
+                                saveCloudflareNote(acc.index, e.target.value)
+                              }
+                            }}
+                          />
+                        </div>
+                        <div className="flex gap-1 shrink-0 self-end sm:self-start">
+                          <Button
+                            variant="outline"
+                            size="icon-sm"
+                            title="Test credential"
+                            disabled={testingIndex !== null}
+                            onClick={() => testStoredCloudflareCredential(acc.index)}
+                          >
+                            <FlaskConical className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-destructive"
+                            onClick={() => removeCloudflareCredential(acc.index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+
+                {data && data.cloudflare.accounts.length > KEYS_PER_PAGE && (
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      Page {cfPage + 1} of{" "}
+                      {Math.ceil(data.cloudflare.accounts.length / KEYS_PER_PAGE)}
+                    </span>
+                    <div className="flex gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={cfPage === 0}
+                        onClick={() => setCfPage((p) => p - 1)}
+                      >
+                        Previous
                       </Button>
                       <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-destructive"
-                        onClick={() => removeCloudflareCredential(acc.index)}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={
+                          (cfPage + 1) * KEYS_PER_PAGE >=
+                          data.cloudflare.accounts.length
+                        }
+                        onClick={() => setCfPage((p) => p + 1)}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        Next
                       </Button>
                     </div>
                   </div>
-                ))}
+                )}
 
                 {!loading && data && data.cloudflare.accounts.length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-4">
@@ -693,7 +776,7 @@ export default function AdminKeysPage() {
                 <div className="pt-4 border-t border-border space-y-3">
                   <Label>Add Cloudflare credential</Label>
                   <p className="text-xs text-muted-foreground">
-                    Test account + token before adding.
+                    Add directly, or test first if you want to verify the credential.
                   </p>
                   <Input
                     placeholder="Account ID"
@@ -730,12 +813,7 @@ export default function AdminKeysPage() {
                     </Button>
                     <Button
                       onClick={addCloudflareCredential}
-                      disabled={
-                        adding ||
-                        !cfAccountId.trim() ||
-                        !cfApiToken.trim() ||
-                        cfNewTest !== "passed"
-                      }
+                      disabled={adding || !cfAccountId.trim() || !cfApiToken.trim()}
                     >
                       <Plus className="h-4 w-4 mr-2" />
                       Add

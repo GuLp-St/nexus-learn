@@ -88,6 +88,7 @@ export async function pregenerateLesson(
           moduleSummary: sourceContext.moduleSummary as string | undefined,
           processedImages:
             (sourceContext.processedImages as LessonMaterialImage[]) || [],
+          defaultFileName: sourceContext.defaultFileName as string | undefined,
           sourceFiles: loadedMaterialContext?.sourceFiles,
           imageMap: loadedMaterialContext?.imageMap,
         }

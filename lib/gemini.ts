@@ -563,6 +563,7 @@ ${storedModules ? "- IMPORTANT: Use the EXACT module and lesson titles provided 
                 moduleSummary: storedModule.summary,
                 materialPages: storedLesson.materialPages ?? [],
                 processedImages: lessonImages,
+                defaultFileName: storedLesson.sourceFileName,
               }
             }
           })
@@ -725,7 +726,9 @@ ${sourceContext.references.map((ref, idx) => `${idx + 1}. ${ref}`).join("\n") ||
 
 ${persistedMaterialBlock ? `\n${persistedMaterialBlock}` : ""}
 
-Ensure all content is grounded in the source material. Do not invent facts.`
+Ensure all content is grounded in the source material. Do not invent facts.
+
+For each text block "reference", cite the uploaded source file and page number (e.g. fileName + page). Never use the lesson title, module title, or processed image URLs as the reference.`
   }
 
   const prompt = `Generate a lesson stream for "${lessonTitle}" as part of the course "${courseTitle}", module "${moduleTitle}".${sourceMaterialContext}
@@ -737,7 +740,7 @@ Return ONLY valid JSON without markdown formatting, following this exact structu
     {
       "type": "text",
       "content": "Brief explanatory text (2-4 short paragraphs max, markdown supported). Keep text concise — visuals carry much of the teaching.",
-      "reference": { "label": "Source name or page", "url": "https://optional-web-url", "fileName": "optional-uploaded-file.pdf", "page": 12 },
+      "reference": { "fileName": "uploaded-source.pdf", "page": 12, "label": "See PDF page 12" },
       "illustrationPrompt": "Optional: detailed prompt for an AI illustration of the concept just explained (omit if using only uploaded material images)"
     },
     {

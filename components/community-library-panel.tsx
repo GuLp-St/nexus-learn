@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Search, BookOpen, Star, Plus, ArrowDown, Info, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -104,9 +104,24 @@ export function CommunityLibraryPanel({ compact = false }: { compact?: boolean }
     fetchCourses()
   }, [user])
 
-  const allTags = Array.from(
-    new Set(courses.flatMap((c) => c.tags || []).filter(Boolean))
-  ).slice(0, 20)
+  const topTags = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const course of courses) {
+      for (const tag of course.tags ?? []) {
+        if (!tag) continue
+        counts.set(tag, (counts.get(tag) ?? 0) + 1)
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 10)
+      .map(([tag]) => tag)
+  }, [courses])
+
+  const visibleTags = useMemo(() => {
+    if (!selectedTag || topTags.includes(selectedTag)) return topTags
+    return [selectedTag, ...topTags.filter((t) => t !== selectedTag)].slice(0, 10)
+  }, [topTags, selectedTag])
 
   useEffect(() => {
     let result = [...courses]
@@ -190,7 +205,7 @@ export function CommunityLibraryPanel({ compact = false }: { compact?: boolean }
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search courses..."
+            placeholder="Search courses or tags..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -209,7 +224,7 @@ export function CommunityLibraryPanel({ compact = false }: { compact?: boolean }
         </Select>
       </div>
 
-      {allTags.length > 0 && (
+      {visibleTags.length > 0 && (
         <div className="flex flex-wrap gap-2">
           <Button
             variant={selectedTag === "" ? "default" : "outline"}
@@ -218,7 +233,7 @@ export function CommunityLibraryPanel({ compact = false }: { compact?: boolean }
           >
             All
           </Button>
-          {allTags.map((tag) => (
+          {visibleTags.map((tag) => (
             <Button
               key={tag}
               variant={selectedTag === tag ? "default" : "outline"}

@@ -50,7 +50,14 @@ export async function generateLessonStreamWithImages(
 
   if (materialImages.length > 0) {
     stream = distributeMaterialImagesToTextBlocks(stream, materialImages)
-    return stream
+    return ensureTextBlockReferences(stream, {
+      references: sourceContext?.references,
+      courseTitle,
+      moduleTitle,
+      lessonTitle,
+      defaultFileName: sourceContext?.defaultFileName,
+      material: materialContext,
+    })
   }
 
   if (await isCloudflareConfigured()) {

@@ -266,6 +266,9 @@ export default function LessonPage() {
                   lessonSummary: sourceContext.lessonSummary,
                   moduleSummary: sourceContext.moduleSummary,
                   processedImages: sourceContext.processedImages || [],
+                  defaultFileName:
+                    sourceContext.defaultFileName ||
+                    (lesson as { sourceFileName?: string }).sourceFileName,
                   sourceFiles: loadedMaterialContext?.sourceFiles,
                   imageMap: loadedMaterialContext?.imageMap,
                 }

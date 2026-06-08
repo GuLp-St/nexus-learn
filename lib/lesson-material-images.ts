@@ -87,8 +87,14 @@ export function distributeMaterialImagesToTextBlocks(
     const img = images[imgIdx++]
     const desc = img.description?.slice(0, 120) || `Page ${img.pageNumber ?? img.imageIndex}`
     blocks[i] = {
-      type: "text",
+      ...block,
       content: `${block.content.trim()}\n\n![${desc}](${img.url})\n\n`,
+      reference: block.reference ?? {
+        label: img.pageNumber
+          ? `Page ${img.pageNumber}`
+          : `Image ${img.imageIndex}`,
+        page: img.pageNumber ?? img.imageIndex,
+      },
     }
   }
 

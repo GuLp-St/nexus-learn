@@ -9,6 +9,7 @@ import { MarkdownRenderer } from "@/components/markdown-renderer"
 import type { TextBlock } from "@/lib/gemini"
 import {
   formatBlockCitation,
+  resolveBlockReferenceUrl,
   type MaterialReferenceContext,
 } from "@/lib/lesson-reference-resolver"
 import {
@@ -115,15 +116,16 @@ export function LessonBlockPanel({
     setHasConflict(false)
   }
 
+  const defaultSourceFile = materialContext?.sourceFiles?.[0]?.name
   const ref = block.reference ?? {
-    label: lessonTitle
-      ? `${lessonTitle}${moduleTitle ? ` · ${moduleTitle}` : ""}`
-      : courseTitle || "Course material",
+    label: defaultSourceFile ?? courseTitle ?? "Course material",
+    fileName: defaultSourceFile,
   }
   const isUploadCourse = !!(
     materialContext?.sourceFiles?.length || ref.fileName
   )
   const citationText = formatBlockCitation(ref, isUploadCourse)
+  const sourceUrl = resolveBlockReferenceUrl(ref, materialContext)
 
   return (
     <Card className={isPast && !readOnly ? "opacity-60" : readOnly ? "border" : borderClass}>
@@ -142,7 +144,18 @@ export function LessonBlockPanel({
           </button>
           {refOpen && (
             <div className="mt-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-foreground leading-relaxed">
-              {citationText}
+              {sourceUrl ? (
+                <a
+                  href={sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline underline-offset-2 hover:text-primary/80"
+                >
+                  {citationText}
+                </a>
+              ) : (
+                citationText
+              )}
             </div>
           )}
         </div>

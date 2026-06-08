@@ -37,6 +37,37 @@ export function parseReferenceString(ref: string): ParsedReference {
   return { label: trimmed, page }
 }
 
+function isWeakReference(
+  ref: ParsedReference,
+  options?: {
+    lessonTitle?: string
+    moduleTitle?: string
+    courseTitle?: string
+    material?: MaterialReferenceContext
+  }
+): boolean {
+  const label = (ref.label || "").trim().toLowerCase()
+  if (!label && !ref.fileName && ref.page == null && !ref.url) return true
+
+  const lesson = options?.lessonTitle?.trim().toLowerCase()
+  const module = options?.moduleTitle?.trim().toLowerCase()
+  const course = options?.courseTitle?.trim().toLowerCase()
+
+  if (lesson && label === lesson) return true
+  if (lesson && module && label === `${lesson} · ${module}`) return true
+  if (lesson && module && label === `${lesson} — ${module}`) return true
+  if (lesson && label.startsWith(`${lesson} —`)) return true
+  if (lesson && label.startsWith(`${lesson} ·`)) return true
+  if (course && label === course) return true
+
+  if (ref.url && options?.material?.imageMap) {
+    const imageUrls = new Set(Object.values(options.material.imageMap))
+    if (imageUrls.has(ref.url)) return true
+  }
+
+  return false
+}
+
 export function ensureTextBlockReferences(
   stream: LessonStream,
   options?: {
@@ -52,28 +83,48 @@ export function ensureTextBlockReferences(
     .map(parseReferenceString)
     .filter((r) => r.label)
 
+  const defaultFileName =
+    options?.defaultFileName ?? options?.material?.sourceFiles?.[0]?.name
+
   const fallback: ParsedReference = parsedRefs[0] ?? {
-    label: options?.lessonTitle
-      ? `${options.lessonTitle} — ${options.moduleTitle || options.courseTitle || "Course"}`
-      : options?.courseTitle || "Course material",
-    fileName: options?.defaultFileName,
+    label: defaultFileName ?? options?.courseTitle ?? "Course material",
+    fileName: defaultFileName,
   }
 
   let textIndex = 0
   const enrich = (ref: ParsedReference): ParsedReference =>
-    enrichReferenceWithMaterial(ref, options?.material)
+    enrichReferenceWithMaterial(
+      {
+        ...ref,
+        fileName: ref.fileName ?? defaultFileName,
+        url: isWeakReference(ref, options) ? undefined : ref.url,
+      },
+      options?.material
+    )
 
   const blocks = stream.blocks.map((block) => {
     if (block.type !== "text") return block
     const textBlock = block as TextBlock
     const existing = textBlock.reference
-    if (existing?.label || existing?.url || existing?.fileName) {
+    if (
+      existing &&
+      (existing.label || existing.url || existing.fileName || existing.page != null) &&
+      !isWeakReference(
+        {
+          label: existing.label || "",
+          url: existing.url,
+          fileName: existing.fileName,
+          page: existing.page,
+        },
+        options
+      )
+    ) {
       return {
         ...textBlock,
         reference: enrich({
-          label: existing.label || "Course material",
+          label: existing.label || defaultFileName || "Course material",
           url: existing.url,
-          fileName: existing.fileName,
+          fileName: existing.fileName ?? defaultFileName,
           page: existing.page,
         }),
       }
