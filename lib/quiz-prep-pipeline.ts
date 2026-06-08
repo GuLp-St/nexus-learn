@@ -5,6 +5,7 @@ import {
   generateCourseQuizQuestions,
   generateModuleQuizQuestions,
 } from "./quiz-generator"
+import { enrichQuestionLessonLinks } from "./quiz-reference-utils-server"
 import { selectRandomQuestions, type QuizQuestion } from "./quiz-utils"
 import { saveQuizQuestionsAdmin } from "./quiz-prep-server"
 
@@ -57,6 +58,12 @@ export async function runQuizPrepPipeline(
     throw new Error("No questions available")
   }
 
-  await saveQuizQuestionsAdmin(generatedQuestions)
+  const questionsWithReferences = await Promise.all(
+    generatedQuestions.map((question) =>
+      enrichQuestionLessonLinks(courseId, question, courseData as any)
+    )
+  )
+
+  await saveQuizQuestionsAdmin(questionsWithReferences)
   return generatedQuestions.map((q) => q.questionId)
 }

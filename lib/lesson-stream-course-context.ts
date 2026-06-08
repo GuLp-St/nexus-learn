@@ -1,6 +1,7 @@
 import { db } from "./firebase"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
 import type { LessonStream } from "./gemini"
+import { findBlockIndexForFact } from "./lesson-fact-blocks"
 
 /**
  * Update module accumulatedContext on the course doc — only for the course creator.
@@ -37,6 +38,7 @@ export async function mergeLessonFactsIntoCourseModule(
       text: fact.text,
       sourceLessonId: lessonId,
       sourceLessonTitle: lessonTitle,
+      sourceBlockIndex: findBlockIndexForFact(stream, fact.text),
     }
     const exists = updatedModules[moduleIndex].accumulatedContext.some(
       (f: { id: string }) => f.id === fact.id

@@ -10,6 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { QuizPreparingView } from "@/components/quiz-preparing-view"
+import { QuizQuestionReferences } from "@/components/quiz-question-references"
 import { subscribeToQuizPrepJob } from "@/lib/quiz-prep-client"
 import { findActiveQuizPrepJob } from "@/lib/quiz-prep-job"
 import { startAttemptFromPrepJob } from "@/lib/quiz-prep-load"
@@ -24,17 +25,6 @@ import { QuizQuestion, fetchQuizQuestions, fetchQuizQuestionsByIds, createQuizAt
 import { evaluateSubjectiveAnswer, checkObjectiveAnswer } from "@/lib/quiz-generator"
 import { useActivityTracking } from "@/hooks/use-activity-tracking"
 import { useXP } from "@/components/xp-context-provider"
-import { useQuizLeaveWarning } from "@/hooks/use-quiz-leave-warning"
-
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-
 export default function ModuleQuizPage() {
   const params = useParams()
   const courseId = params.courseId as string
@@ -56,7 +46,6 @@ export default function ModuleQuizPage() {
   const quizStartTimeRef = useRef<number | null>(null)
   const isChallengeMode = challengeFriendId !== null
   const quizStartedRef = useRef(false) // Prevent double start
-  const handleSubmitRef = useRef<() => Promise<void>>(async () => {})
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
   const { setPageContext } = useChatContext()
@@ -510,15 +499,6 @@ export default function ModuleQuizPage() {
     }
   }
 
-  useEffect(() => {
-    handleSubmitRef.current = handleSubmit
-  }, [handleSubmit])
-
-  const { LeaveWarningDialog } = useQuizLeaveWarning({
-    active: questions.length > 0 && !showResults && !submitting && !loading,
-    onLeave: () => handleSubmitRef.current(),
-  })
-
   if (generating) {
     const moduleTitle = course?.modules[moduleIndex]?.title
     return (
@@ -676,48 +656,13 @@ export default function ModuleQuizPage() {
                                     }
                                   </p>
                                 )}
-                            {/* Citations - Only show if facts are found */}
-                                {(() => {
-                                  const factIds = (question.sourceFactIds || [question.sourceFactId]).filter(Boolean)
-                                  if (!factIds.length || !course) return null
-                                  
-                                  const foundFacts = factIds.map((factId) => {
-                                    // Find fact in current module first, then across all modules
-                                    const module = course.modules[moduleIndex]
-                                    let found = (module as any).accumulatedContext?.find((f: any) => f.id === factId)
-                                    if (found) return found
-                                    
-                                    // Search other modules if not found
-                                    for (let i = 0; i < course.modules.length; i++) {
-                                      const mod = course.modules[i]
-                                      found = (mod as any).accumulatedContext?.find((f: any) => f.id === factId)
-                                      if (found) return found
-                                    }
-                                    return null
-                                  }).filter(Boolean)
-                                  
-                                  if (foundFacts.length === 0) return null
-                                  
-                                  return (
-                                    <div className="mt-3 pt-3 border-t border-border">
-                                      <p className="text-xs font-medium text-muted-foreground mb-2">Learn more:</p>
-                                      <div className="space-y-1">
-                                        {foundFacts.map((fact: any, idx: number) => {
-                                          const [courseIdPart, modIdx, lessonIdx] = fact.sourceLessonId.split("-").slice(-3).map(Number)
-                                          return (
-                                            <Link
-                                              key={idx}
-                                              href={`/journey/${courseId}/modules/${modIdx}/lessons/${lessonIdx}`}
-                                              className="text-xs text-primary hover:underline flex items-center gap-1"
-                                            >
-                                              <span>→ {fact.sourceLessonTitle}</span>
-                                            </Link>
-                                          )
-                                        })}
-                                      </div>
-                                    </div>
-                                  )
-                                })()}
+                                <QuizQuestionReferences
+                                  userId={user?.uid}
+                                  courseId={courseId}
+                                  question={question}
+                                  course={course}
+                                  variant="block"
+                                />
                               </div>
                             ) : (
                               <div>
@@ -728,6 +673,13 @@ export default function ModuleQuizPage() {
                                     <p className="text-sm text-foreground">{score.feedback}</p>
                                   </div>
                                 )}
+                                <QuizQuestionReferences
+                                  userId={user?.uid}
+                                  courseId={courseId}
+                                  question={question}
+                                  course={course}
+                                  variant="block"
+                                />
                               </div>
                             )}
                           </div>
@@ -747,7 +699,6 @@ export default function ModuleQuizPage() {
 
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-background">
-      <LeaveWarningDialog />
       <SidebarNav currentPath="/journey" />
 
         <main className="flex-1">
@@ -843,6 +794,13 @@ export default function ModuleQuizPage() {
                     </p>
                   </div>
                 )}
+
+                <QuizQuestionReferences
+                  userId={user?.uid}
+                  courseId={courseId}
+                  question={currentQuestion}
+                  course={course}
+                />
 
                 {/* Navigation - same as final quiz */}
                 <div className="flex items-center justify-between pt-4 gap-2">

@@ -24,6 +24,13 @@ export interface QuizQuestion {
   }
   sourceFactId?: string // For objective questions - links to fact in accumulatedContext
   sourceFactIds?: string[] // For subjective questions - links to multiple facts
+  /** Resolved lesson links persisted at generation time for reference buttons */
+  sourceLessonLinks?: Array<{
+    moduleIndex: number
+    lessonIndex: number
+    lessonTitle: string
+    blockIndex?: number | null
+  }>
   /** Extra wrong answers pre-generated for Powered sabotage "+2 false answer" */
   extraOptions?: string[]
   /** Expanded true/false variant with partially-true options for sabotage */

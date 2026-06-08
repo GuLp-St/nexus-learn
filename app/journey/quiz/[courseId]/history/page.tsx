@@ -11,6 +11,7 @@ import SidebarNav from "@/components/sidebar-nav"
 import { useAuth } from "@/components/auth-provider"
 import { getCourseWithProgress, CourseWithProgress } from "@/lib/course-utils"
 import { getQuizAttempts, QuizAttempt, fetchQuizQuestionsByIds, QuizQuestion } from "@/lib/quiz-utils"
+import { QuizQuestionReferences } from "@/components/quiz-question-references"
 import { formatDateForDisplay } from "@/lib/date-utils"
 import { checkObjectiveAnswer } from "@/lib/quiz-generator"
 
@@ -372,43 +373,13 @@ export default function QuizHistoryPage() {
                                   <p className="text-sm text-foreground">{score.feedback}</p>
                                 </div>
                               )}
-                              {/* Learn more - Only show if facts are found */}
-                              {(() => {
-                                const factIds = (question.sourceFactIds || [question.sourceFactId]).filter(Boolean)
-                                if (!factIds.length || !course) return null
-                                
-                                const foundFacts = factIds.map((factId) => {
-                                  // Find fact across all modules
-                                  for (let i = 0; i < course.modules.length; i++) {
-                                    const module = course.modules[i]
-                                    const found = (module as any).accumulatedContext?.find((f: any) => f.id === factId)
-                                    if (found) return found
-                                  }
-                                  return null
-                                }).filter(Boolean)
-                                
-                                if (foundFacts.length === 0) return null
-                                
-                                return (
-                                  <div className="mt-3 pt-3 border-t border-border">
-                                    <p className="text-xs font-medium text-muted-foreground mb-2">Learn more:</p>
-                                    <div className="space-y-1">
-                                      {foundFacts.map((fact: any, idx: number) => {
-                                        const [courseIdPart, modIdx, lessonIdx] = fact.sourceLessonId.split("-").slice(-3).map(Number)
-                                        return (
-                                          <Link
-                                            key={idx}
-                                            href={`/journey/${courseId}/modules/${modIdx}/lessons/${lessonIdx}`}
-                                            className="text-xs text-primary hover:underline flex items-center gap-1"
-                                          >
-                                            <span>→ {fact.sourceLessonTitle}</span>
-                                          </Link>
-                                        )
-                                      })}
-                                    </div>
-                                  </div>
-                                )
-                              })()}
+                              <QuizQuestionReferences
+                                userId={user?.uid}
+                                courseId={courseId}
+                                question={question}
+                                course={course}
+                                variant="block"
+                              />
                             </div>
                           </div>
                         </CardContent>

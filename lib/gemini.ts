@@ -110,6 +110,7 @@ export interface CourseModule {
     text: string
     sourceLessonId: string
     sourceLessonTitle: string
+    sourceBlockIndex?: number | null
   }>
 }
 

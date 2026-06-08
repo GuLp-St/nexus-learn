@@ -21,6 +21,7 @@ import {
   saveUserLessonStream,
   getLegacyLessonStreamFromCourse,
 } from "@/lib/lesson-stream-store"
+import { getAccessibleLessonStream } from "@/lib/lesson-stream-resolve"
 import { mergeLessonFactsIntoCourseModule } from "@/lib/lesson-stream-course-context"
 import { LessonBlockPanel } from "@/components/lesson-block-panel"
 import { getCourseWithProgress, updateUserProgress, CourseWithProgress, ensureUserProgress, getLessonStreamProgress } from "@/lib/course-utils"
@@ -48,6 +49,7 @@ export default function LessonPage() {
   const [completedInteractions, setCompletedInteractions] = useState<{ [index: number]: any }>({})
   const [viewMode, setViewMode] = useState<"interactive" | "review">("interactive")
   const [readOnlyView, setReadOnlyView] = useState(false)
+  const [highlightBlockIndex, setHighlightBlockIndex] = useState<number | null>(null)
   const [resetLesson, setResetLesson] = useState(false)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
@@ -156,10 +158,19 @@ export default function LessonPage() {
         // Detect reset / read-only view flags from URL
         let resetRequested = false
         let viewOnlyRequested = false
+        let requestedBlockIndex: number | null = null
         if (typeof window !== "undefined") {
           const searchParams = new URLSearchParams(window.location.search)
           resetRequested = searchParams.get("reset") === "true"
           viewOnlyRequested = searchParams.get("view") === "true"
+          const blockParam = searchParams.get("block")
+          if (blockParam != null) {
+            const parsed = parseInt(blockParam, 10)
+            if (!Number.isNaN(parsed) && parsed >= 0) {
+              requestedBlockIndex = parsed
+              viewOnlyRequested = true
+            }
+          }
         }
         if (viewOnlyRequested) {
           setReadOnlyView(true)
@@ -206,11 +217,13 @@ export default function LessonPage() {
         savedBlockIndex = streamProgress.currentBlockIndex
         setCompletedInteractions(streamProgress.completedInteractions || {})
 
-        let existingStream = await getUserLessonStream(
+        let existingStream = await getAccessibleLessonStream(
           user.uid,
+          courseData.createdBy,
           courseId,
           moduleIndex,
-          lessonIndex
+          lessonIndex,
+          lesson
         )
 
         if (!existingStream) {
@@ -221,21 +234,42 @@ export default function LessonPage() {
           }
         }
 
+        if (!existingStream && viewOnlyRequested) {
+          setError(
+            "This lesson has not been generated yet. Open it from the course journey to generate the teaching content first."
+          )
+          setLoading(false)
+          return
+        }
+
         if (existingStream) {
-          const validatedBlockIndex = viewOnlyRequested
-            ? existingStream.blocks.length - 1
-            : Math.min(savedBlockIndex, existingStream.blocks.length - 1)
+          const validatedBlockIndex =
+            requestedBlockIndex != null
+              ? Math.min(requestedBlockIndex, existingStream.blocks.length - 1)
+              : viewOnlyRequested
+                ? existingStream.blocks.length - 1
+                : Math.min(savedBlockIndex, existingStream.blocks.length - 1)
           setLessonStream(existingStream)
           setCurrentBlockIndex(Math.max(0, validatedBlockIndex))
           setLoading(false)
 
-          const scrollKey = `scroll-pos-${courseId}-${moduleIndex}-${lessonIndex}`
-          const savedScroll = sessionStorage.getItem(scrollKey)
-          if (savedScroll) {
-            const scrollY = parseInt(savedScroll, 10)
+          if (requestedBlockIndex != null) {
+            setHighlightBlockIndex(validatedBlockIndex)
             requestAnimationFrame(() => {
-              window.scrollTo(0, scrollY)
+              document
+                .getElementById(`block-${validatedBlockIndex}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
             })
+            window.setTimeout(() => setHighlightBlockIndex(null), 4000)
+          } else {
+            const scrollKey = `scroll-pos-${courseId}-${moduleIndex}-${lessonIndex}`
+            const savedScroll = sessionStorage.getItem(scrollKey)
+            if (savedScroll) {
+              const scrollY = parseInt(savedScroll, 10)
+              requestAnimationFrame(() => {
+                window.scrollTo(0, scrollY)
+              })
+            }
           }
           return
         }
@@ -929,7 +963,11 @@ export default function LessonPage() {
                         materialContext={materialContext}
                         isPast={!readOnlyView}
                         readOnly={readOnlyView}
-                        borderClass=""
+                        borderClass={
+                          highlightBlockIndex === index
+                            ? "ring-2 ring-primary shadow-md"
+                            : ""
+                        }
                       />
                     </NexusFocusRegion>
                   )
