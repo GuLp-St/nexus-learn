@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { BookOpen, Play, Trash2, Star, Target, Plus, Sparkles, Library } from "lucide-react"
+import { BookOpen, Play, Trash2, Star, Target, Plus, Sparkles, Library, Folder } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -73,6 +73,7 @@ const CourseCard = ({
   index,
   onRemove,
   onRate,
+  onMoveToFolder,
   userId,
   viewType = "icon-lg",
 }: {
@@ -80,6 +81,7 @@ const CourseCard = ({
   index: number
   onRemove: () => void
   onRate: () => void
+  onMoveToFolder?: () => void
   userId: string
   viewType?: JourneyViewType
 }) => {
@@ -278,6 +280,21 @@ const CourseCard = ({
           )}
           {sourceBadge}
         </div>
+
+        {onMoveToFolder && (
+          <Button
+            variant="secondary"
+            size="icon"
+            className="absolute bottom-2 left-2 z-10 h-7 w-7 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 shadow-md"
+            title="Move to folder"
+            onClick={(e) => {
+              e.stopPropagation()
+              onMoveToFolder()
+            }}
+          >
+            <Folder className="h-3 w-3" />
+          </Button>
+        )}
 
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/20">
           <div
@@ -625,13 +642,19 @@ export default function JourneyPage() {
     }
   }
 
-  const renderCourseCard = (course: CourseWithProgress, index: number, viewType: JourneyViewType) => (
+  const renderCourseCard = (
+    course: CourseWithProgress,
+    index: number,
+    viewType: JourneyViewType,
+    onMoveToFolder?: () => void
+  ) => (
     <CourseCard
       key={course.id}
       course={course}
       index={index}
       onRemove={() => handleRemoveClick(course)}
       onRate={() => setRatingModal({ open: true, courseId: course.id, courseTitle: course.title })}
+      onMoveToFolder={onMoveToFolder}
       userId={user!.uid}
       viewType={viewType}
     />

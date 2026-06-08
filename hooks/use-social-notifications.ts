@@ -1,11 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { subscribeToTotalUnreadChatCount } from "@/lib/chat-utils"
 import { doc, onSnapshot, collection, query, where } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import type { Challenge } from "@/lib/challenge-utils"
+import {
+  getSeenChallengeIds,
+  getSeenFriendRequestIds,
+} from "@/lib/social-notification-seen"
 
 export function useSocialNotifications() {
   const { user } = useAuth()
@@ -13,6 +17,15 @@ export function useSocialNotifications() {
   const [pendingFriendRequestsCount, setPendingFriendRequestsCount] = useState(0)
   const [pendingChallengesCount, setPendingChallengesCount] = useState(0)
   const [yourTurnChallengeCount, setYourTurnChallengeCount] = useState(0)
+  const [seenTick, setSeenTick] = useState(0)
+
+  const bumpSeen = useCallback(() => setSeenTick((n) => n + 1), [])
+
+  useEffect(() => {
+    const onSeenUpdate = () => bumpSeen()
+    window.addEventListener("nexus-social-seen-updated", onSeenUpdate)
+    return () => window.removeEventListener("nexus-social-seen-updated", onSeenUpdate)
+  }, [bumpSeen])
 
   useEffect(() => {
     if (!user) {
@@ -23,6 +36,11 @@ export function useSocialNotifications() {
       return
     }
 
+    let challengerTurn = 0
+    let challengedTurn = 0
+
+    const syncYourTurn = () => setYourTurnChallengeCount(challengerTurn + challengedTurn)
+
     const unsubscribeChat = subscribeToTotalUnreadChatCount(user.uid, (count) => {
       setUnreadChatCount(count)
     })
@@ -30,7 +48,9 @@ export function useSocialNotifications() {
     const unsubscribeUser = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data()
-        setPendingFriendRequestsCount(data.friendRequests?.length || 0)
+        const requests: string[] = data.friendRequests || []
+        const seenReq = getSeenFriendRequestIds()
+        setPendingFriendRequestsCount(requests.filter((id) => !seenReq.has(id)).length)
       }
     })
 
@@ -40,13 +60,13 @@ export function useSocialNotifications() {
       where("status", "==", "pending")
     )
     const unsubscribePending = onSnapshot(pendingQuery, (snapshot) => {
-      setPendingChallengesCount(snapshot.size)
+      const seen = getSeenChallengeIds()
+      let count = 0
+      snapshot.forEach((docSnap) => {
+        if (!seen.has(docSnap.id)) count++
+      })
+      setPendingChallengesCount(count)
     })
-
-    let challengerTurn = 0
-    let challengedTurn = 0
-
-    const syncYourTurn = () => setYourTurnChallengeCount(challengerTurn + challengedTurn)
 
     const challengerActiveQuery = query(
       collection(db, "challenges"),
@@ -60,18 +80,22 @@ export function useSocialNotifications() {
     )
 
     const unsubscribeChallengerActive = onSnapshot(challengerActiveQuery, (snapshot) => {
+      const seen = getSeenChallengeIds()
       challengerTurn = 0
       snapshot.forEach((docSnap) => {
+        if (seen.has(docSnap.id)) return
         const c = docSnap.data() as Challenge
         if (!c.hasChallengerPlayed) challengerTurn++
       })
       syncYourTurn()
     })
     const unsubscribeChallengedActive = onSnapshot(challengedActiveQuery, (snapshot) => {
+      const seen = getSeenChallengeIds()
       challengedTurn = 0
       snapshot.forEach((docSnap) => {
+        if (seen.has(docSnap.id)) return
         const c = docSnap.data() as Challenge
-        if (c.challengedScore === null) challengedTurn++
+        if (c.hasChallengedAccepted && c.challengedScore == null) challengedTurn++
       })
       syncYourTurn()
     })
@@ -83,7 +107,7 @@ export function useSocialNotifications() {
       unsubscribeChallengerActive()
       unsubscribeChallengedActive()
     }
-  }, [user])
+  }, [user, seenTick])
 
   const totalSocialNotifications =
     unreadChatCount +

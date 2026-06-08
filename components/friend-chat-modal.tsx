@@ -1,12 +1,29 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { AvatarWithCosmetics } from "@/components/avatar-with-cosmetics"
 import { NameWithColor } from "@/components/name-with-color"
-import { sendMessage, subscribeToChatMessages, markMessagesAsRead, setTypingStatus, subscribeToTypingStatus, ChatMessage } from "@/lib/chat-utils"
+import {
+  sendMessage,
+  subscribeToChatMessages,
+  markMessagesAsRead,
+  setTypingStatus,
+  subscribeToTypingStatus,
+  deleteChatHistoryForUser,
+  type ChatHistoryDeleteMode,
+  type ChatMessage,
+} from "@/lib/chat-utils"
+import { markChallengesSeen } from "@/lib/social-notification-seen"
 import { useAuth } from "@/components/auth-provider"
 import { format, isToday, isYesterday, isSameDay } from "date-fns"
 import { Zap, Trophy, Play, Share2, BookOpen, Plus, Clock, X, Check, Trash2, AlertCircle, Send, CheckCheck } from "lucide-react"
@@ -62,6 +79,8 @@ export function FriendChatModal({
   const [isChallengeModalOpen, setIsChallengeModalOpen] = useState(false)
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [activeChallengeCourseId, setActiveChallengeCourseId] = useState<string | null>(null)
+  const [historyDeleteOpen, setHistoryDeleteOpen] = useState(false)
+  const [deletingHistory, setDeletingHistory] = useState(false)
 
   useEffect(() => {
     if (open && initialChallengeCourseId) {
@@ -141,15 +160,23 @@ export function FriendChatModal({
     }
   }, [open, user, friendId])
 
-  // Mark messages as read when modal is open and messages change
+  // Mark all messages as read when chat opens (including hidden-by-delete ones)
   useEffect(() => {
-    if (open && user && messages.length > 0) {
-      const hasUnread = messages.some(m => m.receiverId === user.uid && !m.read)
-      if (hasUnread) {
-        markMessagesAsRead(user.uid, friendId).catch(console.error)
-      }
+    if (open && user) {
+      markMessagesAsRead(user.uid, friendId).catch(console.error)
     }
-  }, [open, user, friendId, messages])
+  }, [open, user, friendId])
+
+  // Dismiss challenge notifications once the user has opened this chat
+  useEffect(() => {
+    if (!open || messages.length === 0) return
+    const challengeIds = messages
+      .filter((m) => m.type === "challenge" && m.challengeId)
+      .map((m) => m.challengeId as string)
+    if (challengeIds.length > 0) {
+      markChallengesSeen(challengeIds)
+    }
+  }, [open, messages])
 
   const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setNewMessage(e.target.value)
@@ -196,6 +223,32 @@ export function FriendChatModal({
     }
   }
 
+  const HISTORY_DELETE_OPTIONS: { mode: ChatHistoryDeleteMode; label: string; description: string }[] = [
+    { mode: "keep_last_hour", label: "Keep last hour", description: "Remove everything older than 1 hour" },
+    { mode: "keep_since_yesterday", label: "Keep since yesterday", description: "Remove messages before yesterday" },
+    { mode: "keep_last_week", label: "Keep last week", description: "Remove everything older than 7 days" },
+    { mode: "all", label: "Delete all history", description: "Clear the entire chat on your side" },
+  ]
+
+  const handleDeleteHistory = async (mode: ChatHistoryDeleteMode) => {
+    if (!user || deletingHistory) return
+    setDeletingHistory(true)
+    try {
+      const count = await deleteChatHistoryForUser(user.uid, friendId, mode)
+      setHistoryDeleteOpen(false)
+      toast.success(
+        count > 0
+          ? `Removed ${count} message${count === 1 ? "" : "s"} from your view`
+          : "No messages to remove"
+      )
+    } catch (error) {
+      console.error("Error deleting chat history:", error)
+      toast.error("Failed to delete chat history")
+    } finally {
+      setDeletingHistory(false)
+    }
+  }
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -232,11 +285,21 @@ export function FriendChatModal({
                 )}
               </div>
             </DialogTitle>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-2 text-xs"
+                className="gap-1.5 text-xs px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => setHistoryDeleteOpen(true)}
+                title="Clear chat history"
+              >
+                <Trash2 className="h-3 w-3" />
+                Clear
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs px-2"
                 onClick={() => {
                   onOpenChange(false)
                   router.push(
@@ -245,12 +308,12 @@ export function FriendChatModal({
                 }}
               >
                 <Share2 className="h-3 w-3" />
-                Share
+                <span className="hidden sm:inline">Share</span>
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-2 text-xs"
+                className="gap-1.5 text-xs px-2"
                 onClick={() => {
                   onOpenChange(false)
                   router.push(
@@ -259,7 +322,7 @@ export function FriendChatModal({
                 }}
               >
                 <Zap className="h-3 w-3" />
-                Challenge
+                <span className="hidden sm:inline">Challenge</span>
               </Button>
             </div>
           </div>
@@ -396,6 +459,37 @@ export function FriendChatModal({
           friendId={friendId}
           friendNickname={friendNickname}
         />
+
+        <Dialog open={historyDeleteOpen} onOpenChange={setHistoryDeleteOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Delete chat history</DialogTitle>
+              <DialogDescription>
+                Removes messages from your view only. They stay on {friendNickname}&apos;s side until
+                they delete them too — then they&apos;re removed from the server.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 py-1">
+              {HISTORY_DELETE_OPTIONS.map((opt) => (
+                <Button
+                  key={opt.mode}
+                  variant="outline"
+                  className="w-full h-auto flex-col items-start gap-0.5 py-2.5 px-3 text-left"
+                  disabled={deletingHistory}
+                  onClick={() => void handleDeleteHistory(opt.mode)}
+                >
+                  <span className="text-sm font-medium">{opt.label}</span>
+                  <span className="text-xs text-muted-foreground font-normal">{opt.description}</span>
+                </Button>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setHistoryDeleteOpen(false)} disabled={deletingHistory}>
+                Cancel
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   )

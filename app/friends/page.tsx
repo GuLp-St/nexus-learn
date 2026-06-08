@@ -16,7 +16,8 @@ import { getFriends, getFriendRequests, acceptFriendRequest, rejectFriendRequest
 import { FriendChatModal } from "@/components/friend-chat-modal"
 import Link from "next/link"
 import { Spinner } from "@/components/ui/spinner"
-import { subscribeToFriendUnreadCount } from "@/lib/chat-utils"
+import { subscribeToFriendUnreadCount, markMessagesAsRead } from "@/lib/chat-utils"
+import { markFriendRequestsSeen } from "@/lib/social-notification-seen"
 import {
   Dialog,
   DialogContent,
@@ -198,6 +199,9 @@ export default function SocialPage() {
   }
 
   const handleOpenChat = (friend: FriendInfo) => {
+    if (user) {
+      markMessagesAsRead(user.uid, friend.userId).catch(console.error)
+    }
     setSelectedFriend({
       id: friend.userId,
       nickname: friend.nickname,
@@ -205,6 +209,12 @@ export default function SocialPage() {
     })
     setChatOpen(true)
   }
+
+  useEffect(() => {
+    if (activeTab === "requests" && friendRequests.length > 0) {
+      markFriendRequestsSeen(friendRequests.map((r) => r.userId))
+    }
+  }, [activeTab, friendRequests])
 
   const handleUnfriendClick = (friend: FriendInfo) => {
     setUnfriendDialog({

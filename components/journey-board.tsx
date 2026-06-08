@@ -65,7 +65,12 @@ interface JourneyBoardProps {
   selectionMode?: "share" | "challenge" | null
   onSelectCourse?: (course: CourseWithProgress) => void
   selectionEmptyMessage?: string
-  renderCourse: (course: CourseWithProgress, index: number, viewType: JourneyViewType) => React.ReactNode
+  renderCourse: (
+    course: CourseWithProgress,
+    index: number,
+    viewType: JourneyViewType,
+    onMoveToFolder?: () => void
+  ) => React.ReactNode
   onCreateFolder: (name: string) => Promise<void>
   onRenameFolder: (folderId: string, name: string) => Promise<void>
   onDeleteFolder: (folderId: string) => Promise<void>
@@ -127,23 +132,25 @@ export function JourneyBoard({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
-          {activeFolder && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0"
-              onClick={() => onActiveFolderChange(null)}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-          )}
-          <h3 className="text-lg font-semibold text-foreground shrink-0">
-            {activeFolder ? activeFolder.name : "All Courses"}
-          </h3>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between min-w-0">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            {activeFolder && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={() => onActiveFolderChange(null)}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            )}
+            <h3 className="text-lg font-semibold text-foreground">
+              {activeFolder ? activeFolder.name : "All Courses"}
+            </h3>
+          </div>
           {courseLimits && !activeFolder && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground mt-0.5">
               <span className="font-medium text-foreground">
                 {courseLimits.generated}/{courseLimits.maxGenerated} generated
               </span>
@@ -160,26 +167,26 @@ export function JourneyBoard({
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap shrink-0 self-start sm:self-auto">
           {!activeFolder && (
             <Button
               variant="outline"
               size="sm"
-              className="gap-1"
+              className="gap-1 shrink min-w-0 px-2 sm:px-3 h-8 sm:h-9 text-xs sm:text-sm"
               onClick={() => {
                 setNewFolderName("")
                 setNewFolderOpen(true)
               }}
             >
-              <Plus className="h-3 w-3" />
-              New folder
+              <Plus className="h-3 w-3 shrink-0" />
+              <span className="truncate">New folder</span>
             </Button>
           )}
           <Select
             value={settings.sortBy}
             onValueChange={(v) => onSortByChange(v as JourneySortBy)}
           >
-            <SelectTrigger className="w-[140px] h-9">
+            <SelectTrigger className="w-[110px] sm:w-[140px] h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3 shrink-0">
               <ArrowUpDown className="h-3.5 w-3.5 mr-1 shrink-0" />
               <SelectValue placeholder="Sort" />
             </SelectTrigger>
@@ -195,7 +202,7 @@ export function JourneyBoard({
             value={viewType}
             onValueChange={(v) => onViewTypeChange(v as JourneyViewType)}
           >
-            <SelectTrigger className="w-[120px] h-9">
+            <SelectTrigger className="w-[96px] sm:w-[120px] h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3 shrink-0">
               <SelectValue placeholder="View" />
             </SelectTrigger>
             <SelectContent>
@@ -284,27 +291,20 @@ export function JourneyBoard({
                 : undefined
             }
           >
-            {!selectionMode && settings.folders.length > 0 && (
-              <Button
-                variant="secondary"
-                size="icon"
-                className="absolute top-2 left-2 z-20 h-7 w-7 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 shadow-md"
-                title="Move to folder"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setMoveCourseId(course.id)
-                }}
-              >
-                <Folder className="h-3 w-3" />
-              </Button>
-            )}
             <div
               className={cn(
                 "h-full rounded-xl",
                 viewType === "list" ? "overflow-visible" : "overflow-hidden"
               )}
             >
-              {renderCourse(course, index, viewType)}
+              {renderCourse(
+                course,
+                index,
+                viewType,
+                !selectionMode && settings.folders.length > 0
+                  ? () => setMoveCourseId(course.id)
+                  : undefined
+              )}
             </div>
           </div>
         ))}

@@ -13,6 +13,14 @@ export function createGoogleProvider(): GoogleAuthProvider {
   return provider
 }
 
+function googleNickname(user: User): string {
+  return (
+    user.displayName?.trim().split(/\s+/)[0] ||
+    user.email?.split("@")[0] ||
+    "Learner"
+  )
+}
+
 /** Create or update Firestore profile after Google sign-in. */
 export async function ensureGoogleUserProfile(
   gUser: User,
@@ -23,7 +31,7 @@ export async function ensureGoogleUserProfile(
 
   if (!existing.exists()) {
     await setDoc(userRef, {
-      nickname: options?.nickname?.trim() || gUser.displayName?.split(" ")[0] || "Learner",
+      nickname: options?.nickname?.trim() || googleNickname(gUser),
       email: gUser.email,
       xp: 0,
       dailyLoginStreak: 0,
@@ -38,44 +46,36 @@ export async function ensureGoogleUserProfile(
 function isPopupBlockedError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false
   const code = (err as { code?: string }).code
+  return code === "auth/popup-blocked"
+}
+
+function isUserCancelledPopup(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false
+  const code = (err as { code?: string }).code
   return (
-    code === "auth/popup-blocked" ||
     code === "auth/popup-closed-by-user" ||
     code === "auth/cancelled-popup-request"
   )
 }
 
-function prefersRedirect(): boolean {
-  if (typeof window === "undefined") return false
-  const ua = navigator.userAgent
-  const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua)
-  const standalone =
-    window.matchMedia("(display-mode: standalone)").matches ||
-    ("standalone" in navigator && !!(navigator as { standalone?: boolean }).standalone)
-  return mobile || standalone
-}
-
 /**
- * Sign in with Google — redirect on mobile/PWA (reliable), popup on desktop with redirect fallback.
+ * Sign in with Google — popup only; redirect strictly when the browser blocks popups.
  */
 export async function signInWithGoogle(options?: {
   nickname?: string
 }): Promise<{ method: "popup" | "redirect" }> {
   const provider = createGoogleProvider()
 
-  if (prefersRedirect()) {
-    if (options?.nickname?.trim()) {
-      sessionStorage.setItem("google-signup-nickname", options.nickname.trim())
-    }
-    await signInWithRedirect(auth, provider)
-    return { method: "redirect" }
-  }
-
   try {
     const result = await signInWithPopup(auth, provider)
-    await ensureGoogleUserProfile(result.user, options)
+    await ensureGoogleUserProfile(result.user, {
+      nickname: options?.nickname || googleNickname(result.user),
+    })
     return { method: "popup" }
   } catch (err) {
+    if (isUserCancelledPopup(err)) {
+      throw err
+    }
     if (isPopupBlockedError(err)) {
       if (options?.nickname?.trim()) {
         sessionStorage.setItem("google-signup-nickname", options.nickname.trim())

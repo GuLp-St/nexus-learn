@@ -66,7 +66,7 @@ export default function AuthPage() {
             : undefined
         if (savedNickname) sessionStorage.removeItem("google-signup-nickname")
         await ensureGoogleUserProfile(result.user, {
-          nickname: savedNickname || nickname,
+          nickname: savedNickname,
         })
         const returnUrl = sessionStorage.getItem("auth-return-url")
         sessionStorage.removeItem("auth-return-url")
@@ -105,20 +105,19 @@ export default function AuthPage() {
 
   const handleGoogleAuth = async () => {
     setError("")
-    if (activeTab === "signup" && !nickname.trim()) {
-      setError("Choose a nickname to complete sign up with Google")
-      return
-    }
     setIsSubmitting(true)
     try {
-      const { method } = await signInWithGoogle({ nickname })
-      if (method === "redirect") {
+      const { method } = await signInWithGoogle()
+      if (method === "redirect") return
+      // Popup success — auth state listener redirects once Firebase session is ready
+    } catch (err: unknown) {
+      const code = err && typeof err === "object" ? (err as { code?: string }).code : undefined
+      if (
+        code === "auth/popup-closed-by-user" ||
+        code === "auth/cancelled-popup-request"
+      ) {
         return
       }
-      const returnUrl = sessionStorage.getItem("auth-return-url")
-      sessionStorage.removeItem("auth-return-url")
-      router.push(returnUrl && returnUrl !== "/auth" ? returnUrl : "/")
-    } catch (err: unknown) {
       setError(getAuthErrorMessage(err, "Google sign-in failed"))
     } finally {
       setIsSubmitting(false)

@@ -30,6 +30,8 @@ import {
 
   addDoc,
 
+  writeBatch,
+
 } from "firebase/firestore"
 
 
@@ -60,6 +62,39 @@ export interface ChatMessage {
 
   createdAt: Timestamp
 
+  /** User IDs who hid this message on their side */
+  deletedFor?: string[]
+
+}
+
+export type ChatHistoryDeleteMode =
+  | "all"
+  | "keep_last_hour"
+  | "keep_since_yesterday"
+  | "keep_last_week"
+
+function isMessageVisibleForUser(message: ChatMessage, userId: string): boolean {
+  return !(message.deletedFor?.includes(userId))
+}
+
+function getKeepCutoff(mode: ChatHistoryDeleteMode): number | null {
+  const now = Date.now()
+  switch (mode) {
+    case "all":
+      return null
+    case "keep_last_hour":
+      return now - 60 * 60 * 1000
+    case "keep_since_yesterday": {
+      const d = new Date()
+      d.setHours(0, 0, 0, 0)
+      d.setDate(d.getDate() - 1)
+      return d.getTime()
+    }
+    case "keep_last_week":
+      return now - 7 * 24 * 60 * 60 * 1000
+    default:
+      return null
+  }
 }
 
 
@@ -252,7 +287,9 @@ export async function getChatMessages(
 
     )
 
-    return sortMessagesChronologically(messages)
+    return sortMessagesChronologically(
+      messages.filter((m) => isMessageVisibleForUser(m, userId1))
+    )
 
   } catch (error: unknown) {
 
@@ -308,7 +345,11 @@ export function subscribeToChatMessages(
 
       )
 
-      callback(sortMessagesChronologically(messages))
+      callback(
+        sortMessagesChronologically(
+          messages.filter((m) => isMessageVisibleForUser(m, userId1))
+        )
+      )
 
     },
 
@@ -354,7 +395,14 @@ export function subscribeToFriendUnreadCount(
 
     q,
 
-    (snapshot) => callback(snapshot.size),
+    (snapshot) => {
+      let count = 0
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data()
+        if (!data.deletedFor?.includes(userId)) count++
+      })
+      callback(count)
+    },
 
     (error) => logFirestoreError("subscribeToFriendUnreadCount", error)
 
@@ -482,7 +530,14 @@ export function subscribeToTotalUnreadChatCount(
 
     q,
 
-    (snapshot) => callback(snapshot.size),
+    (snapshot) => {
+      let count = 0
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data()
+        if (!data.deletedFor?.includes(userId)) count++
+      })
+      callback(count)
+    },
 
     (error) => logFirestoreError("subscribeToTotalUnreadChatCount", error)
 
@@ -594,6 +649,62 @@ export function subscribeToTypingStatus(
 
   )
 
+}
+
+/**
+ * Hide or purge chat messages for one user. Hard-deletes from the server only when
+ * both participants have removed the same message.
+ */
+export async function deleteChatHistoryForUser(
+  userId: string,
+  otherUserId: string,
+  mode: ChatHistoryDeleteMode
+): Promise<number> {
+  const chatId = getChatId(userId, otherUserId)
+  const cutoff = getKeepCutoff(mode)
+
+  const snapshot = await getDocs(
+    query(collection(db, "chatMessages"), where("chatId", "==", chatId))
+  )
+
+  let batch = writeBatch(db)
+  let affected = 0
+  let batchCount = 0
+
+  const commitBatch = async () => {
+    if (batchCount === 0) return
+    await batch.commit()
+    batch = writeBatch(db)
+    batchCount = 0
+  }
+
+  for (const docSnap of snapshot.docs) {
+    const data = docSnap.data() as ChatMessage
+    const msgTime = data.createdAt?.toMillis?.() ?? 0
+
+    if (cutoff !== null && msgTime >= cutoff) continue
+    if (data.deletedFor?.includes(userId)) continue
+
+    const deletedFor = [...(data.deletedFor ?? []), userId]
+    const bothDeleted =
+      deletedFor.includes(userId) && deletedFor.includes(otherUserId)
+
+    if (bothDeleted) {
+      batch.delete(docSnap.ref)
+    } else {
+      batch.update(docSnap.ref, { deletedFor })
+    }
+
+    affected++
+    batchCount++
+
+    if (batchCount >= 400) {
+      await commitBatch()
+    }
+  }
+
+  await commitBatch()
+  return affected
 }
 
 

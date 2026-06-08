@@ -472,7 +472,7 @@ export default function CourseQuizPage() {
     handleSubmitRef.current = handleSubmit
   }, [handleSubmit])
 
-  useQuizLeaveWarning({
+  const { LeaveWarningDialog } = useQuizLeaveWarning({
     active: questions.length > 0 && !showResults && !submitting && !loading,
     onLeave: () => handleSubmitRef.current(),
   })
@@ -766,6 +766,7 @@ export default function CourseQuizPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background lg:flex-row">
+      <LeaveWarningDialog />
       <SidebarNav 
         currentPath="/journey" 
         title="Quiz"

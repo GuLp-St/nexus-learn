@@ -42,6 +42,8 @@ import { db } from "@/lib/firebase"
 import { useXP } from "@/components/xp-context-provider"
 import { ChallengeReadyRoom } from "@/components/challenge/challenge-ready-room"
 import { ChallengeQuizOverlay } from "@/components/challenge/challenge-quiz-overlay"
+import { ChallengeComboBar } from "@/components/challenge/challenge-combo-bar"
+import { markChallengesSeen } from "@/lib/social-notification-seen"
 import { ChallengeTabAwayModal } from "@/components/challenge/challenge-tab-away-modal"
 import { useChallengeQuizFx } from "@/hooks/use-challenge-quiz-fx"
 import { calculatePerformanceScore } from "@/lib/challenge-scoring"
@@ -138,6 +140,12 @@ export default function ChallengeQuizPage() {
   useEffect(() => {
     phaseRef.current = phase
   }, [phase])
+
+  useEffect(() => {
+    if (challengeId) {
+      markChallengesSeen([challengeId])
+    }
+  }, [challengeId])
 
   useEffect(() => {
     if (phase !== "playing" || questions.length === 0) {
@@ -600,21 +608,27 @@ export default function ChallengeQuizPage() {
     handleSubmitRef.current = handleSubmit
   }, [handleSubmit])
 
-  useQuizLeaveWarning({
-    active: phase === "playing" && questions.length > 0,
-    message: LEAVE_CONFIRM_MESSAGE,
-    onLeave: () => handleSubmitRef.current(),
-  })
+  const { requestConfirm, LeaveWarningDialog } =
+    useQuizLeaveWarning({
+      active: phase === "playing" && questions.length > 0,
+      message: LEAVE_CONFIRM_MESSAGE,
+      onLeave: () => handleSubmitRef.current(),
+    })
 
   const confirmAndLeave = useCallback(
     async (href: string) => {
-      if (!window.confirm(LEAVE_CONFIRM_MESSAGE)) return
+      if (phase !== "playing" || questions.length === 0) {
+        router.push(href)
+        return
+      }
+      const confirmed = await requestConfirm()
+      if (!confirmed) return
       setTabAwayOpen(false)
       tabAwayDeadlineRef.current = null
       await handleSubmitRef.current()
       router.push(href)
     },
-    [router]
+    [router, phase, questions.length, requestConfirm]
   )
 
   useEffect(() => {
@@ -670,27 +684,6 @@ export default function ChallengeQuizPage() {
     const id = setInterval(tick, 100)
     return () => clearInterval(id)
   }, [tabAwayOpen])
-
-  useEffect(() => {
-    if (phase !== "playing" || submitting) return
-
-    const onCaptureClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      const anchor = target.closest("a")
-      if (!anchor) return
-
-      const href = anchor.getAttribute("href")
-      if (!href || href.startsWith("#") || href.startsWith("javascript:")) return
-      if (href.includes(`/challenges/${challengeId}`)) return
-
-      e.preventDefault()
-      e.stopPropagation()
-      void confirmAndLeave(href)
-    }
-
-    document.addEventListener("click", onCaptureClick, true)
-    return () => document.removeEventListener("click", onCaptureClick, true)
-  }, [phase, submitting, challengeId, confirmAndLeave])
 
   const handleAnswerChange = (questionId: string, answer: string | number | boolean) => {
     setAnswers((prev) => ({ ...prev, [questionId]: answer }))
@@ -795,23 +788,31 @@ export default function ChallengeQuizPage() {
 
   if (authLoading || phase === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Spinner className="h-8 w-8" />
-      </div>
+      <>
+        <LeaveWarningDialog />
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <Spinner className="h-8 w-8" />
+        </div>
+      </>
     )
   }
 
   if (!challenge) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Button onClick={() => router.push("/friends")}>Go to Friends</Button>
-      </div>
+      <>
+        <LeaveWarningDialog />
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <Button onClick={() => router.push("/friends")}>Go to Friends</Button>
+        </div>
+      </>
     )
   }
 
   if (phase === "ready") {
     return (
-      <ChallengeReadyRoom
+      <>
+        <LeaveWarningDialog />
+        <ChallengeReadyRoom
         challenge={challenge}
         isChallenger={!!isChallenger}
         friendNickname={friendNickname}
@@ -825,6 +826,7 @@ export default function ChallengeQuizPage() {
         accepting={accepting}
         onBack={() => router.push("/friends")}
       />
+      </>
     )
   }
 
@@ -840,11 +842,13 @@ export default function ChallengeQuizPage() {
     const scorePercentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0
 
     return (
-      <div className="flex flex-col lg:flex-row min-h-screen bg-background">
-        <SidebarNav currentPath="/friends" />
-        <main className="flex-1 p-4 lg:p-8">
-          <div className="mx-auto max-w-3xl space-y-6">
-            <h1 className="text-3xl font-bold">Challenge Results</h1>
+      <>
+        <LeaveWarningDialog />
+        <div className="flex flex-col lg:flex-row min-h-screen bg-background">
+          <SidebarNav currentPath="/friends" />
+          <main className="flex-1 p-4 lg:p-8">
+            <div className="mx-auto max-w-3xl space-y-6">
+              <h1 className="text-3xl font-bold">Challenge Results</h1>
             <Card className="bg-primary/5 border-primary/20">
               <CardContent className="p-8 text-center space-y-4">
                 <div className="text-5xl font-bold text-primary">{scorePercentage}%</div>
@@ -863,9 +867,10 @@ export default function ChallengeQuizPage() {
                 <Button onClick={() => router.push("/friends")}>Back to Social</Button>
               </CardContent>
             </Card>
-          </div>
-        </main>
-      </div>
+            </div>
+          </main>
+        </div>
+      </>
     )
   }
 
@@ -878,30 +883,32 @@ export default function ChallengeQuizPage() {
 
   if (!currentQuestion) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Spinner className="h-8 w-8" />
-      </div>
+      <>
+        <LeaveWarningDialog />
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <Spinner className="h-8 w-8" />
+        </div>
+      </>
     )
   }
 
+  const optionCount = currentQuestion.options?.length ?? 0
+  const compactOptions = optionCount > 4
+
   return (
     <div className="flex flex-col lg:flex-row h-dvh min-h-0 bg-background relative overflow-hidden">
+      <LeaveWarningDialog />
       <ChallengeTabAwayModal open={tabAwayOpen} secondsLeft={tabAwaySeconds} />
       <ChallengeQuizOverlay
         answerFx={fx.answerFx}
         actionFx={actionFx.actionFx}
-        comboStreak={fx.comboStreak}
-        comboMultiplier={fx.comboMultiplier}
-        peakComboMultiplier={fx.peakComboMultiplier}
-        comboTimeLeft={fx.comboTimeLeft}
-        showCombo={challengeSettings?.combo !== false}
         showFlash={challengeSettings?.immediateFeedback !== false}
         sabotageActive={sabotageActive}
       />
       <SidebarNav currentPath="/friends" />
       <main className="flex-1 min-h-0 overflow-hidden">
         <div className="p-2 sm:p-4 lg:p-8 h-full min-h-0">
-          <div className="mx-auto max-w-3xl h-full min-h-0 flex flex-col gap-2 sm:gap-4">
+          <div className="mx-auto max-w-3xl h-full min-h-0 flex flex-col gap-1.5 sm:gap-2">
             <div className="flex items-center gap-2 shrink-0">
               <Button
                 variant="ghost"
@@ -950,24 +957,45 @@ export default function ChallengeQuizPage() {
             )}
 
             <Card className={cn("flex-1 min-h-0 flex flex-col overflow-hidden", questionShake && "challenge-question-shake")}>
-              <CardContent className="p-3 sm:p-5 flex-1 min-h-0 flex flex-col gap-2 sm:gap-3">
-                <h2 className="text-base sm:text-xl font-semibold leading-snug shrink-0">
+              <CardContent className="p-2.5 sm:p-4 flex-1 min-h-0 flex flex-col gap-1.5 sm:gap-2">
+                <h2
+                  className={cn(
+                    "font-semibold leading-snug shrink-0",
+                    compactOptions ? "text-sm sm:text-base" : "text-base sm:text-xl"
+                  )}
+                >
                   {currentQuestion.question}
                 </h2>
 
-                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-0.5">
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-0.5 -mx-0.5 px-0.5">
                   {currentQuestion.type === "objective" && currentQuestion.options && (
                     <RadioGroup
                       value={answers[currentQuestion.questionId]?.toString() || ""}
                       onValueChange={(value) =>
                         handleAnswerChange(currentQuestion.questionId, value)
                       }
-                      className="space-y-2"
+                      className={cn(compactOptions ? "space-y-1" : "space-y-2")}
                     >
                       {currentQuestion.options.map((option, idx) => (
-                        <div key={idx} className="flex items-start space-x-2">
-                          <RadioGroupItem value={option} id={`option-${idx}`} className="mt-0.5" />
-                          <Label htmlFor={`option-${idx}`} className="cursor-pointer flex-1 text-sm leading-snug">
+                        <div
+                          key={idx}
+                          className={cn(
+                            "flex items-start gap-1.5 rounded-md border border-transparent px-0.5",
+                            compactOptions && "py-0"
+                          )}
+                        >
+                          <RadioGroupItem
+                            value={option}
+                            id={`option-${idx}`}
+                            className={cn("shrink-0", compactOptions ? "mt-0.5 h-3.5 w-3.5" : "mt-0.5")}
+                          />
+                          <Label
+                            htmlFor={`option-${idx}`}
+                            className={cn(
+                              "cursor-pointer flex-1 leading-tight",
+                              compactOptions ? "text-xs sm:text-sm py-0.5" : "text-sm leading-snug"
+                            )}
+                          >
                             {option}
                           </Label>
                         </div>
@@ -982,11 +1010,11 @@ export default function ChallengeQuizPage() {
                   )}
                 </div>
 
-                <div className="flex items-center justify-between gap-2 shrink-0 pt-2 border-t border-border/50">
+                <div className="flex items-center gap-2 shrink-0 pt-2 border-t border-border/50">
                   {challengeSettings?.timer !== false ? (
                     <div
                       className={cn(
-                        "flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/60 border text-xs sm:text-sm",
+                        "flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/60 border text-xs sm:text-sm shrink-0",
                         fx.timerPulse && "challenge-timer-flash"
                       )}
                     >
@@ -997,8 +1025,20 @@ export default function ChallengeQuizPage() {
                       </span>
                     </div>
                   ) : (
-                    <span />
+                    <span className="shrink-0 w-0" />
                   )}
+
+                  {challengeSettings?.combo !== false &&
+                    (fx.comboStreak > 0 || fx.peakComboMultiplier > 1) && (
+                      <ChallengeComboBar
+                        comboStreak={fx.comboStreak}
+                        comboMultiplier={fx.comboMultiplier}
+                        peakComboMultiplier={fx.peakComboMultiplier}
+                        comboTimeLeft={fx.comboTimeLeft}
+                      />
+                    )}
+
+                  <div className="shrink-0 ml-auto">
                   {isLastQuestion ? (
                     <Button
                       size="sm"
@@ -1030,6 +1070,7 @@ export default function ChallengeQuizPage() {
                       )}
                     </Button>
                   )}
+                  </div>
                 </div>
               </CardContent>
             </Card>

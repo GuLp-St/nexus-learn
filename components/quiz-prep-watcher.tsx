@@ -8,6 +8,17 @@ import { useAuth } from "@/components/auth-provider"
 import type { QuizPrepJob } from "@/lib/quiz-prep-job"
 import { toast } from "sonner"
 
+function wasNotified(jobId: string): boolean {
+  if (typeof localStorage === "undefined") return false
+  return localStorage.getItem(`quiz-prep-notified-${jobId}`) === "1"
+}
+
+function markNotified(jobId: string): void {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(`quiz-prep-notified-${jobId}`, "1")
+  }
+}
+
 /**
  * Notifies users when a journey quiz finishes generating in the background.
  */
@@ -15,6 +26,7 @@ export function QuizPrepWatcher() {
   const { user } = useAuth()
   const router = useRouter()
   const notifiedRef = useRef<Set<string>>(new Set())
+  const jobStatusRef = useRef<Map<string, QuizPrepJob["status"]>>(new Map())
 
   useEffect(() => {
     if (!user) return
@@ -26,15 +38,21 @@ export function QuizPrepWatcher() {
     )
 
     const unsub = onSnapshot(q, (snap) => {
+      const seen = new Set<string>()
+
       snap.docs.forEach((docSnap) => {
         const job = { id: docSnap.id, ...docSnap.data() } as QuizPrepJob
-        if (job.status !== "completed" || !job.questionIds?.length) return
-        if (notifiedRef.current.has(job.id)) return
+        seen.add(job.id)
 
-        const key = `quiz-prep-notified-${job.id}`
-        if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(key)) return
-        if (typeof sessionStorage !== "undefined") sessionStorage.setItem(key, "1")
+        const prevStatus = jobStatusRef.current.get(job.id)
+        jobStatusRef.current.set(job.id, job.status)
+
+        if (job.status !== "completed" || !job.questionIds?.length) return
+        if (notifiedRef.current.has(job.id) || wasNotified(job.id)) return
+        if (prevStatus !== undefined && prevStatus === "completed") return
+
         notifiedRef.current.add(job.id)
+        markNotified(job.id)
 
         const label =
           job.kind === "course"
@@ -56,6 +74,10 @@ export function QuizPrepWatcher() {
           },
         })
       })
+
+      for (const id of jobStatusRef.current.keys()) {
+        if (!seen.has(id)) jobStatusRef.current.delete(id)
+      }
     })
 
     return () => unsub()

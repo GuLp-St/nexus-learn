@@ -500,7 +500,7 @@ export default function ModuleQuizPage() {
     handleSubmitRef.current = handleSubmit
   }, [handleSubmit])
 
-  useQuizLeaveWarning({
+  const { LeaveWarningDialog } = useQuizLeaveWarning({
     active: questions.length > 0 && !showResults && !submitting && !loading,
     onLeave: () => handleSubmitRef.current(),
   })
@@ -733,6 +733,7 @@ export default function ModuleQuizPage() {
 
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-background">
+      <LeaveWarningDialog />
       <SidebarNav currentPath="/journey" />
 
         <main className="flex-1">
