@@ -274,6 +274,50 @@ export async function saveQuizQuestions(questions: QuizQuestion[]): Promise<void
   }
 }
 
+function buildQuizQuestionDocCandidates(
+  courseId: string,
+  questionId: string,
+  moduleIndex: number | null,
+  lessonIndex: number | null
+): string[] {
+  return [
+    getQuizQuestionDocId(courseId, moduleIndex, lessonIndex, questionId),
+    moduleIndex !== null
+      ? getQuizQuestionDocId(courseId, moduleIndex, null, questionId)
+      : null,
+    getQuizQuestionDocId(courseId, null, null, questionId),
+  ].filter((id, idx, arr) => id && arr.indexOf(id) === idx) as string[]
+}
+
+async function fetchQuizQuestionByIdClient(
+  courseId: string,
+  questionId: string,
+  moduleIndex: number | null,
+  lessonIndex: number | null
+): Promise<QuizQuestion | null> {
+  for (const docId of buildQuizQuestionDocCandidates(courseId, questionId, moduleIndex, lessonIndex)) {
+    const snap = await getDoc(doc(db, "quizQuestions", docId))
+    if (snap.exists()) {
+      return snap.data() as QuizQuestion
+    }
+  }
+
+  const legacyQuery = query(
+    collection(db, "quizQuestions"),
+    where("questionId", "==", questionId),
+    limit(5)
+  )
+  const legacySnap = await getDocs(legacyQuery)
+  for (const legacyDoc of legacySnap.docs) {
+    const data = legacyDoc.data() as QuizQuestion
+    if (data.courseId === courseId) {
+      return data
+    }
+  }
+
+  return null
+}
+
 /**
  * Fetch quiz questions by question IDs
  */
@@ -285,24 +329,9 @@ export async function fetchQuizQuestionsByIds(
 ): Promise<QuizQuestion[]> {
   try {
     const fetched = await Promise.all(
-      questionIds.map(async (questionId) => {
-        const candidates = [
-          getQuizQuestionDocId(courseId, moduleIndex, lessonIndex, questionId),
-          moduleIndex !== null
-            ? getQuizQuestionDocId(courseId, moduleIndex, null, questionId)
-            : null,
-          getQuizQuestionDocId(courseId, null, null, questionId),
-        ].filter((id, idx, arr) => id && arr.indexOf(id) === idx) as string[]
-
-        for (const docId of candidates) {
-          const snap = await getDoc(doc(db, "quizQuestions", docId))
-          if (snap.exists()) {
-            return snap.data() as QuizQuestion
-          }
-        }
-
-        return null
-      })
+      questionIds.map((questionId) =>
+        fetchQuizQuestionByIdClient(courseId, questionId, moduleIndex, lessonIndex)
+      )
     )
 
     return questionIds
