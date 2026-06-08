@@ -66,4 +66,4 @@ Copy `env.template` to `.env.local`. Required keys include Firebase client confi
 
 ## License
 
-Final Year Project — see your institution's submission guidelines for usage and attribution.
+Final Year Project 
