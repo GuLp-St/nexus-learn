@@ -7,6 +7,7 @@ import {
 } from "@/lib/challenge-scoring"
 
 export type AnswerFx = "correct" | "wrong" | null
+export type ComboVisualFx = "none" | "self-reset" | "opponent-break" | "shield-shatter"
 
 export function useChallengeQuizFx(
   questionIndex: number,
@@ -19,6 +20,7 @@ export function useChallengeQuizFx(
   const [comboTimeLeft, setComboTimeLeft] = useState(0)
   const [answerFx, setAnswerFx] = useState<AnswerFx>(null)
   const [timerPulse, setTimerPulse] = useState(false)
+  const [comboVisualFx, setComboVisualFx] = useState<ComboVisualFx>("none")
 
   const comboDeadlineRef = useRef<number | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -83,13 +85,47 @@ export function useChallengeQuizFx(
     }
   }, [])
 
-  /** Resets active streak timer only; peak multiplier is kept for final scoring. */
   const resetActiveCombo = useCallback(() => {
     comboDeadlineRef.current = null
     setComboStreak(0)
     setComboMultiplier(1)
     setComboTimeLeft(0)
   }, [])
+
+  const syncComboFromRemote = useCallback((streak: number) => {
+    const mult = comboMultiplierFromStreak(streak)
+    setComboStreak(streak)
+    setComboMultiplier(mult)
+    setPeakComboMultiplier((peak) => Math.max(peak, mult))
+    if (streak > 0) {
+      comboDeadlineRef.current = Date.now() + COMBO_TIMEOUT_MS
+      setComboTimeLeft(COMBO_TIMEOUT_MS)
+    } else {
+      comboDeadlineRef.current = null
+      setComboTimeLeft(0)
+    }
+  }, [])
+
+  const triggerOpponentComboBreak = useCallback(() => {
+    setComboVisualFx("opponent-break")
+    resetActiveCombo()
+    playTone(120, 0.25, "sawtooth", 0.08)
+    setTimeout(() => setComboVisualFx("none"), 850)
+  }, [resetActiveCombo, playTone])
+
+  const triggerSelfComboReset = useCallback(() => {
+    setComboVisualFx("self-reset")
+    resetActiveCombo()
+    playTone(140, 0.22, "sawtooth", 0.06)
+    setTimeout(() => setComboVisualFx("none"), 650)
+  }, [resetActiveCombo, playTone])
+
+  const triggerShieldShatter = useCallback(() => {
+    setComboVisualFx("shield-shatter")
+    playTone(280, 0.1, "triangle", 0.09)
+    setTimeout(() => playTone(180, 0.15, "sawtooth", 0.07), 90)
+    setTimeout(() => setComboVisualFx("none"), 750)
+  }, [playTone])
 
   const onCorrectAnswer = useCallback(() => {
     setAnswerFx("correct")
@@ -104,14 +140,13 @@ export function useChallengeQuizFx(
     })
     playTone(660, 0.14, "triangle", 0.09)
     setTimeout(() => setAnswerFx(null), 580)
-  }, [comboStreak, playTone])
+  }, [playTone])
 
   const onWrongAnswer = useCallback(() => {
     setAnswerFx("wrong")
-    resetActiveCombo()
-    playTone(140, 0.22, "sawtooth", 0.06)
+    triggerSelfComboReset()
     setTimeout(() => setAnswerFx(null), 580)
-  }, [playTone, resetActiveCombo])
+  }, [triggerSelfComboReset])
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -179,11 +214,16 @@ export function useChallengeQuizFx(
     comboMultiplier,
     peakComboMultiplier,
     comboTimeLeft,
+    comboVisualFx,
     answerFx,
     timerPulse,
     onCorrectAnswer,
     onWrongAnswer,
     resetActiveCombo,
+    syncComboFromRemote,
+    triggerOpponentComboBreak,
+    triggerSelfComboReset,
+    triggerShieldShatter,
     stopAmbientPulse,
   }
 }

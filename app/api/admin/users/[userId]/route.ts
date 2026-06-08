@@ -3,7 +3,18 @@ import { requireAdmin } from "@/lib/admin-auth"
 import { adminErrorResponse } from "@/lib/admin-route-utils"
 import { deleteUserAccountAdmin, setUserRoleAdmin } from "@/lib/admin-delete-user"
 import { getAdminFirestore } from "@/lib/firebase-admin"
-import { FieldValue } from "firebase-admin/firestore"
+import { FieldValue, Timestamp } from "firebase-admin/firestore"
+
+function getWeekDateStrings(): string[] {
+  const todayUTC = new Date().toISOString().split("T")[0]
+  const dates: string[] = []
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(todayUTC + "T00:00:00.000Z")
+    date.setUTCDate(date.getUTCDate() - i)
+    dates.push(date.toISOString().split("T")[0])
+  }
+  return dates
+}
 
 export const runtime = "nodejs"
 
@@ -60,6 +71,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
       })
     )
 
+    const weekDates = getWeekDateStrings()
+    const activityThisWeek: Record<string, number> = {}
+    for (const date of weekDates) {
+      const actSnap = await db.collection("userActivity").doc(`${userId}-${date}`).get()
+      const totalSeconds = actSnap.exists ? (actSnap.data()?.totalSeconds ?? 0) : 0
+      activityThisWeek[date] = Math.round((totalSeconds / 3600) * 100) / 100
+    }
+
     return NextResponse.json({
       user: {
         id: userId,
@@ -77,6 +96,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         challengeWins: typeof data.challengeWins === "number" ? data.challengeWins : 0,
         challengeWinStreak: typeof data.challengeWinStreak === "number" ? data.challengeWinStreak : 0,
       },
+      activityThisWeek,
       courses,
     })
   } catch (error) {
@@ -146,6 +166,46 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         await setUserRoleAdmin(userId, "admin")
       } else {
         await setUserRoleAdmin(userId, null)
+      }
+    }
+
+    if (
+      body.activityThisWeek &&
+      typeof body.activityThisWeek === "object" &&
+      !Array.isArray(body.activityThisWeek)
+    ) {
+      const entries = Object.entries(body.activityThisWeek as Record<string, unknown>)
+      for (const [date, hours] of entries) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
+        if (typeof hours !== "number" || hours < 0) continue
+        const totalSeconds = Math.round(hours * 3600)
+        const actRef = db.collection("userActivity").doc(`${userId}-${date}`)
+        if (totalSeconds === 0) {
+          const existing = await actRef.get()
+          if (existing.exists) {
+            await actRef.update({
+              sessions: [],
+              totalSeconds: 0,
+              updatedAt: FieldValue.serverTimestamp(),
+            })
+          }
+        } else {
+          const ts = Timestamp.now()
+          await actRef.set({
+            userId,
+            date,
+            sessions: [
+              {
+                startTime: ts,
+                endTime: ts,
+                duration: totalSeconds,
+                pageType: "course",
+              },
+            ],
+            totalSeconds,
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+        }
       }
     }
 

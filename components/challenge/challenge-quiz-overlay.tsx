@@ -26,7 +26,8 @@ function actionFxClass(actionFx: ActionFxType): string {
     case "incoming_halve":
       return "challenge-action-fx-halve"
     case "combo_breaker":
-      return "challenge-action-fx-break"
+    case "incoming_combo_break":
+      return "challenge-action-fx-incoming-break"
     case "combo_shield":
       return "challenge-action-fx-shield"
     default:

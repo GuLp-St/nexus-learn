@@ -7,12 +7,12 @@ import {
   SABOTAGE_ACTIONS,
   type PowerActionType,
 } from "@/lib/challenge-powered-actions"
-import { CHALLENGE_ACTIONS_PER_PLAYER } from "@/lib/challenge-utils"
 import { Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface ChallengeActionsPanelProps {
   actionsLeft: number
+  actionsPerPlayer?: number
   disabled?: boolean
   onAction: (action: PowerActionType) => Promise<void>
 }
@@ -66,6 +66,7 @@ function ActionRow({
 
 export function ChallengeActionsPanel({
   actionsLeft,
+  actionsPerPlayer = 3,
   disabled,
   onAction,
 }: ChallengeActionsPanelProps) {
@@ -108,7 +109,7 @@ export function ChallengeActionsPanel({
           <div className="flex items-center gap-0.5 text-[10px] font-semibold">
             <Zap className="h-2.5 w-2.5 text-orange-500 shrink-0" />
             <span className="tabular-nums whitespace-nowrap">
-              {actionsLeft}/{CHALLENGE_ACTIONS_PER_PLAYER}
+              {actionsLeft}/{actionsPerPlayer}
             </span>
           </div>
           <span className="text-[8px] text-muted-foreground leading-none">Actions</span>

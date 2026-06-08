@@ -17,6 +17,8 @@ export interface ChallengeSettings {
   immediateFeedback: boolean
   /** Combo is always enabled in challenges */
   combo: boolean
+  /** Powered mode only — actions per player (1–10) */
+  actionsPerPlayer?: number
   /** @deprecated use gameMode === "powered" */
   mode?: "async" | "live"
   hint?: boolean
@@ -24,6 +26,11 @@ export interface ChallengeSettings {
 }
 
 export const CHALLENGE_ACTIONS_PER_PLAYER = 3
+
+export function getChallengeActionsPerPlayer(settings?: ChallengeSettings): number {
+  const raw = settings?.actionsPerPlayer ?? CHALLENGE_ACTIONS_PER_PLAYER
+  return Math.min(10, Math.max(1, Math.floor(raw)))
+}
 
 export const DEFAULT_CHALLENGE_SETTINGS: ChallengeSettings = {
   gameMode: "powered",
@@ -51,6 +58,14 @@ export function normalizeChallengeSettings(raw?: Partial<ChallengeSettings>): Ch
     bpm: raw.bpm ?? true,
     immediateFeedback: raw.immediateFeedback ?? true,
     combo: true,
+    actionsPerPlayer: getChallengeActionsPerPlayer({
+      ...raw,
+      gameMode,
+      timer: raw.timer ?? true,
+      bpm: raw.bpm ?? true,
+      immediateFeedback: raw.immediateFeedback ?? true,
+      combo: true,
+    }),
   }
 }
 
@@ -237,8 +252,8 @@ function challengeDocPayload(
           liveStartAt: null,
           sabotageUntil: null,
           sabotageBy: null,
-          challengerActionsLeft: CHALLENGE_ACTIONS_PER_PLAYER,
-          challengedActionsLeft: CHALLENGE_ACTIONS_PER_PLAYER,
+          challengerActionsLeft: getChallengeActionsPerPlayer(settings),
+          challengedActionsLeft: getChallengeActionsPerPlayer(settings),
           challengerComboStreak: 0,
           challengedComboStreak: 0,
           challengerEffects: {},
@@ -1068,7 +1083,7 @@ export async function useChallengePowerAction(
   if (!isChallenger && !isChallenged) throw new Error("Not part of this challenge")
 
   const actionsKey = isChallenger ? "challengerActionsLeft" : "challengedActionsLeft"
-  const actionsLeft = data[actionsKey] ?? CHALLENGE_ACTIONS_PER_PLAYER
+  const actionsLeft = data[actionsKey] ?? getChallengeActionsPerPlayer(settings)
   if (actionsLeft <= 0) throw new Error("No actions remaining")
 
   const opponentIsChallenger = !isChallenger
@@ -1115,9 +1130,15 @@ export async function useChallengePowerAction(
       }
       break
     }
-    case "combo_breaker":
-      patch[oppComboKey] = 0
+    case "combo_breaker": {
+      const oppEffectsForBreak: PowerEffectsBucket = { ...(data[oppEffectsKey] ?? {}) }
+      if (oppEffectsForBreak.comboShield) {
+        patch[oppEffectsKey] = { ...oppEffectsForBreak, comboShield: false }
+      } else {
+        patch[oppComboKey] = 0
+      }
       break
+    }
     case "swap_harder": {
       const swapped = oppEffects.swappedQuestionByQuestionId ?? {}
       let targetIdx = context.opponentQuestionIndex

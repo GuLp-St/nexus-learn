@@ -25,7 +25,7 @@ import {
   updateChallengeComboStreak,
   isPoweredChallenge,
   normalizeChallengeSettings,
-  CHALLENGE_ACTIONS_PER_PLAYER,
+  getChallengeActionsPerPlayer,
   Challenge,
 } from "@/lib/challenge-utils"
 import { applyPowerEffectsToQuestion } from "@/lib/challenge-powered-actions"
@@ -88,6 +88,9 @@ export default function ChallengeQuizPage() {
   const liveStartTriggeredRef = useRef(false)
   const prevOppEffectsRef = useRef<string>("")
   const prevSelfEffectsRef = useRef<string>("")
+  const prevLiveComboRef = useRef<number | undefined>(undefined)
+  const prevOppLiveComboRef = useRef<number | undefined>(undefined)
+  const selfWrongJustNowRef = useRef(false)
 
   const params = useParams()
   const router = useRouter()
@@ -100,9 +103,10 @@ export default function ChallengeQuizPage() {
   const isChallenged = challenge?.challengedId === user?.uid
   const challengeSettings = normalizeChallengeSettings(challenge?.settings)
   const isPowered = isPoweredChallenge(challengeSettings)
+  const actionsPerPlayer = getChallengeActionsPerPlayer(challengeSettings)
   const actionsLeft = isChallenger
-    ? (challenge?.challengerActionsLeft ?? CHALLENGE_ACTIONS_PER_PLAYER)
-    : (challenge?.challengedActionsLeft ?? CHALLENGE_ACTIONS_PER_PLAYER)
+    ? (challenge?.challengerActionsLeft ?? actionsPerPlayer)
+    : (challenge?.challengedActionsLeft ?? actionsPerPlayer)
 
   const selfEffects = isChallenger
     ? challenge?.challengerEffects
@@ -115,6 +119,10 @@ export default function ChallengeQuizPage() {
   const liveComboStreak = isChallenger
     ? challenge?.challengerComboStreak
     : challenge?.challengedComboStreak
+
+  const opponentLiveComboStreak = isChallenger
+    ? challenge?.challengedComboStreak
+    : challenge?.challengerComboStreak
 
   const opponentLiveIndex = isChallenger
     ? challenge?.challengedLiveIndex
@@ -412,12 +420,17 @@ export default function ChallengeQuizPage() {
         await firestoreUpdate(ref, {
           [key]: { ...selfEffects, comboShield: false },
         })
-        toast.message("Combo shield blocked the break!")
+        fx.triggerShieldShatter()
+        toast.message("Shield blocked your mistake — combo saved!")
       } else {
+        selfWrongJustNowRef.current = true
         fx.onWrongAnswer()
         if (isPowered && user) {
           void updateChallengeComboStreak(challengeId, user.uid, 0)
         }
+        setTimeout(() => {
+          selfWrongJustNowRef.current = false
+        }, 400)
       }
     },
     [fx, challengeSettings, isPowered, user, challengeId, isChallenger, selfEffects]
@@ -425,10 +438,53 @@ export default function ChallengeQuizPage() {
 
   useEffect(() => {
     if (!isPowered || liveComboStreak === undefined) return
-    if (liveComboStreak === 0 && fx.comboStreak > 0) {
-      fx.resetActiveCombo()
+
+    const prev = prevLiveComboRef.current
+    const prevOpp = prevOppLiveComboRef.current
+    const oppStreak = opponentLiveComboStreak ?? 0
+
+    prevLiveComboRef.current = liveComboStreak
+    prevOppLiveComboRef.current = oppStreak
+
+    if (prev === undefined) {
+      fx.syncComboFromRemote(liveComboStreak)
+      return
     }
-  }, [liveComboStreak, isPowered, fx])
+
+    if (liveComboStreak === prev && oppStreak === (prevOpp ?? oppStreak)) return
+
+    const isComboSwap =
+      prevOpp !== undefined &&
+      liveComboStreak === prevOpp &&
+      oppStreak === prev
+
+    if (isComboSwap) {
+      fx.syncComboFromRemote(liveComboStreak)
+      actionFx.triggerActionFx("combo_switcher")
+      if (liveComboStreak > prev) {
+        toast.message(`Combo swapped! Streak: ${liveComboStreak}`)
+      } else if (liveComboStreak < prev) {
+        toast.message(`Combo swapped down to ${liveComboStreak}`)
+      } else {
+        toast.message("Combos swapped!")
+      }
+      return
+    }
+
+    if (liveComboStreak === 0 && prev > 0) {
+      if (selfWrongJustNowRef.current) {
+        return
+      }
+      fx.triggerOpponentComboBreak()
+      actionFx.triggerActionFx("incoming_combo_break")
+      toast.error("Opponent broke your combo!")
+      return
+    }
+
+    if (liveComboStreak !== prev) {
+      fx.syncComboFromRemote(liveComboStreak)
+    }
+  }, [liveComboStreak, opponentLiveComboStreak, isPowered, fx, actionFx])
 
   useEffect(() => {
     const activeQ = questions[currentQuestionIndex]
@@ -496,6 +552,17 @@ export default function ChallengeQuizPage() {
       !prev.removedWrongByQuestionId?.[qid]
     ) {
       actionFx.triggerActionFx("incoming_halve")
+    }
+
+    if (prev.comboShield && !selfEffects?.comboShield) {
+      if (!selfWrongJustNowRef.current) {
+        fx.triggerShieldShatter()
+        toast.message("Shield blocked opponent's combo break!")
+      }
+    }
+
+    if (selfEffects?.comboShield && !prev.comboShield) {
+      toast.message("Combo shield active!")
     }
   }, [selfEffects, isPowered, phase, questions, currentQuestionIndex, actionFx])
 
@@ -950,6 +1017,7 @@ export default function ChallengeQuizPage() {
               <div className="shrink-0">
                 <ChallengeActionsPanel
                   actionsLeft={actionsLeft}
+                  actionsPerPlayer={actionsPerPlayer}
                   disabled={actionBusy}
                   onAction={handlePowerAction}
                 />
@@ -1028,15 +1096,16 @@ export default function ChallengeQuizPage() {
                     <span className="shrink-0 w-0" />
                   )}
 
-                  {challengeSettings?.combo !== false &&
-                    (fx.comboStreak > 0 || fx.peakComboMultiplier > 1) && (
-                      <ChallengeComboBar
-                        comboStreak={fx.comboStreak}
-                        comboMultiplier={fx.comboMultiplier}
-                        peakComboMultiplier={fx.peakComboMultiplier}
-                        comboTimeLeft={fx.comboTimeLeft}
-                      />
-                    )}
+                  {challengeSettings?.combo !== false && (
+                    <ChallengeComboBar
+                      comboStreak={fx.comboStreak}
+                      comboMultiplier={fx.comboMultiplier}
+                      peakComboMultiplier={fx.peakComboMultiplier}
+                      comboTimeLeft={fx.comboTimeLeft}
+                      comboVisualFx={fx.comboVisualFx}
+                      shieldActive={!!selfEffects?.comboShield}
+                    />
+                  )}
 
                   <div className="shrink-0 ml-auto">
                   {isLastQuestion ? (

@@ -3,7 +3,12 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Challenge, isPoweredChallenge, normalizeChallengeSettings } from "@/lib/challenge-utils"
+import {
+  Challenge,
+  isPoweredChallenge,
+  normalizeChallengeSettings,
+} from "@/lib/challenge-utils"
+import { ChallengeSettingsSummary } from "@/components/challenge/challenge-settings-summary"
 import { NexonIcon } from "@/components/ui/nexon-icon"
 import { Zap, Clock, AlertTriangle, Loader2, Users, CheckCircle2 } from "lucide-react"
 
@@ -63,13 +68,7 @@ export function ChallengeReadyRoom({
             <p className="text-xs text-muted-foreground">
               {isChallenger ? `vs ${friendNickname}` : `from ${friendNickname}`}
             </p>
-            <div className="flex flex-wrap justify-center gap-1 pt-1">
-              <Badge variant="secondary" className="text-[10px] capitalize">{settings.gameMode}</Badge>
-              {settings.timer && <Badge variant="outline" className="text-[10px]">Timer</Badge>}
-              <Badge variant="outline" className="text-[10px]">Combo</Badge>
-              {settings.immediateFeedback && <Badge variant="outline" className="text-[10px]">Flash</Badge>}
-              {isPowered && <Badge variant="outline" className="text-[10px]">3 actions</Badge>}
-            </div>
+            <ChallengeSettingsSummary settings={settings} compact className="justify-center pt-1" />
           </div>
 
           <div className="rounded-lg bg-muted/50 p-3 space-y-1.5 text-xs">

@@ -1285,6 +1285,59 @@
   animation: challenge-shake-wrong 0.45s ease-in-out;
 }
 
+@keyframes challenge-combo-shatter {
+  0% { transform: scale(1); opacity: 1; filter: none; }
+  25% { transform: scale(1.05) rotate(-2deg); filter: brightness(1.3); }
+  50% { transform: scale(0.95) rotate(3deg); opacity: 0.7; }
+  100% { transform: scale(0.85); opacity: 0.4; filter: blur(1px); }
+}
+
+@keyframes challenge-combo-reset {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(4px); opacity: 0.55; }
+}
+
+@keyframes challenge-shield-shatter {
+  0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.5); }
+  40% { box-shadow: 0 0 12px 4px rgba(56, 189, 248, 0.8); }
+  100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); opacity: 0.5; }
+}
+
+@keyframes challenge-shield-glow {
+  0%, 100% { box-shadow: 0 0 6px rgba(56, 189, 248, 0.35); }
+  50% { box-shadow: 0 0 14px rgba(56, 189, 248, 0.55); }
+}
+
+@keyframes challenge-shield-icon-pop {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4) rotate(12deg); opacity: 0.5; }
+  100% { transform: scale(0); opacity: 0; }
+}
+
+.challenge-combo-shatter {
+  animation: challenge-combo-shatter 0.85s ease-out forwards;
+}
+
+.challenge-combo-reset {
+  animation: challenge-combo-reset 0.65s ease-out forwards;
+}
+
+.challenge-shield-shatter {
+  animation: challenge-shield-shatter 0.75s ease-out forwards;
+}
+
+.challenge-shield-glow {
+  animation: challenge-shield-glow 1.8s ease-in-out infinite;
+}
+
+.challenge-shield-icon-shatter {
+  animation: challenge-shield-icon-pop 0.75s ease-out forwards;
+}
+
+.challenge-action-fx-incoming-break {
+  background: radial-gradient(circle, rgba(220, 60, 60, 0.2), transparent 65%);
+}
+
 /* Hide scrollbar utility */
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {

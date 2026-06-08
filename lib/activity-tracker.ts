@@ -236,3 +236,55 @@ export function formatSecondsToHours(seconds: number): number {
   return Math.round((seconds / 3600) * 100) / 100 // Round to 2 decimal places
 }
 
+/** Admin: set total learning hours for a specific UTC date */
+export async function setUserActivityHoursForDate(
+  userId: string,
+  date: string,
+  hours: number
+): Promise<void> {
+  const totalSeconds = Math.max(0, Math.round(hours * 3600))
+  const docId = getActivityDocId(userId, date)
+  const activityRef = doc(db, "userActivity", docId)
+
+  if (totalSeconds === 0) {
+    const existing = await getDoc(activityRef)
+    if (existing.exists()) {
+      await setDoc(activityRef, {
+        userId,
+        date,
+        sessions: [],
+        totalSeconds: 0,
+        updatedAt: serverTimestamp(),
+      })
+    }
+    return
+  }
+
+  const now = serverTimestamp()
+  await setDoc(activityRef, {
+    userId,
+    date,
+    sessions: [
+      {
+        startTime: now,
+        endTime: now,
+        duration: totalSeconds,
+        pageType: "course" as ActivityPageType,
+      },
+    ],
+    totalSeconds,
+    updatedAt: now,
+  })
+}
+
+export function getWeekDateStrings(): string[] {
+  const todayUTC = getUTCDateString()
+  const dates: string[] = []
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(todayUTC + "T00:00:00.000Z")
+    date.setUTCDate(date.getUTCDate() - i)
+    dates.push(date.toISOString().split("T")[0])
+  }
+  return dates
+}
+

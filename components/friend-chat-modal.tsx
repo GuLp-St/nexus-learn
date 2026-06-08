@@ -24,6 +24,7 @@ import {
   type ChatMessage,
 } from "@/lib/chat-utils"
 import { markChallengesSeen } from "@/lib/social-notification-seen"
+import { ChallengeSettingsSummary } from "@/components/challenge/challenge-settings-summary"
 import { useAuth } from "@/components/auth-provider"
 import { format, isToday, isYesterday, isSameDay } from "date-fns"
 import { Zap, Trophy, Play, Share2, BookOpen, Plus, Clock, X, Check, Trash2, AlertCircle, Send, CheckCheck } from "lucide-react"
@@ -700,6 +701,9 @@ function ChallengeMessageCard({
           <p className="text-sm font-semibold truncate">
             {isChallenger ? `You challenged ${friendNickname}` : `${friendNickname} challenged you`}
           </p>
+          {(challenge.status === "pending" || challenge.status === "generating") && (
+            <ChallengeSettingsSummary settings={challenge.settings} className="mt-2" />
+          )}
         </div>
 
         {/* Dynamic Status / Actions */}

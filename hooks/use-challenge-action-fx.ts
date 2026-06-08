@@ -9,6 +9,7 @@ export type ActionFxType =
   | "incoming_harder"
   | "incoming_false_answers"
   | "incoming_halve"
+  | "incoming_combo_break"
   | null
 
 export function useChallengeActionFx() {
@@ -65,8 +66,10 @@ export function useChallengeActionFx() {
           playTone(520, 0.1, "triangle", 0.08)
           break
         case "combo_breaker":
+        case "incoming_combo_break":
           playTone(200, 0.12, "square", 0.07)
           setTimeout(() => playTone(150, 0.18, "sawtooth", 0.05), 100)
+          setTimeout(() => playTone(90, 0.2, "sawtooth", 0.06), 200)
           break
         case "combo_shield":
           playTone(440, 0.12, "sine", 0.08)

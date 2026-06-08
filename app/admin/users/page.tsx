@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Search, Shield, Trash2, UserCog, Zap, BookOpen, VenetianMask, RefreshCw, Gem, Sparkles, Trophy } from "lucide-react"
+import { Search, Shield, Trash2, UserCog, Zap, BookOpen, VenetianMask, RefreshCw, Gem, Sparkles, Trophy, Clock } from "lucide-react"
 import {
   AdminCourseProgressControls,
   type AdminCourseProgress,
@@ -55,6 +55,7 @@ export default function AdminUsersPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [impersonating, setImpersonating] = useState(false)
+  const [editActivityWeek, setEditActivityWeek] = useState<Record<string, string>>({})
 
   const loadUsers = useCallback(async () => {
     setLoading(true)
@@ -86,6 +87,7 @@ export default function AdminUsersPage() {
           challengeWinStreak?: number
         }
         courses: UserCourse[]
+        activityThisWeek?: Record<string, number>
       }>(
         `/api/admin/users/${userId}`
       )
@@ -98,6 +100,14 @@ export default function AdminUsersPage() {
       setEditFreeCaches(String(data.user.freeNexusCaches ?? 0))
       setEditChallengeWins(String(data.user.challengeWins ?? 0))
       setEditChallengeWinStreak(String(data.user.challengeWinStreak ?? 0))
+      setEditActivityWeek(
+        Object.fromEntries(
+          Object.entries(data.activityThisWeek ?? {}).map(([date, hours]) => [
+            date,
+            String(hours),
+          ])
+        )
+      )
       setCourses(data.courses)
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, ...data.user } : u))
@@ -139,6 +149,13 @@ export default function AdminUsersPage() {
 
     setSaving(true)
     try {
+      const activityThisWeek = Object.fromEntries(
+        Object.entries(editActivityWeek).map(([date, hours]) => [
+          date,
+          Math.max(0, parseFloat(hours) || 0),
+        ])
+      )
+
       await adminJson(`/api/admin/users/${selectedId}`, {
         method: "PATCH",
         body: {
@@ -149,6 +166,7 @@ export default function AdminUsersPage() {
           styleShards: shards,
           freeNexusCaches: freeCaches,
           questRefreshTokens: tokens,
+          activityThisWeek,
         },
       })
       toast.success("User updated")
@@ -391,6 +409,37 @@ export default function AdminUsersPage() {
                             onChange={(e) => setEditFreeCaches(e.target.value)}
                             className="mt-1"
                           />
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          Activity this week (hours)
+                        </h3>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {Object.entries(editActivityWeek)
+                            .sort(([a], [b]) => a.localeCompare(b))
+                            .map(([date, hours]) => (
+                              <div key={date}>
+                                <Label className="text-[10px] text-muted-foreground">
+                                  {date.slice(5)}
+                                </Label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step={0.1}
+                                  value={hours}
+                                  onChange={(e) =>
+                                    setEditActivityWeek((prev) => ({
+                                      ...prev,
+                                      [date]: e.target.value,
+                                    }))
+                                  }
+                                  className="mt-0.5 h-8 text-xs"
+                                />
+                              </div>
+                            ))}
                         </div>
                       </div>
 

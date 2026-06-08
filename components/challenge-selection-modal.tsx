@@ -47,7 +47,7 @@ const MODE_INFO: Record<
   },
   powered: {
     label: "Powered",
-    description: "Live 1v1 — both players must be present. Classic rules plus 3 actions each.",
+    description: "Live 1v1 — both players must be present. Classic rules plus power actions.",
     icon: <Zap className="h-3.5 w-3.5 shrink-0 text-orange-500" />,
   },
 }
@@ -337,6 +337,25 @@ export function ChallengeSelectionModal({
                 onChange={(v) => setSettings((s) => ({ ...s, bpm: v }))}
               />
             </div>
+
+            {settings.gameMode === "powered" && (
+              <div className="rounded-md border px-3 py-2 space-y-1.5">
+                <Label className="text-[11px] text-muted-foreground">Actions per player (1–10)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={settings.actionsPerPlayer ?? 3}
+                  onChange={(e) =>
+                    setSettings((s) => ({
+                      ...s,
+                      actionsPerPlayer: Math.min(10, Math.max(1, parseInt(e.target.value) || 3)),
+                    }))
+                  }
+                  className="h-8 text-xs"
+                />
+              </div>
+            )}
 
             {/* Wager */}
             <div className="rounded-md border px-3 py-2">
