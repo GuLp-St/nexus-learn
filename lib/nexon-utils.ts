@@ -1,6 +1,9 @@
 import { db } from "./firebase"
 import { doc, getDoc, updateDoc, increment, serverTimestamp, collection, setDoc, Timestamp } from "firebase/firestore"
 
+/** Nexon granted to every new account on registration. */
+export const REGISTER_BONUS_NEXON = 300
+
 export interface NexonHistoryEntry {
   id: string
   userId: string

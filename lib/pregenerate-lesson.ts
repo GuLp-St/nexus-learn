@@ -24,23 +24,11 @@ export function getNextLessonAfterCurrent(
   return null
 }
 
+/** Lesson to pregenerate on the roadmap — the next lesson the user will play. */
 export function getPregenerateTarget(
-  nextLesson: { moduleIndex: number; lessonIndex: number } | null,
-  course: CourseWithProgress,
-  isModuleUnlocked: (moduleIndex: number) => boolean
+  nextLesson: { moduleIndex: number; lessonIndex: number } | null
 ): { moduleIndex: number; lessonIndex: number } | null {
-  if (!nextLesson) return null
-  const { moduleIndex, lessonIndex } = nextLesson
-  const mod = course.modules[moduleIndex]
-  if (!mod) return null
-  if (lessonIndex + 1 < mod.lessons.length) {
-    return { moduleIndex, lessonIndex: lessonIndex + 1 }
-  }
-  const nextMod = moduleIndex + 1
-  if (nextMod < course.modules.length && isModuleUnlocked(nextMod)) {
-    return { moduleIndex: nextMod, lessonIndex: 0 }
-  }
-  return null
+  return nextLesson
 }
 
 export function lessonKey(moduleIndex: number, lessonIndex: number): string {

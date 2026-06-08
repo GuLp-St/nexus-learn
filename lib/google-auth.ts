@@ -6,6 +6,7 @@ import {
 } from "firebase/auth"
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore"
 import { auth, db } from "./firebase"
+import { REGISTER_BONUS_NEXON, recordNexonHistory } from "./nexon-utils"
 
 export function createGoogleProvider(): GoogleAuthProvider {
   const provider = new GoogleAuthProvider()
@@ -21,6 +22,31 @@ function googleNickname(user: User): string {
   )
 }
 
+/** Create a new Firestore user profile with the registration Nexon bonus. */
+export async function createNewUserProfile(
+  userId: string,
+  data: { nickname: string; email: string | null }
+): Promise<void> {
+  const userRef = doc(db, "users", userId)
+  await setDoc(userRef, {
+    nickname: data.nickname,
+    email: data.email,
+    xp: 0,
+    nexon: REGISTER_BONUS_NEXON,
+    dailyLoginStreak: 0,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  })
+  await recordNexonHistory(
+    userId,
+    REGISTER_BONUS_NEXON,
+    "Registration Bonus",
+    "Welcome to Nexus Learn!"
+  )
+  const { checkAndAwardDailyLoginXP } = await import("./xp-utils")
+  await checkAndAwardDailyLoginXP(userId)
+}
+
 /** Create or update Firestore profile after Google sign-in. */
 export async function ensureGoogleUserProfile(
   gUser: User,
@@ -30,16 +56,10 @@ export async function ensureGoogleUserProfile(
   const existing = await getDoc(userRef)
 
   if (!existing.exists()) {
-    await setDoc(userRef, {
+    await createNewUserProfile(gUser.uid, {
       nickname: options?.nickname?.trim() || googleNickname(gUser),
       email: gUser.email,
-      xp: 0,
-      dailyLoginStreak: 0,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
     })
-    const { checkAndAwardDailyLoginXP } = await import("./xp-utils")
-    await checkAndAwardDailyLoginXP(gUser.uid)
   }
 }
 

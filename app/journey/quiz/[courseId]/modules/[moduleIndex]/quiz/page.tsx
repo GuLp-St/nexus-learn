@@ -476,6 +476,20 @@ export default function ModuleQuizPage() {
                   [`moduleQuizScores.${moduleIndex}`]: scorePercentage,
                 })
               }
+
+              if (scorePercentage > 50) {
+                const nextMod = moduleIndex + 1
+                let courseData = course
+                if (!courseData) {
+                  courseData = await getCourseWithProgress(user.uid, courseId)
+                }
+                if (courseData && nextMod < courseData.modules.length) {
+                  const { pregenerateLesson } = await import("@/lib/pregenerate-lesson")
+                  void pregenerateLesson(user.uid, courseData, nextMod, 0).catch((err) =>
+                    console.error("Failed to pregenerate first lesson of next module:", err)
+                  )
+                }
+              }
             }
           }
         } else {

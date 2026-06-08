@@ -1779,11 +1779,7 @@ export function CourseRoadmap({ course }: CourseRoadmapProps) {
     completedLessonSet,
     isModuleUnlocked
   )
-  const pregenerateTarget = getPregenerateTarget(
-    nextLesson,
-    course,
-    isModuleUnlocked
-  )
+  const pregenerateTarget = getPregenerateTarget(nextLesson)
 
   useEffect(() => {
     if (!user || !pregenerateTarget) return

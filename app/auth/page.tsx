@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, getRedirectResult } from "firebase/auth"
-import { auth, db } from "@/lib/firebase"
-import { doc, setDoc, serverTimestamp } from "firebase/firestore"
-import { ensureGoogleUserProfile, signInWithGoogle } from "@/lib/google-auth"
+import { auth } from "@/lib/firebase"
+import { createNewUserProfile, ensureGoogleUserProfile, signInWithGoogle } from "@/lib/google-auth"
 import { getAuthErrorMessage } from "@/lib/auth-errors"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -166,19 +165,10 @@ export default function AuthPage() {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       const user = userCredential.user
 
-      // Store nickname and initialize XP in Firestore
-      await setDoc(doc(db, "users", user.uid), {
+      await createNewUserProfile(user.uid, {
         nickname: nickname.trim(),
         email: user.email,
-        xp: 0,
-        dailyLoginStreak: 0,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       })
-
-      // Award first daily login XP
-      const { checkAndAwardDailyLoginXP } = await import("@/lib/xp-utils")
-      await checkAndAwardDailyLoginXP(user.uid)
 
       router.push("/")
     } catch (err: unknown) {
