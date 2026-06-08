@@ -11,6 +11,7 @@ import { useClaimableQuestCount } from "@/hooks/use-claimable-quests"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/components/auth-provider"
 import { HoldToLogoutButton } from "@/components/hold-to-logout-button"
+import { SIDEBAR_EVENT, CLOSE_SIDEBAR_EVENT } from "@/context/OnboardingContext"
 
 interface SidebarNavProps {
   currentPath?: string
@@ -46,12 +47,19 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
       icon: LayoutDashboard,
       label: "Dashboard",
       href: "/",
+      tourId: "nav-dashboard",
       badge: claimableQuests > 0 ? claimableQuests : undefined,
     },
-    { icon: Map, label: "Journey", href: "/journey" },
-    { icon: Trophy, label: "Leaderboard", href: "/leaderboard" },
-    { icon: Users, label: "Social", href: "/friends", badge: totalSocialNotifications > 0 ? totalSocialNotifications : undefined },
-    { icon: ShoppingBag, label: "Store", href: "/store" },
+    { icon: Map, label: "Journey", href: "/journey", tourId: "nav-journey" },
+    { icon: Trophy, label: "Leaderboard", href: "/leaderboard", tourId: "nav-leaderboard" },
+    {
+      icon: Users,
+      label: "Social",
+      href: "/friends",
+      tourId: "nav-social",
+      badge: totalSocialNotifications > 0 ? totalSocialNotifications : undefined,
+    },
+    { icon: ShoppingBag, label: "Store", href: "/store", tourId: "nav-store" },
   ]
 
   const adminNavItems = isAdmin
@@ -124,6 +132,17 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
     if (!sidebarOpen) setDragOffset(0)
   }, [sidebarOpen])
 
+  useEffect(() => {
+    const openForTour = () => setSidebarOpen(true)
+    const closeForTour = () => setSidebarOpen(false)
+    window.addEventListener(SIDEBAR_EVENT, openForTour)
+    window.addEventListener(CLOSE_SIDEBAR_EVENT, closeForTour)
+    return () => {
+      window.removeEventListener(SIDEBAR_EVENT, openForTour)
+      window.removeEventListener(CLOSE_SIDEBAR_EVENT, closeForTour)
+    }
+  }, [])
+
   const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
@@ -165,7 +184,7 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
           <h1 className="text-lg font-semibold text-foreground truncate leading-none flex items-center">{title}</h1>
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <NotificationBell size="icon-sm" />
+          <NotificationBell size="icon-sm" tourId="notifications-mobile" />
           <Link href="/profile">
             <Button variant="ghost" size="icon-sm">
               <User className="h-4 w-4" />
@@ -194,7 +213,7 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
               <img src="/icon.svg" alt="Nexon" className="h-7 w-7 shrink-0 object-contain" />
               <h1 className="text-[1.1rem] font-bold tracking-tighter text-foreground whitespace-nowrap leading-none flex items-center">NexusLearn</h1>
               <div className="hidden lg:flex items-center gap-0.5 shrink-0">
-                <NotificationBell align="left" size="icon-sm" />
+                <NotificationBell align="left" size="icon-sm" tourId="notifications-desktop" />
                 <Link href="/profile">
                   <Button variant="ghost" size="icon-sm" className="h-8 w-8">
                     <User className="h-4 w-4" />
@@ -215,6 +234,7 @@ export function SidebarNav({ currentPath, title = "NexusLearn", leftAction }: Si
             {navItems.map((item) => (
               <Link key={item.label} href={item.href}>
                 <button
+                  data-tour-id={item.tourId}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors relative ${
                     currentPath === item.href
                       ? "bg-primary text-primary-foreground"

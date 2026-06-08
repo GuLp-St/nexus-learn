@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, type CSSProperties } from "react"
+import { useState, useRef, useEffect, useCallback, type CSSProperties } from "react"
 import { MessageSquare, Send, X, Loader2, Sparkles, Plus, Trash2, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,6 +29,12 @@ import {
   titleFromFirstMessage,
   type ChatbotSession,
 } from "@/lib/chatbot-sessions"
+import { useOnboarding } from "@/context/OnboardingContext"
+import {
+  isTutorialTrigger,
+  tutorialStartReply,
+  TOUR_CHIP_LABEL,
+} from "@/lib/onboarding-tour"
 
 export function ChatbotOverlay() {
   const [isOpen, setIsOpen] = useState(false)
@@ -49,6 +55,7 @@ export function ChatbotOverlay() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { pageContext } = useChatContext()
   const { user } = useAuth()
+  const { startTour, registerChatbotControls, tourActive, currentStep } = useOnboarding()
   const pathname = usePathname()
   const animationFrameRef = useRef<number | null>(null)
   const tempPositionRef = useRef<{ x: number; y: number } | null>(null)
@@ -167,13 +174,30 @@ export function ChatbotOverlay() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
+  const openChat = useCallback(() => setIsOpen(true), [])
+  const closeChat = useCallback(() => setIsOpen(false), [])
+
+  useEffect(() => {
+    if (pathname === "/auth" || !user) {
+      registerChatbotControls(null)
+      return
+    }
+    registerChatbotControls({ open: openChat, close: closeChat })
+    return () => registerChatbotControls(null)
+  }, [pathname, user, openChat, closeChat, registerChatbotControls])
+
   useEffect(() => {
     if (!isOpen) {
       setSuggestedChips([])
       return
     }
-    setSuggestedChips(resolveSuggestedChips(pageContext, pathname))
-  }, [isOpen, pathname, pageContext])
+    const chips = resolveSuggestedChips(pageContext, pathname)
+    if (user && pathname !== "/auth" && !chips.includes(TOUR_CHIP_LABEL)) {
+      setSuggestedChips([TOUR_CHIP_LABEL, ...chips].slice(0, 5))
+    } else {
+      setSuggestedChips(chips)
+    }
+  }, [isOpen, pathname, pageContext, user])
 
   const sendMessage = async (text?: string) => {
     const messageToSubmit = text || message
@@ -192,6 +216,18 @@ export function ChatbotOverlay() {
       updateChatbotSession(activeSessionId, { title: titleFromFirstMessage(userMessageText) })
       setSessions(listChatbotSessions())
     }
+    if (
+      user &&
+      pathname !== "/auth" &&
+      (isTutorialTrigger(userMessageText) || userMessageText === TOUR_CHIP_LABEL)
+    ) {
+      closeChat()
+      startTour(0)
+      const aiMessage: ChatMessage = { role: "assistant", content: tutorialStartReply() }
+      setMessages((prev) => [...prev, aiMessage])
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -299,11 +335,19 @@ export function ChatbotOverlay() {
         pointerEvents: "none",
       }
 
+  if (pathname === "/auth" || !user) {
+    return null
+  }
+
+  const highlightFab =
+    tourActive && currentStep?.target === "chatbot-fab" && !isOpen
+
   return (
     <>
       {/* Floating Chat Button - Always visible and draggable */}
       <Button
         ref={buttonRef}
+        data-tour-id="chatbot-fab"
         onMouseDown={handleDragStart}
         onTouchStart={handleDragStart}
         onClick={() => {
@@ -314,7 +358,9 @@ export function ChatbotOverlay() {
         }}
         className={`fixed h-14 w-14 rounded-full shadow-lg bg-transparent hover:bg-accent/50 z-40 p-0 overflow-hidden ${
           isOpen ? "opacity-0 pointer-events-none" : "opacity-100"
-        } ${isDragging ? "cursor-grabbing transition-none" : "cursor-grab transition-all"}`}
+        } ${isDragging ? "cursor-grabbing transition-none" : "cursor-grab transition-all"} ${
+          highlightFab ? "ring-4 ring-primary/50 ring-offset-2 ring-offset-background animate-pulse" : ""
+        }`}
         style={buttonStyle}
         aria-label="Open AI Chatbot"
       >

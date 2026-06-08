@@ -2,6 +2,9 @@
 
 Use this when you pull the repo on a new machine. **Everything in Git is the app source.** A few files stay **only on your machine** (secrets).
 
+For the full technical guide (prerequisites, all env vars, Firebase steps), see **[INSTALLATION_KIT.md](./INSTALLATION_KIT.md)**.  
+For end-user flows, see **[USER_MANUAL.md](./USER_MANUAL.md)**.
+
 ## 1. Clone and install
 
 ```bash

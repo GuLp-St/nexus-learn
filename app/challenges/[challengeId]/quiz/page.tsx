@@ -517,8 +517,8 @@ export default function ChallengeQuizPage() {
     }
 
     if (
-      opponentEffects?.swappedQuestionByQuestionId?.[qid] === "hard" &&
-      prev.swappedQuestionByQuestionId?.[qid] !== "hard"
+      opponentEffects?.swapVariantByQuestionId?.[qid] &&
+      !prev.swapVariantByQuestionId?.[qid]
     ) {
       actionFx.triggerActionFx("incoming_harder")
       setQuestionShake(true)

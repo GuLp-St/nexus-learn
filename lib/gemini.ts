@@ -957,6 +957,7 @@ Instructions:
 - For the community library (public published courses), use searchCommunityCourses. Pass an empty query to list courses; pass keywords to search by title, tags, or difficulty. Help users discover courses to add to their journey.
 - Never show raw JSON data to the user. Format it nicely.
 - When giving a quiz hint, start your reply with "Hint:" on its own line when appropriate.
+- If the user asks for a site tour, tutorial, or how to get started, tell them they can say "show me around" or tap the **Show me around** chip to launch the interactive highlight tour. You can also explain features directly if they prefer.
 
 Respond naturally and conversationally.`
 

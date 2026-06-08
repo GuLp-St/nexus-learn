@@ -583,7 +583,10 @@ export default function CreateCourseUnified() {
                 </TabsList>
 
                 <TabsContent value="create" className="space-y-6 mt-0">
-                  <div className="flex gap-2 p-1 rounded-lg bg-muted/50 w-full max-w-md">
+                  <div
+                    className="flex gap-2 p-1 rounded-lg bg-muted/50 w-full max-w-md"
+                    data-tour-id="create-mode-tabs"
+                  >
                     <Button
                       type="button"
                       variant={createMode === "ai" ? "default" : "ghost"}

@@ -16,6 +16,9 @@ import { ImpersonationBanner } from "@/components/impersonation-banner"
 import { CourseCreationWatcher } from "@/components/course-creation-watcher"
 import { QuizPrepWatcher } from "@/components/quiz-prep-watcher"
 import { ChallengeReadyWatcher } from "@/components/challenge-ready-watcher"
+import { OnboardingProvider } from "@/context/OnboardingContext"
+import { OnboardingTourOverlay } from "@/components/onboarding-tour-overlay"
+import { OnboardingWelcomeDialog } from "@/components/onboarding-welcome-dialog"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
@@ -55,17 +58,21 @@ export default function RootLayout({
         <ThemeProvider>
           <XPContextProvider>
             <AuthProvider>
-              <ChatContextProvider>
-                <QuestInitializer />
-                <NexonToastHandler />
-                <LevelUpModalWrapper />
-                <ImpersonationBanner />
-                <CourseCreationWatcher />
-                <QuizPrepWatcher />
-                <ChallengeReadyWatcher />
-                {children}
-                <ChatbotOverlay />
-              </ChatContextProvider>
+              <OnboardingProvider>
+                <ChatContextProvider>
+                  <QuestInitializer />
+                  <NexonToastHandler />
+                  <LevelUpModalWrapper />
+                  <ImpersonationBanner />
+                  <CourseCreationWatcher />
+                  <QuizPrepWatcher />
+                  <ChallengeReadyWatcher />
+                  {children}
+                  <OnboardingWelcomeDialog />
+                  <OnboardingTourOverlay />
+                  <ChatbotOverlay />
+                </ChatContextProvider>
+              </OnboardingProvider>
             </AuthProvider>
           </XPContextProvider>
         </ThemeProvider>

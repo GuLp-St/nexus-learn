@@ -14,7 +14,7 @@ import { resolve } from "path"
 function loadEnvLocal() {
   const path = resolve(process.cwd(), ".env.local")
   if (!existsSync(path)) {
-    console.error("Missing .env.local — create it first (see .env.example)")
+    console.error("Missing .env.local — create it first (copy env.template → .env.local)")
     process.exit(1)
   }
   for (const line of readFileSync(path, "utf8").split("\n")) {

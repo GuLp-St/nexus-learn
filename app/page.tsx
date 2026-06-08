@@ -135,7 +135,7 @@ export default function LearningDashboard() {
                 What do you want to learn today?
               </h2>
               <div className="flex justify-center">
-                <Button asChild size="lg" className="gap-2 h-14 px-8 text-base">
+                <Button asChild size="lg" className="gap-2 h-14 px-8 text-base" data-tour-id="create-course-cta">
                   <Link href="/create-course">
                     <Plus className="h-5 w-5" />
                     {courseCount === 0 ? "Add a course now!" : "Add more courses!"}
@@ -147,7 +147,7 @@ export default function LearningDashboard() {
             {/* Dashboard Cards Grid */}
             <div className="grid gap-6 lg:grid-cols-3">
               {/* Daily Quest */}
-              <div>
+              <div data-tour-id="daily-quests">
                 <DailyQuestCard />
               </div>
 

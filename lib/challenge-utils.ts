@@ -6,7 +6,12 @@ import { calculatePerformanceScore, filterObjectiveQuestions } from "./challenge
 import { fetchQuizQuestionsByIds, saveQuizQuestions } from "./quiz-utils"
 import type { PowerActionType, PowerEffectsBucket } from "./challenge-powered-actions"
 import { halveOptions, shuffleArray } from "./challenge-powered-actions"
-import { enrichQuestionsForPoweredMode } from "./challenge-question-enrichment"
+import {
+  enrichQuestionsForPoweredMode,
+  generateSwapReserveQuestions,
+  type SwapReserveMeta,
+} from "./challenge-question-enrichment"
+import type { SwapVariantContent } from "./challenge-powered-actions"
 
 export type ChallengeGameMode = "classic" | "powered"
 
@@ -78,6 +83,10 @@ export interface Challenge {
   moduleIndex: number | null
   lessonIndex: number | null // Always null now, kept for backward compatibility
   questionIds: string[] // Empty initially, populated when quiz is generated
+  /** Powered swap pool — N easy reserve questions (N = actionsPerPlayer) */
+  easyReserveQuestionIds?: string[]
+  /** Powered swap pool — N hard reserve questions (N = actionsPerPlayer) */
+  hardReserveQuestionIds?: string[]
   challengerAttemptId: string | null // null until challenger plays
   challengerScore: number | null // null until challenger plays (raw points)
   challengerTime: number | null // null until challenger plays
@@ -329,15 +338,37 @@ export async function finalizeChallengeQuestions(
 
     generatedQuestions = filterObjectiveQuestions(generatedQuestions, questionTarget)
 
-    if (isPoweredChallenge(settings)) {
-      generatedQuestions = await enrichQuestionsForPoweredMode(generatedQuestions)
+    const reserveMeta: SwapReserveMeta = {
+      courseId,
+      quizType: quizType === "module" ? "module" : "course",
+      moduleIndex: params.moduleIndex,
+      lessonIndex: null,
     }
 
-    await saveQuizQuestions(generatedQuestions)
+    let easyReserveQuestionIds: string[] = []
+    let hardReserveQuestionIds: string[] = []
+    let questionsToSave = generatedQuestions
+
+    if (isPoweredChallenge(settings)) {
+      generatedQuestions = await enrichQuestionsForPoweredMode(generatedQuestions)
+      const actions = getChallengeActionsPerPlayer(settings)
+      const reserves = await generateSwapReserveQuestions(
+        generatedQuestions,
+        actions,
+        reserveMeta
+      )
+      easyReserveQuestionIds = reserves.easy.map((q) => q.questionId)
+      hardReserveQuestionIds = reserves.hard.map((q) => q.questionId)
+      questionsToSave = [...generatedQuestions, ...reserves.easy, ...reserves.hard]
+    }
+
+    await saveQuizQuestions(questionsToSave)
     const questionIds = generatedQuestions.map((q) => q.questionId)
 
     await updateDoc(challengeRef, {
       questionIds,
+      easyReserveQuestionIds,
+      hardReserveQuestionIds,
       status: "pending",
       generationError: null,
     })
@@ -916,11 +947,82 @@ export async function getUserChallenges(userId: string): Promise<Challenge[]> {
   }
 }
 
+function swapReserveMetaFromChallenge(challenge: Challenge): SwapReserveMeta {
+  return {
+    courseId: challenge.courseId,
+    quizType: challenge.quizType === "module" ? "module" : "course",
+    moduleIndex: challenge.moduleIndex,
+    lessonIndex: challenge.lessonIndex ?? null,
+  }
+}
+
+async function loadChallengeReserveQuestion(
+  challenge: Challenge,
+  reserveId: string
+): Promise<QuizQuestion> {
+  const questions = await fetchQuizQuestionsByIds(
+    challenge.courseId,
+    [reserveId],
+    challenge.quizType === "module" ? challenge.moduleIndex : null,
+    challenge.lessonIndex ?? null
+  )
+  if (!questions[0]) throw new Error("Swap variant question not found")
+  return questions[0]
+}
+
+function swapVariantFromQuestion(q: QuizQuestion): SwapVariantContent {
+  return {
+    question: q.question,
+    options: q.options ?? [],
+    correctAnswer: q.correctAnswer ?? 0,
+    objectiveType: q.objectiveType,
+  }
+}
+
+/** Ensure sabotage enrichment + N easy / N hard swap reserves exist for Powered challenges. */
+async function ensurePoweredChallengeAssets(
+  challenge: Challenge,
+  baseQuestions: QuizQuestion[]
+): Promise<QuizQuestion[]> {
+  const settings = normalizeChallengeSettings(challenge.settings)
+  if (!isPoweredChallenge(settings)) return baseQuestions
+
+  let questions = baseQuestions
+  const needsEnrichment = questions.some(
+    (q) => q.type === "objective" && !q.extraOptions?.length
+  )
+  if (needsEnrichment) {
+    questions = await enrichQuestionsForPoweredMode(questions)
+    await saveQuizQuestions(questions)
+  }
+
+  const actions = getChallengeActionsPerPlayer(settings)
+  const easyOk = (challenge.easyReserveQuestionIds?.length ?? 0) >= actions
+  const hardOk = (challenge.hardReserveQuestionIds?.length ?? 0) >= actions
+
+  if (!easyOk || !hardOk) {
+    const reserves = await generateSwapReserveQuestions(
+      questions,
+      actions,
+      swapReserveMetaFromChallenge(challenge)
+    )
+    await saveQuizQuestions([...reserves.easy, ...reserves.hard])
+    if (challenge.id) {
+      await updateDoc(doc(db, "challenges", challenge.id), {
+        easyReserveQuestionIds: reserves.easy.map((q) => q.questionId),
+        hardReserveQuestionIds: reserves.hard.map((q) => q.questionId),
+      })
+    }
+  }
+
+  return questions
+}
+
 /**
  * Load challenge questions by direct doc lookup; regenerate if missing from storage.
  */
 export async function getChallengeQuestions(challenge: Challenge): Promise<QuizQuestion[]> {
-  const { courseId, questionIds, quizType, moduleIndex, lessonIndex, betAmount } = challenge
+  const { courseId, questionIds, quizType, moduleIndex, lessonIndex } = challenge
   if (!questionIds?.length) return []
 
   let questions = await fetchQuizQuestionsByIds(
@@ -931,18 +1033,7 @@ export async function getChallengeQuestions(challenge: Challenge): Promise<QuizQ
   )
 
   if (questions.length === questionIds.length) {
-    const settings = normalizeChallengeSettings(challenge.settings)
-    if (isPoweredChallenge(settings)) {
-      const needsEnrichment = questions.some(
-        (q) => q.type === "objective" && !q.extraOptions?.length
-      )
-      if (needsEnrichment) {
-        const enriched = await enrichQuestionsForPoweredMode(questions)
-        await saveQuizQuestions(enriched)
-        return enriched
-      }
-    }
-    return questions
+    return ensurePoweredChallengeAssets(challenge, questions)
   }
 
   console.warn(
@@ -973,15 +1064,32 @@ export async function getChallengeQuestions(challenge: Challenge): Promise<QuizQ
   }
 
   const settings = normalizeChallengeSettings(challenge.settings)
+  let easyReserveQuestionIds: string[] = []
+  let hardReserveQuestionIds: string[] = []
+  let questionsToSave = generated
+
   if (isPoweredChallenge(settings)) {
     generated = await enrichQuestionsForPoweredMode(generated)
+    const actions = getChallengeActionsPerPlayer(settings)
+    const reserves = await generateSwapReserveQuestions(
+      generated,
+      actions,
+      swapReserveMetaFromChallenge(challenge)
+    )
+    easyReserveQuestionIds = reserves.easy.map((q) => q.questionId)
+    hardReserveQuestionIds = reserves.hard.map((q) => q.questionId)
+    questionsToSave = [...generated, ...reserves.easy, ...reserves.hard]
   }
 
-  await saveQuizQuestions(generated)
+  await saveQuizQuestions(questionsToSave)
   const newIds = generated.map((q) => q.questionId)
 
   if (challenge.id) {
-    await updateDoc(doc(db, "challenges", challenge.id), { questionIds: newIds })
+    await updateDoc(doc(db, "challenges", challenge.id), {
+      questionIds: newIds,
+      easyReserveQuestionIds,
+      hardReserveQuestionIds,
+    })
   }
 
   return generated
@@ -1051,7 +1159,7 @@ function comboKeyForUser(isChallenger: boolean): "challengerComboStreak" | "chal
   return isChallenger ? "challengerComboStreak" : "challengedComboStreak"
 }
 
-/** Use a Powered-mode action (3 per player per match) */
+/** Use a Powered-mode action (actionsPerPlayer per player per match) */
 export async function useChallengePowerAction(
   challengeId: string,
   fromUserId: string,
@@ -1140,21 +1248,28 @@ export async function useChallengePowerAction(
       break
     }
     case "swap_harder": {
-      const swapped = oppEffects.swappedQuestionByQuestionId ?? {}
+      const variants = oppEffects.swapVariantByQuestionId ?? {}
       let targetIdx = context.opponentQuestionIndex
       while (
         targetIdx < context.questionIds.length &&
-        swapped[context.questionIds[targetIdx]] === "hard"
+        variants[context.questionIds[targetIdx]]
       ) {
         targetIdx++
       }
       const targetId = context.questionIds[targetIdx]
       if (!targetId) throw new Error("No target question")
+
+      const hardIds = data.hardReserveQuestionIds ?? []
+      const used = oppEffects.hardReservesUsed ?? 0
+      if (used >= hardIds.length) throw new Error("No harder variants remaining")
+      const reserve = await loadChallengeReserveQuestion(data, hardIds[used])
+
       patch[oppEffectsKey] = {
         ...oppEffects,
-        swappedQuestionByQuestionId: {
-          ...swapped,
-          [targetId]: "hard",
+        hardReservesUsed: used + 1,
+        swapVariantByQuestionId: {
+          ...variants,
+          [targetId]: swapVariantFromQuestion(reserve),
         },
       }
       break
@@ -1191,15 +1306,21 @@ export async function useChallengePowerAction(
     case "combo_shield":
       patch[selfEffectsKey] = { ...selfEffects, comboShield: true }
       break
-    case "swap_easier":
+    case "swap_easier": {
+      const easyIds = data.easyReserveQuestionIds ?? []
+      const used = selfEffects.easyReservesUsed ?? 0
+      if (used >= easyIds.length) throw new Error("No easier variants remaining")
+      const reserve = await loadChallengeReserveQuestion(data, easyIds[used])
       patch[selfEffectsKey] = {
         ...selfEffects,
-        swappedQuestionByQuestionId: {
-          ...selfEffects.swappedQuestionByQuestionId,
-          [context.currentQuestionId]: "easy",
+        easyReservesUsed: used + 1,
+        swapVariantByQuestionId: {
+          ...selfEffects.swapVariantByQuestionId,
+          [context.currentQuestionId]: swapVariantFromQuestion(reserve),
         },
       }
       break
+    }
     case "combo_switcher": {
       const myStreak = data[selfComboKey] ?? 0
       const oppStreak = data[oppComboKey] ?? 0

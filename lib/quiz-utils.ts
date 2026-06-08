@@ -32,9 +32,11 @@ export interface QuizQuestion {
     options: string[]
     correctAnswer: string | number | boolean
   }
-  /** Alternate difficulty variants for Powered swap actions */
+  /** Alternate difficulty variants for Powered swap actions (legacy — prefer swap reserves) */
   alternateEasy?: { question: string; options: string[]; correctAnswer: string | number | boolean }
   alternateHard?: { question: string; options: string[]; correctAnswer: string | number | boolean }
+  /** Powered swap pool entry — not part of the main quiz question list */
+  swapReserveRole?: "easy" | "hard"
   createdAt?: Timestamp
 }
 

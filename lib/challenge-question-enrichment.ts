@@ -99,7 +99,178 @@ function buildFallbackEnrichment(q: QuizQuestion): Partial<QuizQuestion> {
   }
 }
 
-/** Pre-generate powered-mode variants so actions apply instantly during the match. */
+export type SwapReserveMeta = {
+  courseId: string
+  quizType: QuizQuestion["quizType"]
+  moduleIndex: number | null
+  lessonIndex: number | null
+}
+
+function buildFallbackReserveQuestion(
+  base: QuizQuestion,
+  index: number,
+  difficulty: "easy" | "hard",
+  meta: SwapReserveMeta
+): QuizQuestion {
+  const fallback = buildFallbackEnrichment(base)
+  const variant = difficulty === "easy" ? fallback.alternateEasy : fallback.alternateHard
+  const questionId = `swap-${difficulty}-${index}-${base.questionId}`
+  return {
+    questionId,
+    courseId: meta.courseId,
+    moduleIndex: meta.moduleIndex,
+    lessonIndex: meta.lessonIndex,
+    quizType: meta.quizType,
+    type: "objective",
+    objectiveType: base.objectiveType,
+    question: variant?.question ?? base.question,
+    options: variant?.options ?? base.options ?? [],
+    correctAnswer: variant?.correctAnswer ?? base.correctAnswer ?? 0,
+    swapReserveRole: difficulty,
+  }
+}
+
+/**
+ * Pre-generate N easy + N hard swap reserve questions (2N total) for Powered challenges.
+ * Base quiz keeps 10 (module) or 20 (final) questions; reserves are consumed by swap actions.
+ */
+export async function generateSwapReserveQuestions(
+  baseQuestions: QuizQuestion[],
+  variantCount: number,
+  meta: SwapReserveMeta
+): Promise<{ easy: QuizQuestion[]; hard: QuizQuestion[] }> {
+  const count = Math.min(10, Math.max(1, Math.floor(variantCount)))
+  const objective = baseQuestions.filter((q) => q.type === "objective")
+  if (objective.length === 0) {
+    return { easy: [], hard: [] }
+  }
+
+  const seeds = Array.from({ length: count }, (_, i) => objective[i % objective.length])
+  const hasKeys = await hasGeminiApiKeys()
+
+  if (!hasKeys) {
+    return {
+      easy: seeds.map((q, i) => buildFallbackReserveQuestion(q, i, "easy", meta)),
+      hard: seeds.map((q, i) => buildFallbackReserveQuestion(q, i, "hard", meta)),
+    }
+  }
+
+  const compact = seeds.map((q, i) => ({
+    reserveIndex: i,
+    sourceQuestionId: q.questionId,
+    type: q.objectiveType,
+    question: q.question,
+    options: q.options ?? [],
+    correctAnswer: q.correctAnswer,
+  }))
+
+  const prompt = `Generate ${count} EASY and ${count} HARD alternate quiz questions for a 1v1 Powered challenge swap pool.
+
+Return ONLY valid JSON:
+{
+  "easy": [
+    { "reserveIndex": 0, "question": "...", "options": ["..."], "correctAnswer": "..." }
+  ],
+  "hard": [
+    { "reserveIndex": 0, "question": "...", "options": ["..."], "correctAnswer": "..." }
+  ]
+}
+
+Rules:
+- Provide exactly ${count} items in "easy" and exactly ${count} in "hard"
+- Each reserveIndex 0..${count - 1} must appear once per array
+- Base each variant on the source question at the same reserveIndex below
+- easy: simpler wording, fewer distractors (True/False ok for T/F sources)
+- hard: more advanced wording, 4 options for multiple-choice (partial T/F ok for T/F sources)
+- correctAnswer must match an option (string) or be a 0-based option index
+- Do NOT copy the source question verbatim
+
+Source questions:
+${JSON.stringify(compact, null, 2)}`
+
+  try {
+    const text = await poolGenerateText(prompt)
+    let jsonText = text.trim()
+    if (jsonText.startsWith("```json")) {
+      jsonText = jsonText.replace(/^```json\n?/, "").replace(/\n?```$/, "")
+    } else if (jsonText.startsWith("```")) {
+      jsonText = jsonText.replace(/^```\n?/, "").replace(/\n?```$/, "")
+    }
+
+    const data = JSON.parse(jsonText) as {
+      easy?: Array<{
+        reserveIndex: number
+        question: string
+        options: string[]
+        correctAnswer: string | number | boolean
+      }>
+      hard?: Array<{
+        reserveIndex: number
+        question: string
+        options: string[]
+        correctAnswer: string | number | boolean
+      }>
+    }
+
+    const easyByIdx = new Map((data.easy ?? []).map((e) => [e.reserveIndex, e]))
+    const hardByIdx = new Map((data.hard ?? []).map((h) => [h.reserveIndex, h]))
+
+    const easy: QuizQuestion[] = []
+    const hard: QuizQuestion[] = []
+
+    for (let i = 0; i < count; i++) {
+      const seed = seeds[i]
+      const easyVar = easyByIdx.get(i)
+      const hardVar = hardByIdx.get(i)
+
+      if (easyVar?.question && easyVar.options?.length) {
+        easy.push({
+          questionId: `swap-easy-${i}-${seed.questionId}`,
+          courseId: meta.courseId,
+          moduleIndex: meta.moduleIndex,
+          lessonIndex: meta.lessonIndex,
+          quizType: meta.quizType,
+          type: "objective",
+          objectiveType: seed.objectiveType,
+          question: easyVar.question,
+          options: easyVar.options,
+          correctAnswer: normalizeCorrectAnswer(easyVar.options, easyVar.correctAnswer),
+          swapReserveRole: "easy",
+        })
+      } else {
+        easy.push(buildFallbackReserveQuestion(seed, i, "easy", meta))
+      }
+
+      if (hardVar?.question && hardVar.options?.length) {
+        hard.push({
+          questionId: `swap-hard-${i}-${seed.questionId}`,
+          courseId: meta.courseId,
+          moduleIndex: meta.moduleIndex,
+          lessonIndex: meta.lessonIndex,
+          quizType: meta.quizType,
+          type: "objective",
+          objectiveType: seed.objectiveType,
+          question: hardVar.question,
+          options: hardVar.options,
+          correctAnswer: normalizeCorrectAnswer(hardVar.options, hardVar.correctAnswer),
+          swapReserveRole: "hard",
+        })
+      } else {
+        hard.push(buildFallbackReserveQuestion(seed, i, "hard", meta))
+      }
+    }
+
+    return { easy, hard }
+  } catch (err) {
+    console.error("Swap reserve generation failed:", err)
+    return {
+      easy: seeds.map((q, i) => buildFallbackReserveQuestion(q, i, "easy", meta)),
+      hard: seeds.map((q, i) => buildFallbackReserveQuestion(q, i, "hard", meta)),
+    }
+  }
+}
+
+/** Pre-generate powered-mode sabotage variants (false answers, T/F expansion) on base questions. */
 export async function enrichQuestionsForPoweredMode(
   questions: QuizQuestion[]
 ): Promise<QuizQuestion[]> {
@@ -115,8 +286,6 @@ export async function enrichQuestionsForPoweredMode(
         ...q,
         extraOptions: fallback.extraOptions ?? q.extraOptions,
         tfExpandedVariant: fallback.tfExpandedVariant ?? q.tfExpandedVariant,
-        alternateEasy: fallback.alternateEasy ?? q.alternateEasy,
-        alternateHard: fallback.alternateHard ?? q.alternateHard,
       }
     })
   }
@@ -129,7 +298,7 @@ export async function enrichQuestionsForPoweredMode(
     correctAnswer: q.correctAnswer,
   }))
 
-  const prompt = `For each quiz question below, generate Powered-mode variants for a 1v1 challenge.
+  const prompt = `For each quiz question below, generate Powered-mode sabotage variants for a 1v1 challenge.
 
 Return ONLY valid JSON:
 {
@@ -137,8 +306,6 @@ Return ONLY valid JSON:
     {
       "questionId": "same id",
       "extraOptions": ["wrong1", "wrong2"],
-      "alternateEasy": { "question": "...", "options": ["..."], "correctAnswer": "..." },
-      "alternateHard": { "question": "...", "options": ["..."], "correctAnswer": "..." },
       "partialTfOptions": ["Partially true", "Partially false"],
       "tfExpandedVariant": { "question": "similar but different question", "options": ["True", "False", "Partially true", "Partially false"], "correctAnswer": "..." }
     }
@@ -150,9 +317,6 @@ Rules:
 - For true/false questions:
   - Provide tfExpandedVariant: a SIMILAR but DIFFERENT question with exactly 4 options ["True", "False", "Partially true", "Partially false"] where any of them could be correct
   - Provide partialTfOptions as ["Partially true", "Partially false"]
-  - alternateHard for T/F must also use 4 options including partially true/false
-- alternateEasy: easier rewording with 4 options (or True/False for simple T/F)
-- alternateHard: harder version with 4 options
 - extraOptions must NOT include the correct answer
 - Keep correctAnswer semantics (string matching an option, or index number)
 
@@ -195,32 +359,6 @@ ${JSON.stringify(compact, null, 2)}`
           options: tfVar.options,
           correctAnswer: normalizeCorrectAnswer(tfVar.options, tfVar.correctAnswer),
         }
-      }
-
-      if (v.alternateEasy?.question && v.alternateEasy.options?.length) {
-        patch.alternateEasy = {
-          question: v.alternateEasy.question,
-          options: v.alternateEasy.options,
-          correctAnswer: normalizeCorrectAnswer(
-            v.alternateEasy.options,
-            v.alternateEasy.correctAnswer
-          ),
-        }
-      } else if (fallback.alternateEasy) {
-        patch.alternateEasy = fallback.alternateEasy
-      }
-
-      if (v.alternateHard?.question && v.alternateHard.options?.length) {
-        patch.alternateHard = {
-          question: v.alternateHard.question,
-          options: v.alternateHard.options,
-          correctAnswer: normalizeCorrectAnswer(
-            v.alternateHard.options,
-            v.alternateHard.correctAnswer
-          ),
-        }
-      } else if (fallback.alternateHard) {
-        patch.alternateHard = fallback.alternateHard
       }
 
       if (!patch.extraOptions?.length && fallback.extraOptions) {

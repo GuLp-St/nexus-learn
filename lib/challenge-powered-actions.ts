@@ -13,12 +13,24 @@ export type PowerActionType =
 
 export type PowerActionCategory = "sabotage" | "powerup"
 
+export type SwapVariantContent = {
+  question: string
+  options: string[]
+  correctAnswer: string | number | boolean
+  objectiveType?: QuizQuestion["objectiveType"]
+}
+
 export interface PowerEffectsBucket {
   extraOptionsByQuestionId?: Record<string, string[]>
   shuffledOptionsByQuestionId?: Record<string, string[]>
   halvedOptionsByQuestionId?: Record<string, string[]>
   tfExpandedByQuestionId?: Record<string, boolean>
+  /** @deprecated use swapVariantByQuestionId */
   swappedQuestionByQuestionId?: Record<string, "easy" | "hard">
+  /** Applied swap reserve content keyed by base question id */
+  swapVariantByQuestionId?: Record<string, SwapVariantContent>
+  easyReservesUsed?: number
+  hardReservesUsed?: number
   removedWrongByQuestionId?: Record<string, boolean>
   comboShield?: boolean
 }
@@ -154,20 +166,31 @@ export function applyPowerEffectsToQuestion(
   let q: QuizQuestion = { ...question }
   const qid = question.questionId
 
-  const swap = effects.swappedQuestionByQuestionId?.[qid]
-  if (swap === "easy" && question.alternateEasy) {
+  const variant = effects.swapVariantByQuestionId?.[qid]
+  if (variant?.question && variant.options?.length) {
     q = {
       ...q,
-      question: question.alternateEasy.question,
-      options: [...question.alternateEasy.options],
-      correctAnswer: question.alternateEasy.correctAnswer,
+      question: variant.question,
+      options: [...variant.options],
+      correctAnswer: variant.correctAnswer,
+      objectiveType: variant.objectiveType ?? q.objectiveType,
     }
-  } else if (swap === "hard" && question.alternateHard) {
-    q = {
-      ...q,
-      question: question.alternateHard.question,
-      options: [...question.alternateHard.options],
-      correctAnswer: question.alternateHard.correctAnswer,
+  } else {
+    const swap = effects.swappedQuestionByQuestionId?.[qid]
+    if (swap === "easy" && question.alternateEasy) {
+      q = {
+        ...q,
+        question: question.alternateEasy.question,
+        options: [...question.alternateEasy.options],
+        correctAnswer: question.alternateEasy.correctAnswer,
+      }
+    } else if (swap === "hard" && question.alternateHard) {
+      q = {
+        ...q,
+        question: question.alternateHard.question,
+        options: [...question.alternateHard.options],
+        correctAnswer: question.alternateHard.correctAnswer,
+      }
     }
   }
 

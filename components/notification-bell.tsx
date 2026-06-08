@@ -16,7 +16,15 @@ import { useRouter } from "next/navigation"
 import { formatDateForDisplay } from "@/lib/date-utils"
 import { toast } from "sonner"
 
-export function NotificationBell({ align = "right", size = "icon" }: { align?: "left" | "right", size?: "icon" | "icon-sm" }) {
+export function NotificationBell({
+  align = "right",
+  size = "icon",
+  tourId = "notifications",
+}: {
+  align?: "left" | "right"
+  size?: "icon" | "icon-sm"
+  tourId?: string
+}) {
   const { user } = useAuth()
   const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -162,7 +170,7 @@ export function NotificationBell({ align = "right", size = "icon" }: { align?: "
   if (!user) return null
 
   return (
-    <div className="relative">
+    <div className="relative" data-tour-id={tourId}>
       <Button
         variant="ghost"
         size={size}
