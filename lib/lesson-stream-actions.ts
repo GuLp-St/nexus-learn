@@ -5,6 +5,7 @@ import type { LessonStream } from "./gemini"
 import { enrichLessonStreamWithImages } from "./lesson-image-enrichment"
 import {
   distributeMaterialImagesToTextBlocks,
+  sanitizeLessonStreamMaterialImages,
   type LessonMaterialImage,
 } from "./lesson-material-images"
 import { isCloudflareConfigured } from "./cloudflare-keys"
@@ -49,6 +50,7 @@ export async function generateLessonStreamWithImages(
   const materialImages = sourceContext?.processedImages ?? []
 
   if (materialImages.length > 0) {
+    stream = sanitizeLessonStreamMaterialImages(stream, materialImages)
     stream = distributeMaterialImagesToTextBlocks(stream, materialImages)
     return ensureTextBlockReferences(stream, {
       references: sourceContext?.references,

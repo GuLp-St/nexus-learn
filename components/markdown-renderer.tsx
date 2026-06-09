@@ -1,8 +1,27 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+
+function LessonImage({ alt, src }: { alt?: string; src?: string }) {
+  const [failed, setFailed] = useState(false)
+
+  if (!src || failed) return null
+
+  return (
+    <span className="block my-6 max-w-2xl mx-auto">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt || "Lesson image"}
+        className="rounded-lg border shadow-sm w-full h-auto"
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    </span>
+  )
+}
 
 interface MarkdownRendererProps {
   content: string
@@ -28,8 +47,8 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
               (childrenArray[0] as any).type === 'img'
             
             if (hasOnlyImage) {
-              // Render as div for images to avoid nesting issues (<p><div> is invalid)
-              return <div className="my-6" {...props}>{children}</div>
+              // Avoid extra wrapper margin — LessonImage handles spacing and hides on load failure
+              return <>{children}</>
             }
             return <p className="mb-4 leading-relaxed text-foreground" {...props}>{children}</p>
           },
@@ -57,15 +76,9 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
           blockquote: ({ node, ...props }) => (
             <blockquote className="border-l-4 border-primary pl-4 italic my-4 text-muted-foreground" {...props} />
           ),
-          // Style images
+          // Style images — hide broken URLs instead of leaving empty space
           img: ({ node, ...props }: any) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              {...props}
-              alt={props.alt || "Lesson image"}
-              className="rounded-lg border shadow-sm w-full h-auto max-w-2xl mx-auto block my-6"
-              loading="lazy"
-            />
+            <LessonImage alt={props.alt} src={props.src} />
           ),
           // Preserve line breaks
           br: ({ node, ...props }) => <br {...props} />,

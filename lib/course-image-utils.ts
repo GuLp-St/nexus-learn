@@ -56,7 +56,6 @@ export function buildProcessedImagesForMaterial(
       description: vd.description,
       tags: vd.tags ?? [],
       imageIndex: vd.imageIndex,
-      pageNumber: vd.imageIndex,
     })
   }
 
